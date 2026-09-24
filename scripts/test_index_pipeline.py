@@ -20,6 +20,7 @@ import sys
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 # Add project root to sys.path
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -39,6 +40,7 @@ except ImportError:
 
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
+
 from backend.app.db.seed import seed_all
 from backend.app.db.session import Base
 from backend.app.models.airline import Airline
@@ -312,6 +314,7 @@ def run_tests() -> bool:
             select(NationalDailyIndex).where(
                 NationalDailyIndex.index_date == calc_date,
                 NationalDailyIndex.booking_window == "COMPOSITE",
+                NationalDailyIndex.index_type == "laspeyres",
             )
         ).scalars().first()
 
@@ -326,6 +329,27 @@ def run_tests() -> bool:
         print(f"      National Weighted Mean Fare: INR {nat_index.weighted_mean_fare:.2f}")
         print(f"      DoD Inflation: {nat_index.inflation_dod_pct:+.2f}%")
         print("      ✓ Assertion Passed: NationalDailyIndex record verified.")
+        # Verify Paasche and Fisher indices are also persisted
+        nat_fisher = session.execute(
+            select(NationalDailyIndex).where(
+                NationalDailyIndex.index_date == calc_date,
+                NationalDailyIndex.booking_window == "COMPOSITE",
+                NationalDailyIndex.index_type == "fisher",
+            )
+        ).scalars().first()
+        assert nat_fisher is not None, "NationalDailyIndex Fisher record was not persisted"
+        assert nat_fisher.index_value > 0, "Fisher index value non-positive"
+
+        nat_paasche = session.execute(
+            select(NationalDailyIndex).where(
+                NationalDailyIndex.index_date == calc_date,
+                NationalDailyIndex.booking_window == "COMPOSITE",
+                NationalDailyIndex.index_type == "paasche",
+            )
+        ).scalars().first()
+        assert nat_paasche is not None, "NationalDailyIndex Paasche record was not persisted"
+        assert nat_paasche.index_value > 0, "Paasche index value non-positive"
+        print(f"      National Fisher Index: {nat_fisher.index_value:.2f}, Paasche Index: {nat_paasche.index_value:.2f}")
 
         print("\n[5/5] Verifying AnomalyAlert detection and idempotency...")
         alerts = session.execute(
@@ -356,7 +380,7 @@ def run_tests() -> bool:
         ).scalar()
 
         assert route_count_after == 50, f"Expected 50 route indices after re-run, got {route_count_after}"
-        assert nat_count_after == 1, f"Expected 1 national index after re-run, got {nat_count_after}"
+        assert nat_count_after == 3, f"Expected 3 national indices (Laspeyres, Paasche, Fisher) after re-run, got {nat_count_after}"
         print("      ✓ Assertion Passed: AnomalyAlert generation and pipeline idempotency verified.")
 
         # Test Autonomous Session Management: db=None
