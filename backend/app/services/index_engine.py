@@ -87,12 +87,35 @@ class TukeyBounds:
 
 
 def _extract_field(item: Union[FlightQuote, Mapping[str, Any], Any], field_name: str, default: Any = None) -> Any:
-    """Extract field from FlightQuote, dictionary, or generic object."""
+    """Extract field from FlightQuote, dictionary, or generic object with alias resolution."""
     if isinstance(item, FlightQuote):
         return getattr(item, field_name, default)
+
+    alias_map: Dict[str, Tuple[str, ...]] = {
+        "fare": ("fare", "total_fare", "fare_inr", "price"),
+        "source_portal": ("source_portal", "source_platform", "source", "portal"),
+        "origin": ("origin", "origin_iata"),
+        "destination": ("destination", "destination_iata"),
+        "flight_date": ("flight_date", "departure_date"),
+    }
+
+    candidates = alias_map.get(field_name, (field_name,))
+
     if isinstance(item, Mapping):
-        return item.get(field_name, default)
-    return getattr(item, field_name, default)
+        for key in candidates:
+            if key in item and item[key] is not None:
+                return item[key]
+        if field_name == "is_nonstop" and "stops" in item:
+            return item["stops"] == 0
+        return default
+
+    for attr in candidates:
+        val = getattr(item, attr, None)
+        if val is not None:
+            return val
+    if field_name == "is_nonstop" and hasattr(item, "stops"):
+        return getattr(item, "stops") == 0
+    return default
 
 
 def _normalize_code(code: Any) -> str:
@@ -519,8 +542,13 @@ def calculate_route_composite_fare(
     if not window_fares:
         raise ValueError("Cannot calculate composite fare from empty window fares")
 
-    target_weights = dict(weights if weights is not None else DEFAULT_BOOKING_WINDOW_WEIGHTS)
-
+    raw_weights = weights if weights is not None else DEFAULT_BOOKING_WINDOW_WEIGHTS
+    target_weights: Dict[str, float] = {}
+    for k, v in raw_weights.items():
+        sk = str(k).strip().upper().replace("+", "")
+        if not sk.startswith("T") and sk.isdigit():
+            sk = f"T{sk}"
+        target_weights[sk] = float(v)
     # Standardize window keys (e.g. 'T+1' -> 'T1', '1' -> 'T1')
     normalized_fares: Dict[str, float] = {}
     for k, v in window_fares.items():
