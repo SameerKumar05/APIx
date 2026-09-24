@@ -170,4 +170,7 @@ class IngestionConfig:
     ingestion_mode: str = field(
         default_factory=lambda: os.getenv("INGESTION_MODE", "synthetic")
     )
+    proxy_url: Optional[str] = field(
+        default_factory=lambda: os.getenv("PROXY_URL")
+    )
     user_agents: List[str] = field(default_factory=lambda: list(DEFAULT_USER_AGENTS))
