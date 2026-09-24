@@ -22,6 +22,9 @@ import {
   mockAnomalies,
   mockDGCAValidation,
   mockSystemHealth,
+  mockTelemetry,
+  mockArbitrage,
+  mockLiveFares,
   getMockDashboardSummary,
 } from '../src/services/mockData';
 
@@ -29,7 +32,9 @@ import { OverviewTab } from '../src/components/OverviewTab';
 import { RoutesTab } from '../src/components/RoutesTab';
 import { ElasticityTab } from '../src/components/ElasticityTab';
 import { AnomaliesTab } from '../src/components/AnomaliesTab';
-
+import { TelemetryTab } from '../src/components/TelemetryTab';
+import { LiveTicker } from '../src/components/LiveTicker';
+import { ArbitrageTab } from '../src/components/ArbitrageTab';
 async function runCycle2Verification() {
   console.log('===============================================================');
   console.log('   APIx Frontend Cycle 2 Premier Verification (PS 26056)       ');
@@ -81,6 +86,29 @@ async function runCycle2Verification() {
   }
   console.log(`✓ Surveillance Anomaly Alerts: ${mockAnomalies.length} items (${critAlerts.length} Critical Z≥3.0, ${warnAlerts.length} Warning Z≥2.0).`);
 
+  // Validate Cycle 3 Telemetry, Arbitrage & Live Fares datasets
+  console.log('\n[Cycle 3] Verifying Scraper Telemetry & Arbitrage Datasets...');
+  const crawlerNames = mockTelemetry.scrapers.map((s) => s.crawler_name.toLowerCase());
+  const requiredCrawlers = ['easemytrip', 'makemytrip', 'spicejet', 'amadeus'];
+  for (const rc of requiredCrawlers) {
+    if (!crawlerNames.includes(rc)) {
+      throw new Error(`Missing required crawler: ${rc}`);
+    }
+  }
+  console.log(`✓ 4 Required Scraper Engines verified: ${requiredCrawlers.join(', ')}`);
+  if (mockTelemetry.proxy_pool.active_proxies <= 0 || mockTelemetry.proxy_pool.avg_latency_ms <= 0) {
+    throw new Error('Invalid proxy pool telemetry');
+  }
+  console.log(`✓ Proxy Pool: ${mockTelemetry.proxy_pool.active_proxies} active nodes, ${mockTelemetry.proxy_pool.avg_latency_ms}ms avg latency`);
+
+  if (!mockArbitrage.items || mockArbitrage.items.length === 0) {
+    throw new Error('Missing mock arbitrage items');
+  }
+  const otaCheaperCount = mockArbitrage.items.filter((i) => i.direction === 'OTA_CHEAPER').length;
+  const airlineCheaperCount = mockArbitrage.items.filter((i) => i.direction === 'AIRLINE_CHEAPER').length;
+  console.log(`✓ Arbitrage Opportunities: ${mockArbitrage.items.length} items (${otaCheaperCount} OTA Cheaper, ${airlineCheaperCount} Airline Cheaper)`);
+  console.log(`✓ Peak Arbitrage Spread: +${mockArbitrage.max_spread_percentage}%`);
+  console.log(`✓ Live Fare Stream Seed: ${mockLiveFares.length} initial broadcast packets`);
   // -------------------------------------------------------------------------
   // 2. Verify ApiClient Service Methods
   // -------------------------------------------------------------------------
@@ -166,6 +194,51 @@ async function runCycle2Verification() {
     throw new Error('AnomaliesTab missing required surveillance or Z-score content');
   }
   console.log(`  ✓ AnomaliesTab rendered cleanly (${anomaliesHtml.length} bytes HTML).`);
+
+  // Tab 5: TelemetryTab
+  console.log('  -> Rendering TelemetryTab (Crawler fleet cards, proxy latency gauges, error breakdown)...');
+  const telemetryHtml = renderToString(
+    React.createElement(TelemetryTab, {
+      telemetry: summary.telemetry,
+      onRefresh: () => {},
+    })
+  );
+  if (!telemetryHtml || telemetryHtml.length < 500) {
+    throw new Error('TelemetryTab rendered empty or truncated markup');
+  }
+  if (!telemetryHtml.includes('Crawler Infrastructure') || !telemetryHtml.includes('Proxy Pool Health Gauges')) {
+    throw new Error('TelemetryTab missing required crawler telemetry headers');
+  }
+  console.log(`  ✓ TelemetryTab rendered cleanly (${telemetryHtml.length} bytes HTML).`);
+
+  // Component: LiveTicker
+  console.log('  -> Rendering LiveTicker (Real-time streaming ticker, carrier tags, route badges)...');
+  const tickerHtml = renderToString(
+    React.createElement(LiveTicker, {})
+  );
+  if (!tickerHtml || tickerHtml.length < 200) {
+    throw new Error('LiveTicker rendered empty or truncated markup');
+  }
+  if (!tickerHtml.includes('LIVE FARE FEED')) {
+    throw new Error('LiveTicker missing required stream status header');
+  }
+  console.log(`  ✓ LiveTicker rendered cleanly (${tickerHtml.length} bytes HTML).`);
+
+  // Tab 6: ArbitrageTab
+  console.log('  -> Rendering ArbitrageTab (Direct airline vs OTA spread analysis, savings alerts)...');
+  const arbitrageHtml = renderToString(
+    React.createElement(ArbitrageTab, {
+      arbitrage: summary.arbitrage,
+      onRefresh: () => {},
+    })
+  );
+  if (!arbitrageHtml || arbitrageHtml.length < 500) {
+    throw new Error('ArbitrageTab rendered empty or truncated markup');
+  }
+  if (!arbitrageHtml.includes('Airline Direct vs OTA Price Spread') || !arbitrageHtml.includes('Arbitrage Opportunities')) {
+    throw new Error('ArbitrageTab missing required arbitrage headers');
+  }
+  console.log(`  ✓ ArbitrageTab rendered cleanly (${arbitrageHtml.length} bytes HTML).`);
 
   // -------------------------------------------------------------------------
   // 4. Verify DGCA Weight Invariant

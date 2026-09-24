@@ -183,11 +183,148 @@ export interface SystemHealthResponse {
   latency_ms: number;
 }
 
+export type CrawlerName = 'easemytrip' | 'makemytrip' | 'spicejet' | 'amadeus' | string;
+export type CrawlerStatusType = 'ONLINE' | 'RUNNING' | 'IDLE' | 'DEGRADED' | 'OFFLINE';
+
+export interface CrawlerStatus {
+  crawler_name: CrawlerName;
+  platform: string;
+  status: CrawlerStatusType;
+  uptime_pct: number;
+  success_count: number;
+  error_count: number;
+  error_rate_pct: number;
+  last_run_at: string;
+  fares_collected: number;
+  avg_response_time_ms?: number;
+  rate_limit_rpm?: number;
+  consecutive_failures?: number;
+  target_routes?: string[];
+}
+
+export interface ProxyExitNode {
+  region: string;
+  ip_prefix: string;
+  latency_ms: number;
+  status: 'OPTIMAL' | 'DEGRADED' | 'BLOCKED';
+}
+
+export interface ProxyPoolSummary {
+  total_proxies: number;
+  active_proxies: number;
+  blacklisted_proxies: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  healthy_pct?: number;
+  bandwidth_mb_today?: number;
+  top_exit_nodes?: ProxyExitNode[];
+}
+
+export interface CrawlerErrorItem {
+  id: string;
+  crawler_name: CrawlerName;
+  error_type: 'HTTP_TIMEOUT' | 'CAPTCHA_CHALLENGE' | 'RATE_LIMIT_EXCEEDED' | 'DOM_PARSE_ERROR' | 'PROXY_RESET' | 'SCHEMA_MISMATCH' | string;
+  route_code?: string;
+  status_code?: number;
+  message: string;
+  occurred_at: string;
+  retry_count: number;
+  recovered: boolean;
+}
+
+export interface CrawlerErrorBreakdown {
+  total_errors: number;
+  by_type: Record<string, number>;
+  by_crawler: Record<string, number>;
+  recent_errors: CrawlerErrorItem[];
+}
+
+export interface TelemetryResponse {
+  scrapers: CrawlerStatus[];
+  proxy_pool: ProxyPoolSummary;
+  system_health: SystemStatus;
+  generated_at: string;
+  error_breakdown?: CrawlerErrorBreakdown;
+  schedule_interval_minutes?: number;
+  active_workers?: number;
+}
+
+export interface CrawlerTriggerRequest {
+  crawler_name?: string;
+  route_code?: string;
+  source?: string;
+}
+
+export interface CrawlerTriggerResponse {
+  task_id: string;
+  status: 'QUEUED' | 'TRIGGERED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  message: string;
+  triggered_at: string;
+}
+
 // ---------------------------------------------------------------------------
-// 6. Generic UI / API State
+// 6. Real-Time Streaming Fare Feed
 // ---------------------------------------------------------------------------
 
-export type ActiveTab = 'overview' | 'routes' | 'elasticity' | 'anomalies';
+export interface LiveFareUpdate {
+  type: 'fare_update';
+  airline_code: string;
+  airline_name: string;
+  flight_number: string;
+  origin: string;
+  destination: string;
+  fare_inr: number;
+  source: string;
+  cabin_class: string;
+  departure_datetime: string;
+  booking_datetime: string;
+  timestamp: string;
+  is_anomaly?: boolean;
+  prev_fare_inr?: number;
+  fare_change_pct?: number;
+}
+
+export interface WebSocketFareMessage {
+  type: 'fare_update' | 'ping' | 'pong' | 'buffer_dump';
+  data?: LiveFareUpdate | LiveFareUpdate[];
+}
+
+// ---------------------------------------------------------------------------
+// 7. Direct Airline vs OTA Arbitrage Surveillance
+// ---------------------------------------------------------------------------
+
+export type ArbitrageDirection = 'OTA_CHEAPER' | 'AIRLINE_CHEAPER';
+
+export interface ArbitrageOpportunity {
+  route_code: string;
+  airline_code: string;
+  airline_name?: string;
+  airline_direct_fare: number;
+  ota_name: string;
+  ota_fare: number;
+  spread_inr: number;
+  spread_percentage: number;
+  direction: ArbitrageDirection;
+  actionable: boolean;
+  flight_number?: string;
+  departure_datetime?: string;
+  sample_timestamp?: string;
+}
+
+export interface ArbitrageResponse {
+  generated_at: string;
+  routes_evaluated: number;
+  opportunities_count: number;
+  items: ArbitrageOpportunity[];
+  max_spread_percentage?: number;
+  total_savings_potential_inr?: number;
+}
+
+// ---------------------------------------------------------------------------
+// 8. Generic UI / API State
+// ---------------------------------------------------------------------------
+
+export type ActiveTab = 'overview' | 'routes' | 'elasticity' | 'anomalies' | 'telemetry' | 'arbitrage';
 
 export interface DashboardSummaryData {
   nationalLatest: NationalIndexLatestResponse;
@@ -198,4 +335,6 @@ export interface DashboardSummaryData {
   anomalies: AnomalyAlertItem[];
   dgcaValidation: DGCAValidationResponse;
   systemHealth: SystemHealthResponse;
+  telemetry: TelemetryResponse;
+  arbitrage: ArbitrageResponse;
 }

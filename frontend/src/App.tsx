@@ -8,6 +8,9 @@ import { OverviewTab } from './components/OverviewTab';
 import { RoutesTab } from './components/RoutesTab';
 import { ElasticityTab } from './components/ElasticityTab';
 import { AnomaliesTab } from './components/AnomaliesTab';
+import { TelemetryTab } from './components/TelemetryTab';
+import { LiveTicker } from './components/LiveTicker';
+import { ArbitrageTab } from './components/ArbitrageTab';
 import {
   Plane,
   Activity,
@@ -16,6 +19,7 @@ import {
   ShieldCheck,
   Database,
   Server,
+  Scale,
 } from 'lucide-react';
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
@@ -69,6 +73,7 @@ export const App: React.FC = () => {
   };
 
   const criticalAlertsCount = data?.anomalies.filter((a) => a.severity === 'CRITICAL').length || 0;
+  const arbitrageSpreadsCount = data?.arbitrage?.opportunities_count || 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -227,6 +232,38 @@ export const App: React.FC = () => {
                 </span>
               )}
             </button>
+
+            <button
+              onClick={() => setActiveTab('telemetry')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all ${
+                activeTab === 'telemetry'
+                  ? 'bg-slate-800 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+              }`}
+            >
+              <Server className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Crawler Telemetry</span>
+              {data?.telemetry && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveTab('arbitrage')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all relative ${
+                activeTab === 'arbitrage'
+                  ? 'bg-slate-800 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+              }`}
+            >
+              <Scale className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Fare Arbitrage</span>
+              {arbitrageSpreadsCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-indigo-600 text-white">
+                  {arbitrageSpreadsCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
       </header>
@@ -251,7 +288,15 @@ export const App: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div>
+          <div className="space-y-6">
+            {/* Real-time Streaming Fare Ticker */}
+            <LiveTicker
+              onSelectRoute={() => {
+                setActiveTab('routes');
+              }}
+            />
+
+            {/* Active Tab Views */}
             {activeTab === 'overview' && (
               <OverviewTab
                 latest={data.nationalLatest}
@@ -281,6 +326,20 @@ export const App: React.FC = () => {
               <AnomaliesTab
                 anomalies={data.anomalies}
                 dgcaValidation={data.dgcaValidation}
+              />
+            )}
+
+            {activeTab === 'telemetry' && (
+              <TelemetryTab
+                telemetry={data.telemetry}
+                onRefresh={() => loadData(true)}
+              />
+            )}
+
+            {activeTab === 'arbitrage' && (
+              <ArbitrageTab
+                arbitrage={data.arbitrage}
+                onRefresh={() => loadData(true)}
               />
             )}
           </div>
