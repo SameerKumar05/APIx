@@ -11,15 +11,19 @@ import { AnomaliesTab } from './components/AnomaliesTab';
 import { TelemetryTab } from './components/TelemetryTab';
 import { LiveTicker } from './components/LiveTicker';
 import { ArbitrageTab } from './components/ArbitrageTab';
+import { EconometricsTab } from './components/EconometricsTab';
+import { DgcaSurveillanceTab } from './components/DgcaSurveillanceTab';
 import {
   Plane,
   Activity,
   RefreshCw,
   Clock,
   ShieldCheck,
+  ShieldAlert,
   Database,
   Server,
   Scale,
+  TrendingUp,
 } from 'lucide-react';
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
@@ -73,8 +77,8 @@ export const App: React.FC = () => {
   };
 
   const criticalAlertsCount = data?.anomalies.filter((a) => a.severity === 'CRITICAL').length || 0;
+  const dgcaViolationsCount = data?.dgcaSurveillance?.total_violations || 0;
   const arbitrageSpreadsCount = data?.arbitrage?.opportunities_count || 0;
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       {/* Top Header */}
@@ -193,6 +197,35 @@ export const App: React.FC = () => {
             </button>
 
             <button
+              onClick={() => setActiveTab('econometrics')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all ${
+                activeTab === 'econometrics'
+                  ? 'bg-slate-800 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+              }`}
+            >
+              <TrendingUp className="w-3.5 h-3.5 text-sky-400" />
+              <span>Econometrics &amp; CPI Gap</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('dgca')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all relative ${
+                activeTab === 'dgca'
+                  ? 'bg-slate-800 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+              <span>DGCA Surveillance</span>
+              {dgcaViolationsCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-rose-600 text-white">
+                  {dgcaViolationsCount}
+                </span>
+              )}
+            </button>
+
+            <button
               onClick={() => setActiveTab('routes')}
               className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all ${
                 activeTab === 'routes'
@@ -224,10 +257,10 @@ export const App: React.FC = () => {
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
               }`}
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-rose-400" />
-              <span>DGCA Surveillance</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+              <span>Anomaly Detector</span>
               {criticalAlertsCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-rose-600 text-white">
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-600 text-white">
                   {criticalAlertsCount}
                 </span>
               )}
@@ -306,6 +339,20 @@ export const App: React.FC = () => {
                 onSelectTab={setActiveTab}
               />
             )}
+            {activeTab === 'econometrics' && (
+              <EconometricsTab
+                indices={data.econometricIndices}
+                cpiDivergence={data.cpiDivergence}
+                priceElasticity={data.priceElasticity}
+              />
+            )}
+
+            {activeTab === 'dgca' && (
+              <DgcaSurveillanceTab
+                surveillance={data.dgcaSurveillance}
+              />
+            )}
+
 
             {activeTab === 'routes' && (
               <RoutesTab
