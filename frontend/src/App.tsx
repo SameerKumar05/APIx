@@ -30,7 +30,7 @@ export const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [data, setData] = useState<DashboardSummaryData | null>(null);
-  const [isUsingMock, setIsUsingMock] = useState<boolean>(apiClient.isUsingMock());
+  const [isUsingMock, setIsUsingMock] = useState<boolean>(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
   const loadData = useCallback(async (isManualRefresh: boolean = false) => {

@@ -73,8 +73,8 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [streamStatus, setStreamStatus] = useState<
-    'connected' | 'disconnected' | 'reconnecting' | 'simulated'
-  >('simulated');
+    'connected' | 'connecting' | 'disconnected' | 'reconnecting'
+  >('connecting');
   const [selectedCarrierFilter, setSelectedCarrierFilter] = useState<string>('ALL');
   const [newlyAddedId, setNewlyAddedId] = useState<string | null>(null);
 
@@ -136,8 +136,8 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
                 className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
                   streamStatus === 'connected'
                     ? 'bg-emerald-400'
-                    : streamStatus === 'simulated'
-                    ? 'bg-amber-400'
+                    : streamStatus === 'connecting'
+                    ? 'bg-sky-400'
                     : 'bg-rose-400'
                 }`}
               ></span>
@@ -145,8 +145,8 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
                 className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
                   streamStatus === 'connected'
                     ? 'bg-emerald-500'
-                    : streamStatus === 'simulated'
-                    ? 'bg-amber-500'
+                    : streamStatus === 'connecting'
+                    ? 'bg-sky-500'
                     : 'bg-rose-500'
                 }`}
               ></span>
@@ -162,18 +162,21 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
             className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-semibold border ${
               streamStatus === 'connected'
                 ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
-                : streamStatus === 'simulated'
+                : streamStatus === 'connecting'
+                ? 'bg-sky-950/80 text-sky-300 border-sky-800'
+                : streamStatus === 'reconnecting'
                 ? 'bg-amber-950/80 text-amber-300 border-amber-800'
                 : 'bg-rose-950/80 text-rose-300 border-rose-800'
             }`}
           >
             {streamStatus === 'connected'
-              ? 'WEBSOCKET ACTIVE'
-              : streamStatus === 'simulated'
-              ? 'STREAM SIMULATOR'
-              : 'RECONNECTING'}
+              ? 'WEBSOCKET LIVE'
+              : streamStatus === 'connecting'
+              ? 'CONNECTING PIPELINE'
+              : streamStatus === 'reconnecting'
+              ? 'RECONNECTING'
+              : 'OFFLINE'}
           </span>
-
           <span className="text-slate-600 hidden md:inline">|</span>
 
           {/* Quick Metrics */}
