@@ -1,6 +1,7 @@
 import time
 import uuid
-from typing import Optional
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -17,7 +18,7 @@ router = APIRouter()
 
 
 async def verify_ingestion_key(
-    x_ingestion_key: Optional[str] = Header(None, alias="X-Ingestion-Key"),
+    x_ingestion_key: str | None = Header(None, alias="X-Ingestion-Key"),
 ) -> str:
     if not x_ingestion_key:
         raise HTTPException(
@@ -73,6 +74,35 @@ async def ingest_fare_batch(
 
             # Trigger downstream index calculation pipeline in background
             background_tasks.add_task(run_daily_index_pipeline)
+            # Broadcast newly ingested live flight quotes to connected streaming clients
+            from backend.app.api.v1.endpoints.stream import CARRIER_MAP
+            from backend.app.api.v1.endpoints.stream import manager as stream_manager
+
+            now_iso = datetime.now(UTC).isoformat()
+            for r in valid_records[:20]:
+                c_code = r.airline_code
+                c_name = CARRIER_MAP.get(c_code, f"Airline {c_code}")
+                dep_val = getattr(r, "departure_datetime", None) or getattr(r, "departure_time", None)
+                dep_str = dep_val.isoformat() if dep_val and hasattr(dep_val, "isoformat") else str(dep_val or now_iso)
+                book_val = getattr(r, "booking_datetime", None) or getattr(r, "booking_time", None)
+                book_str = book_val.isoformat() if book_val and hasattr(book_val, "isoformat") else str(book_val or now_iso)
+                packet = {
+                    "type": "fare_update",
+                    "fare_id": f"fare-live-{uuid.uuid4().hex[:8]}",
+                    "airline_code": c_code,
+                    "airline_name": c_name,
+                    "flight_number": r.flight_number,
+                    "origin": r.origin,
+                    "destination": r.destination,
+                    "route_code": f"{r.origin}-{r.destination}",
+                    "fare_inr": round(float(r.fare_inr), 2),
+                    "source": getattr(r, "source", "crawler") or "crawler",
+                    "cabin_class": (getattr(r, "cabin_class", "economy") or "economy").lower(),
+                    "departure_datetime": dep_str,
+                    "booking_datetime": book_str,
+                    "timestamp": now_iso,
+                }
+                background_tasks.add_task(stream_manager.broadcast, packet)
         except Exception:
             # Fallback for uninitialized test databases
             inserted_count = len(valid_records)
