@@ -457,18 +457,19 @@ def get_current_arbitrage_opportunities(
 
     query_date = target_date or datetime.now(timezone.utc).date()
 
-    # Query raw fare records for the calculation date
-    records = (
-        db.query(RawFare)
-        .filter(RawFare.flight_date == query_date)
-        .limit(10_000)
-        .all()
-    )
+    # Query raw fare records for the calculation date with defensive column check
+    query = db.query(RawFare).filter(RawFare.flight_date == query_date)
+    if hasattr(RawFare, "is_active"):
+        query = query.filter(getattr(RawFare, "is_active").is_(True))
+    records = query.limit(10_000).all()
 
     if not records:
         # Fallback to recent raw fares regardless of date if target date has no scrapes
+        fallback_query = db.query(RawFare)
+        if hasattr(RawFare, "is_active"):
+            fallback_query = fallback_query.filter(getattr(RawFare, "is_active").is_(True))
         records = (
-            db.query(RawFare)
+            fallback_query
             .order_by(RawFare.scraped_at.desc())
             .limit(5_000)
             .all()
