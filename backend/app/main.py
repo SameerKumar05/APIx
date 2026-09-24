@@ -118,3 +118,8 @@ async def root():
 
 # Include V1 API Router
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Convenience root WebSocket mounts for streaming clients
+from backend.app.api.v1.endpoints.stream import router as stream_router
+app.include_router(stream_router, prefix="/stream", tags=["Streaming"])
+app.include_router(stream_router, prefix="/ws", tags=["Streaming"])

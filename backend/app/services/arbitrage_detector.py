@@ -11,22 +11,9 @@ from __future__ import annotations
 import logging
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    Iterable,
-    List,
-    Mapping,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Union,
-)
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple, Union
 
-if TYPE_CHECKING:
-    from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session
 from backend.app.services.index_engine import (
     FlightQuote,
     _extract_field,

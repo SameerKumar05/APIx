@@ -21,6 +21,18 @@ from backend.app.schemas.analytics import (
     DGCAValidationItem,
     DGCAValidationResponse,
 )
+from backend.app.schemas.telemetry import (
+    CrawlerHealthItem,
+    CrawlerTriggerRequest,
+    CrawlerTriggerResponse,
+    IngestionTelemetryResponse,
+    ProxyHealthItem,
+    ProxyPoolSummary,
+)
+from backend.app.schemas.arbitrage import (
+    ArbitrageItem,
+    ArbitrageResponse,
+)
 
 __all__ = [
     "RawFareRecord",
@@ -40,4 +52,12 @@ __all__ = [
     "AnomalyAlertsResponse",
     "DGCAValidationItem",
     "DGCAValidationResponse",
+    "CrawlerHealthItem",
+    "ProxyPoolSummary",
+    "ProxyHealthItem",
+    "IngestionTelemetryResponse",
+    "CrawlerTriggerRequest",
+    "CrawlerTriggerResponse",
+    "ArbitrageItem",
+    "ArbitrageResponse",
 ]
