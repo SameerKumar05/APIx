@@ -91,6 +91,7 @@ def _extract_field(item: Union[FlightQuote, Mapping[str, Any], Any], field_name:
     if isinstance(item, FlightQuote):
         return getattr(item, field_name, default)
 
+
     alias_map: Dict[str, Tuple[str, ...]] = {
         "fare": ("fare", "total_fare", "fare_inr", "price"),
         "source_portal": ("source_portal", "source_platform", "source", "portal"),

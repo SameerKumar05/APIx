@@ -31,7 +31,7 @@ RESET="\033[0m"
 # Print banner
 echo -e "${CYAN}${BOLD}"
 echo "================================================================================"
-echo "          APIx Cycle 1 Master Verification Test Harness                         "
+echo "          APIx Cycle 2 Master Verification Test Harness                         "
 echo "  SIH 2026 PS 26056 - Real-time Airfare Price Index for CPI Augmentation        "
 echo "================================================================================"
 echo -e "${RESET}"
@@ -86,49 +86,66 @@ run_step() {
 # ------------------------------------------------------------------------------
 # 1. Database ORM Models & DGCA Seeding Baseline
 # ------------------------------------------------------------------------------
-run_step "1/7" "Database Models & DGCA Seed Invariants" \
+run_step "1/10" "Database Models & DGCA Seed Invariants" \
     "\"$PYTHON_BIN\" scripts/test_db_models.py"
 
 # ------------------------------------------------------------------------------
-# 2. Mathematical Invariants & Statistical Quant Engine
+# 2. Database Ingestion Repository, Bulk Insert & Retention Pruning
 # ------------------------------------------------------------------------------
-run_step "2/7" "Mathematical Invariants & Quant Formulations" \
+run_step "2/10" "Ingestion Repository & Automated Retention Pruning" \
+    "\"$PYTHON_BIN\" scripts/test_ingestion_repo.py"
+
+# ------------------------------------------------------------------------------
+# 3. Mathematical Invariants & Statistical Quant Engine
+# ------------------------------------------------------------------------------
+run_step "3/10" "Mathematical Invariants & Quant Formulations" \
     "\"$PYTHON_BIN\" scripts/test_math_engine.py"
 
 # ------------------------------------------------------------------------------
-# 3. Ingestion Scraper Framework & Synthetic Data Generator
+# 4. Statistical Daily Index Pipeline & DB Persistence
 # ------------------------------------------------------------------------------
-run_step "3/7" "Ingestion Scraper Framework & Multi-Window Generator" \
+run_step "4/10" "Daily Index Pipeline & Anomaly Engine" \
+    "\"$PYTHON_BIN\" scripts/test_index_pipeline.py"
+
+# ------------------------------------------------------------------------------
+# 5. Ingestion Scraper Framework & Synthetic Data Generator
+# ------------------------------------------------------------------------------
+run_step "5/10" "Ingestion Scraper Framework & Multi-Window Generator" \
     "\"$PYTHON_BIN\" scripts/test_ingestion_synthetic.py"
 
 # ------------------------------------------------------------------------------
-# 4. FastAPI Backend Application Endpoints & Security
+# 6. FastAPI Backend Application Endpoints & Security
 # ------------------------------------------------------------------------------
-run_step "4/7" "FastAPI Backend Endpoints & API Authentication" \
+run_step "6/10" "FastAPI Backend Endpoints & API Authentication" \
     "\"$PYTHON_BIN\" scripts/test_api_endpoints.py"
 
 # ------------------------------------------------------------------------------
-# 5. Schema Contract Alignment (Ingestion <-> DB <-> API)
+# 7. Schema Contract Alignment (Ingestion <-> DB <-> API)
 # ------------------------------------------------------------------------------
-run_step "5/7" "Schema Contract Alignment Verification" \
+run_step "7/10" "Schema Contract Alignment Verification" \
     "\"$PYTHON_BIN\" -m pytest tests/test_contracts.py -v"
 
 # ------------------------------------------------------------------------------
-# 6. Master Pytest Full Suite
+# 8. Cycle 2 End-to-End Pipeline Integration Test
 # ------------------------------------------------------------------------------
-run_step "6/7" "Master Pytest Full Test Suite" \
+run_step "8/10" "Cycle 2 End-to-End Pipeline Integration Test" \
+    "\"$PYTHON_BIN\" -m pytest tests/test_e2e_pipeline.py -v"
+
+# ------------------------------------------------------------------------------
+# 9. Master Pytest Full Suite
+# ------------------------------------------------------------------------------
+run_step "9/10" "Master Pytest Full Test Suite" \
     "\"$PYTHON_BIN\" -m pytest tests/ -v"
 
 # ------------------------------------------------------------------------------
-# 7. Frontend SPA Types & Verification
+# 10. Frontend SPA Types & Verification
 # ------------------------------------------------------------------------------
 if command -v bun >/dev/null 2>&1 && [ -d "$REPO_ROOT/frontend" ]; then
-    run_step "7/7" "Frontend Types, Mock Contracts & Verification" \
+    run_step "10/10" "Frontend Types, Mock Contracts & Verification" \
         "cd \"$REPO_ROOT/frontend\" && bun scripts/verify-mock-data.ts"
 elif [ -d "$REPO_ROOT/frontend" ]; then
-    echo -e "${YELLOW}[STEP 7/7 SKIPPED] Bun not found; skipping frontend mock data execution.${RESET}\n"
+    echo -e "${YELLOW}[STEP 10/10 SKIPPED] Bun not found; skipping frontend mock data execution.${RESET}\n"
 fi
-
 # ------------------------------------------------------------------------------
 # Final Summary & Exit
 # ------------------------------------------------------------------------------
