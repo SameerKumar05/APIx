@@ -14,6 +14,13 @@ from backend.app.models.raw_fare import RawFare
 from backend.app.models.route import Route
 from backend.app.models.scraping import ScrapingRun
 from backend.app.models.telemetry import ProxyHealthRecord, ScraperTelemetry
+from backend.app.models.econometrics import (
+    DgcaTrafficWeight,
+    DgcaViolation,
+    EconometricIndex,
+    MospiCpiSeries,
+    RouteElasticity,
+)
 
 __all__ = [
     "Route",
