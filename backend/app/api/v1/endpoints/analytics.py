@@ -17,6 +17,15 @@ from backend.app.schemas.analytics import (
     LeadTimeCurvePoint,
     LeadTimeCurveResponse,
 )
+from backend.app.schemas.arbitrage import (
+    ArbitrageItem,
+    ArbitrageResponse,
+)
+from backend.app.services.arbitrage_detector import (
+    ArbitrageDetector,
+    ArbitrageOpportunity,
+    get_current_arbitrage_opportunities,
+)
 
 router = APIRouter()
 
@@ -343,3 +352,4 @@ async def get_dgca_validation() -> DGCAValidationResponse:
         total_violations=total_breaches,
         violations=violations,
     )
+
