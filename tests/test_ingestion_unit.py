@@ -14,11 +14,13 @@ from ingestion.client import IngestionClient
 from ingestion.config import (
     BOOKING_WINDOWS,
     DEFAULT_ROUTES,
+    IngestionConfig,
     VALID_IATA_CODES,
 )
+from ingestion.crawlers.amadeus import AmadeusFlightClient, parse_iso_duration
 from ingestion.crawlers.easemytrip import EaseMyTripScraper
 from ingestion.crawlers.synthetic import SyntheticFlightGenerator
-
+from ingestion.orchestrator import IngestionOrchestrator
 
 class TestIngestionConfig(unittest.TestCase):
     def test_default_routes_count_and_properties(self):
@@ -212,6 +214,57 @@ class TestIngestionClient(unittest.TestCase):
         self.assertEqual(payload["records"][0]["origin_iata"], "DEL")
         self.assertIn("hash_id", payload["records"][0])
 
+
+
+class TestAmadeusFlightClient(unittest.TestCase):
+    def setUp(self):
+        self.client = AmadeusFlightClient(mock_mode=True)
+
+    def test_parse_iso_duration(self):
+        self.assertEqual(parse_iso_duration("PT2H15M"), 135)
+        self.assertEqual(parse_iso_duration("PT1H"), 60)
+        self.assertEqual(parse_iso_duration("PT45M"), 45)
+        self.assertEqual(parse_iso_duration(""), 120)
+
+    def test_amadeus_mock_scrape(self):
+        res = self.client.scrape_route("DEL", "BOM", date(2026, 9, 25), "T+1")
+        self.assertTrue(res.success)
+        self.assertEqual(len(res.records), 8)
+        self.assertEqual(res.metadata["tier"], 2)
+        self.assertEqual(res.source, "amadeus")
+        self.assertEqual(res.records[0].origin, "DEL")
+        self.assertEqual(res.records[0].destination, "BOM")
+        self.assertEqual(res.records[0].booking_window, "T+1")
+        self.assertGreater(res.records[0].fare_inr, 0)
+
+
+class TestIngestionOrchestrator(unittest.TestCase):
+    def setUp(self):
+        self.config = IngestionConfig(ingestion_mode="synthetic")
+        self.orchestrator = IngestionOrchestrator(
+            config=self.config,
+            jitter_range=(0.0, 0.0),
+            session_recycle_every=5,
+        )
+
+    def test_single_slot_execution(self):
+        route = DEFAULT_ROUTES[0]
+        window = BOOKING_WINDOWS[0]
+        scrape_res, summary = self.orchestrator.run_slot(route, window, slot_index=0)
+        self.assertTrue(scrape_res.success)
+        self.assertTrue(summary.success)
+        self.assertEqual(summary.route, "DEL-BOM")
+        self.assertEqual(summary.booking_window, "T+1")
+        self.assertGreater(summary.records_count, 0)
+
+    def test_orchestrator_dry_run_all_slots(self):
+        summary = self.orchestrator.run_all_slots(dry_run=True)
+        self.assertEqual(summary.total_slots, 40)
+        self.assertEqual(summary.successful_slots, 40)
+        self.assertEqual(summary.failed_slots, 0)
+        self.assertGreater(summary.total_records_collected, 150)
+        self.assertEqual(summary.backend_status, "skipped_dry_run")
+        self.assertEqual(len(summary.slots), 40)
 
 if __name__ == "__main__":
     unittest.main()

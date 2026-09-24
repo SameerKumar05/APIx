@@ -1,29 +1,70 @@
-"""EaseMyTrip scraper module with Playwright stealth options and XHR response interception.
+"""EaseMyTrip Scraper Module with Playwright Stealth, XHR Interception, and 3-Tier Fallback.
 
 Implements browser evasion strategies (navigator.webdriver cloaking, randomized viewports,
-header rotation) and network-level XHR response interception to capture structured JSON
-flight pricing payloads directly from backend APIs.
+Indian locale/timezone emulation, WebGL vendor masking) and network-level XHR response
+interception to capture structured JSON flight pricing payloads directly from backend APIs.
+
+Resource routing automatically aborts images, fonts, styles, and third-party trackers
+to achieve high throughput.
+
+Resilience architecture implements a 3-tier fallback chain:
+  - Tier 1: Live Playwright EaseMyTrip Scraper
+  - Tier 2: Amadeus Flight Offers Search API Client
+  - Tier 3: Deterministic DGCA-Calibrated Synthetic Generator
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 import random
 import re
-from datetime import date, datetime, timedelta
-from typing import Any, Callable, Dict, List, Optional, Tuple
+import time
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+
+# Optional Playwright import for headless browser automation
+try:
+    from playwright.sync_api import (
+        Browser,
+        BrowserContext,
+        Page,
+        Response as PlaywrightResponse,
+        Route as PlaywrightRoute,
+        sync_playwright,
+    )
+    HAS_PLAYWRIGHT_SYNC = True
+except ImportError:
+    HAS_PLAYWRIGHT_SYNC = False
+
+try:
+    from playwright.async_api import (
+        async_playwright,
+        Browser as AsyncBrowser,
+        BrowserContext as AsyncBrowserContext,
+        Page as AsyncPage,
+        Response as AsyncPlaywrightResponse,
+        Route as AsyncPlaywrightRoute,
+    )
+    HAS_PLAYWRIGHT_ASYNC = True
+except ImportError:
+    HAS_PLAYWRIGHT_ASYNC = False
 
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
 from ingestion.config import (
     BOOKING_WINDOW_MAP,
+    BOOKING_WINDOWS,
     BookingWindow,
     DEFAULT_ROUTES,
+    DEFAULT_USER_AGENTS,
     IngestionConfig,
     Route,
     VALID_AIRLINE_CODES,
     VALID_IATA_CODES,
 )
+from ingestion.crawlers.amadeus import AmadeusFlightClient
+from ingestion.crawlers.synthetic import SyntheticFlightGenerator
 
 logger = logging.getLogger("ingestion.crawlers.easemytrip")
 
@@ -42,13 +83,39 @@ PLAYWRIGHT_STEALTH_ARGS: List[str] = [
     "--disable-setuid-sandbox",
     "--disable-infobars",
     "--window-position=0,0",
-    "--ignore-certifcate-errors",
-    "--ignore-certifcate-errors-spki-list",
+    "--ignore-certificate-errors",
+    "--ignore-certificate-errors-spki-list",
     "--disable-dev-shm-usage",
     "--disable-accelerated-2d-canvas",
     "--disable-gpu",
-    "--lang=en-US,en;q=0.9",
+    "--lang=en-IN,en-US,en;q=0.9",
 ]
+
+# Known telemetry, ad, and tracker domains to abort during scraping
+TRACKER_DOMAINS: List[str] = [
+    r"google-analytics\.com",
+    r"googletagmanager\.com",
+    r"doubleclick\.net",
+    r"facebook\.net",
+    r"facebook\.com",
+    r"clevertap\.com",
+    r"hotjar\.com",
+    r"mixpanel\.com",
+    r"clarity\.ms",
+    r"newrelic\.com",
+    r"appsflyer\.com",
+    r"branch\.io",
+    r"vizury\.com",
+    r"criteo\.com",
+    r"adroll\.com",
+    r"segment\.io",
+    r"sentry\.io",
+]
+
+# Resource types to abort for speed and bandwidth optimization
+BLOCKED_RESOURCE_TYPES: frozenset[str] = frozenset(
+    {"image", "imageset", "media", "font", "stylesheet"}
+)
 
 # Client-side JavaScript injected into every new page context before scripts execute
 STEALTH_INIT_SCRIPT = """
@@ -74,12 +141,12 @@ window.chrome = {
     }
 };
 
-// 3. Spoof plugins and languages
+// 3. Spoof plugins and Indian English languages
 Object.defineProperty(navigator, 'plugins', {
     get: () => [1, 2, 3, 4, 5],
 });
 Object.defineProperty(navigator, 'languages', {
-    get: () => ['en-US', 'en'],
+    get: () => ['en-IN', 'en-US', 'en'],
 });
 
 // 4. Permissions spoofing
@@ -89,35 +156,61 @@ window.navigator.permissions.query = (parameters) => (
         Promise.resolve({ state: Notification.permission }) :
         originalQuery(parameters)
 );
+
+// 5. Spoof WebGL Vendor and Renderer
+const getParameter = WebGLRenderingContext.prototype.getParameter;
+WebGLRenderingContext.prototype.getParameter = function(parameter) {
+    if (parameter === 37445) { // UNMASKED_VENDOR_WEBGL
+        return 'Intel Inc.';
+    }
+    if (parameter === 37446) { // UNMASKED_RENDERER_WEBGL
+        return 'Intel Iris OpenGL Engine';
+    }
+    return getParameter.apply(this, [parameter]);
+};
 """
 
 
+def should_abort_resource(url: str, resource_type: str) -> bool:
+    """Checks whether a network request should be aborted to optimize scraping performance."""
+    if resource_type.lower() in BLOCKED_RESOURCE_TYPES:
+        return True
+    return any(re.search(pat, url, re.IGNORECASE) for pat in TRACKER_DOMAINS)
+
+
 class EaseMyTripScraper(BaseScraper):
-    """Production scraper skeleton for EaseMyTrip domestic flight search."""
+    """Production EaseMyTrip Scraper with Playwright stealth, XHR interception, and 3-tier fallback."""
 
     BASE_URL = "https://flight.easemytrip.com"
 
-    def __init__(self, config: Optional[IngestionConfig] = None) -> None:
+    def __init__(
+        self,
+        config: Optional[IngestionConfig] = None,
+        amadeus_client: Optional[AmadeusFlightClient] = None,
+        synthetic_generator: Optional[SyntheticFlightGenerator] = None,
+    ) -> None:
         super().__init__(config)
+        self.amadeus_client = amadeus_client or AmadeusFlightClient(config=self.config)
+        self.synthetic_generator = synthetic_generator or SyntheticFlightGenerator(config=self.config)
 
     def get_playwright_context_options(self) -> Dict[str, Any]:
-        """Generates randomized stealth browser context options."""
+        """Generates randomized stealth browser context options with Indian locale and timezone."""
         viewport = random.choice(STEALTH_VIEWPORTS)
         user_agent = random.choice(self.config.user_agents)
         return {
             "viewport": viewport,
             "user_agent": user_agent,
-            "locale": "en-US",
+            "locale": "en-IN",
             "timezone_id": "Asia/Kolkata",
             "geolocation": {"latitude": 28.6139, "longitude": 77.2090},  # New Delhi
             "permissions": ["geolocation"],
             "ignore_https_errors": True,
             "java_script_enabled": True,
             "extra_http_headers": {
-                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Language": "en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7",
                 "Sec-Ch-Ua": '"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"',
                 "Sec-Ch-Ua-Mobile": "?0",
-                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Ch-Ua-Platform": '"Linux"',
                 "Sec-Fetch-Dest": "document",
                 "Sec-Fetch-Mode": "navigate",
                 "Sec-Fetch-Site": "none",
@@ -129,7 +222,7 @@ class EaseMyTripScraper(BaseScraper):
     def build_search_url(self, origin: str, destination: str, flight_date: date) -> str:
         """Constructs EaseMyTrip domestic search query URL.
 
-        Format: /FlightList/Index?srch=DEL-BOM-24/09/2026&px=1-0-0&cbn=0&ar=e&isSplitItinerary=false
+        Format: /FlightList/Index?srch=DEL-BOM-25/09/2026&px=1-0-0&cbn=0&ar=e&isSplitItinerary=false
         """
         norm_orig = self.normalize_iata(origin)
         norm_dest = self.normalize_iata(destination)
@@ -145,6 +238,7 @@ class EaseMyTripScraper(BaseScraper):
             r"/api/flight/search",
             r"/Flight/Search",
             r"/AirSearch/",
+            r"/SearchFlight",
         ]
         return any(re.search(pat, url, re.IGNORECASE) for pat in target_patterns)
 
@@ -158,7 +252,8 @@ class EaseMyTripScraper(BaseScraper):
     ) -> List[RawFareRecord]:
         """Parses intercepted XHR JSON response from EaseMyTrip search API into RawFareRecords."""
         records: List[RawFareRecord] = []
-        capture_time = capture_dt or datetime.now()
+        capture_time = capture_dt or datetime.now(timezone.utc)
+        booking_dt_str = capture_time.strftime("%Y-%m-%dT%H:%M:%S")
 
         # EaseMyTrip typical JSON response wraps flight sectors in 'AirSearchResult' or 'FlightDetails' or 'Flights'
         flight_items = (
@@ -170,8 +265,11 @@ class EaseMyTripScraper(BaseScraper):
         )
 
         if not isinstance(flight_items, list):
-            logger.warning("Unexpected flight_items payload structure: %s", type(flight_items))
+            logger.debug("Unexpected flight_items payload structure: %s", type(flight_items))
             return records
+
+        norm_origin = self.normalize_iata(origin)
+        norm_dest = self.normalize_iata(destination)
 
         for item in flight_items:
             try:
@@ -211,16 +309,17 @@ class EaseMyTripScraper(BaseScraper):
                 record = RawFareRecord(
                     airline_code=airline_code,
                     flight_number=full_flight_no,
-                    origin=self.normalize_iata(origin),
-                    destination=self.normalize_iata(destination),
+                    origin=norm_origin,
+                    destination=norm_dest,
                     departure_datetime=dep_dt_str,
                     arrival_datetime=arr_dt_str,
-                    booking_datetime=capture_time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    booking_datetime=booking_dt_str,
                     fare_inr=fare_inr,
                     cabin_class="economy",
                     stops=stops,
                     source="easemytrip",
                     booking_window=window_code,
+                    flight_date=dep_dt_str.split("T")[0],
                     duration_minutes=duration,
                     is_synthetic=False,
                     source_platform="easemytrip",
@@ -236,25 +335,91 @@ class EaseMyTripScraper(BaseScraper):
 
         return records
 
-    async def intercept_response(self, response: Any, collected_records: List[RawFareRecord], context_meta: Dict[str, Any]) -> None:
-        """Playwright response event listener to intercept and parse XHR flight search JSON."""
-        try:
-            url = response.url
-            if self.is_flight_api_url(url) and response.status == 200:
-                content_type = response.headers.get("content-type", "")
-                if "application/json" in content_type or "text/plain" in content_type:
-                    body = await response.text()
-                    data = json.loads(body)
-                    parsed = self.parse_flight_json(
-                        payload=data,
-                        origin=context_meta.get("origin", "DEL"),
-                        destination=context_meta.get("destination", "BOM"),
-                        window_code=context_meta.get("window_code", "T+1"),
-                    )
-                    collected_records.extend(parsed)
-                    logger.info("Intercepted %d flight records from %s", len(parsed), url)
-        except Exception as exc:
-            logger.warning("Error intercepting network response: %s", exc)
+    def _scrape_with_playwright(
+        self,
+        origin: str,
+        destination: str,
+        target_date: date,
+        window_code: str,
+    ) -> List[RawFareRecord]:
+        """Launches Playwright with stealth configurations and captures flight search XHR JSON."""
+        if not HAS_PLAYWRIGHT_SYNC:
+            raise RuntimeError("playwright.sync_api is not installed")
+
+        search_url = self.build_search_url(origin, destination, target_date)
+        collected_records: List[RawFareRecord] = []
+        capture_time = datetime.now(timezone.utc)
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=self.config.playwright_headless,
+                args=PLAYWRIGHT_STEALTH_ARGS,
+            )
+            try:
+                context_options = self.get_playwright_context_options()
+                context = browser.new_context(**context_options)
+                context.add_init_script(STEALTH_INIT_SCRIPT)
+
+                # Resource routing to abort images, fonts, styles, and trackers
+                def handle_route(route: PlaywrightRoute) -> None:
+                    req = route.request
+                    if should_abort_resource(req.url, req.resource_type):
+                        route.abort()
+                    else:
+                        route.continue_()
+
+                context.route("**/*", handle_route)
+
+                page = context.new_page()
+
+                # Response interception handler
+                def handle_response(resp: PlaywrightResponse) -> None:
+                    try:
+                        url = resp.url
+                        if self.is_flight_api_url(url) and resp.status == 200:
+                            content_type = resp.headers.get("content-type", "")
+                            if "application/json" in content_type or "text/plain" in content_type:
+                                data = resp.json()
+                                parsed = self.parse_flight_json(
+                                    payload=data,
+                                    origin=origin,
+                                    destination=destination,
+                                    window_code=window_code,
+                                    capture_dt=capture_time,
+                                )
+                                if parsed:
+                                    collected_records.extend(parsed)
+                                    logger.info(
+                                        "Intercepted %d records from EaseMyTrip (%s)",
+                                        len(parsed),
+                                        url,
+                                    )
+                    except Exception as resp_err:
+                        logger.debug("Error in response interception handler: %s", resp_err)
+
+                page.on("response", handle_response)
+
+                # Navigate with domcontentloaded for high-speed scraping
+                page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
+
+                # Allow brief settling time for XHR search endpoints
+                try:
+                    page.wait_for_load_state("networkidle", timeout=5000)
+                except Exception:
+                    pass
+
+                if not collected_records:
+                    # Give asynchronous requests a moment to complete
+                    try:
+                        page.wait_for_timeout(2500)
+                    except Exception:
+                        pass
+
+                context.close()
+            finally:
+                browser.close()
+
+        return collected_records
 
     def scrape_route(
         self,
@@ -263,34 +428,96 @@ class EaseMyTripScraper(BaseScraper):
         target_date: date,
         window_code: str,
     ) -> ScrapeResult:
-        """Executes Playwright browser scrape session for EaseMyTrip (synchronous wrapper/skeleton)."""
-        search_url = self.build_search_url(origin, destination, target_date)
-        logger.info("EaseMyTrip scraping target URL: %s (window %s)", search_url, window_code)
+        """Executes scrape for a single route-window slot with automatic 3-tier fallback.
 
-        # In Cycle 1 scaffold, if Playwright is not running, return structured skeleton result
-        return ScrapeResult(
-            source="easemytrip",
-            success=True,
-            records=[],
-            errors=[],
-            duration_ms=0.0,
-            metadata={
-                "target_url": search_url,
-                "origin": origin,
-                "destination": destination,
-                "window": window_code,
-                "status": "scaffold_initialized",
-            },
-        )
+        Tier 1: EaseMyTrip Playwright crawler
+        Tier 2: Amadeus Flight Offers Search API (Fallback)
+        Tier 3: Synthetic DGCA Flight Generator (Ultimate Fallback)
+        """
+        start_time = time.time()
+        norm_orig = self.normalize_iata(origin)
+        norm_dest = self.normalize_iata(destination)
+        mode = self.config.ingestion_mode.lower()
+
+        # Direct synthetic / mock mode bypass
+        if mode == "synthetic":
+            res = self.synthetic_generator.scrape_route(norm_orig, norm_dest, target_date, window_code)
+            res.metadata["tier"] = 3
+            res.metadata["source"] = "easemytrip_tier3_synthetic"
+            return res
+
+        if mode == "mock":
+            # Test Tier 2 Amadeus mock first
+            res = self.amadeus_client.scrape_route(norm_orig, norm_dest, target_date, window_code)
+            if res.success and res.records:
+                res.metadata["tier"] = 2
+                res.metadata["source"] = "easemytrip_tier2_amadeus_mock"
+                return res
+            # Otherwise synthetic
+            res = self.synthetic_generator.scrape_route(norm_orig, norm_dest, target_date, window_code)
+            res.metadata["tier"] = 3
+            res.metadata["source"] = "easemytrip_tier3_synthetic"
+            return res
+
+        # Tier 1: Live Playwright EaseMyTrip Scraper
+        tier1_errors: List[str] = []
+        try:
+            logger.info("Tier 1: Initiating EaseMyTrip Playwright scrape for %s-%s (%s)", norm_orig, norm_dest, window_code)
+            records = self._scrape_with_playwright(norm_orig, norm_dest, target_date, window_code)
+            if records:
+                elapsed_ms = (time.time() - start_time) * 1000.0
+                return ScrapeResult(
+                    source="easemytrip",
+                    success=True,
+                    records=records,
+                    errors=[],
+                    duration_ms=round(elapsed_ms, 2),
+                    metadata={
+                        "tier": 1,
+                        "origin": norm_orig,
+                        "destination": norm_dest,
+                        "window": window_code,
+                        "date": target_date.isoformat(),
+                    },
+                )
+            tier1_errors.append("EaseMyTrip Tier 1 returned 0 records (anti-bot or no flights)")
+        except Exception as t1_exc:
+            err_msg = f"EaseMyTrip Tier 1 exception: {t1_exc}"
+            logger.warning(err_msg)
+            tier1_errors.append(err_msg)
+
+        # Tier 2: Amadeus Flight Offers Search Fallback
+        logger.info("Tier 2 Fallback: Invoking Amadeus Flight Offers Search for %s-%s (%s)", norm_orig, norm_dest, window_code)
+        try:
+            t2_res = self.amadeus_client.scrape_route(norm_orig, norm_dest, target_date, window_code)
+            if t2_res.success and t2_res.records:
+                elapsed_ms = (time.time() - start_time) * 1000.0
+                t2_res.metadata["tier"] = 2
+                t2_res.metadata["fallback"] = "amadeus"
+                t2_res.metadata["tier1_errors"] = tier1_errors
+                t2_res.duration_ms = round(elapsed_ms, 2)
+                return t2_res
+        except Exception as t2_exc:
+            logger.warning("Amadeus Tier 2 fallback failed: %s", t2_exc)
+
+        # Tier 3: Synthetic DGCA Flight Generator Fallback
+        logger.info("Tier 3 Fallback: Invoking Synthetic DGCA Generator for %s-%s (%s)", norm_orig, norm_dest, window_code)
+        t3_res = self.synthetic_generator.scrape_route(norm_orig, norm_dest, target_date, window_code)
+        elapsed_ms = (time.time() - start_time) * 1000.0
+        t3_res.metadata["tier"] = 3
+        t3_res.metadata["fallback"] = "synthetic"
+        t3_res.metadata["tier1_errors"] = tier1_errors
+        t3_res.duration_ms = round(elapsed_ms, 2)
+        return t3_res
 
     def scrape_all(
         self,
         routes: Optional[List[Route]] = None,
         windows: Optional[List[BookingWindow]] = None,
     ) -> List[ScrapeResult]:
-        """Scrapes all routes and windows using EaseMyTrip."""
+        """Scrapes all routes and windows using EaseMyTrip 3-tier fallback pipeline."""
         target_routes = routes or DEFAULT_ROUTES
-        target_windows = windows or []
+        target_windows = windows or BOOKING_WINDOWS
         today = date.today()
 
         results: List[ScrapeResult] = []

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -39,7 +41,7 @@ class IngestionClient:
         ingestion_key: Optional[str] = None,
     ) -> None:
         self.config = config or IngestionConfig()
-        self.base_url = (base_url or self.config.api_base_url).rstrip("/")
+        self.base_url = (base_url or os.getenv("INGESTION_ENDPOINT_URL") or self.config.api_base_url).rstrip("/")
         self.ingestion_key = ingestion_key or self.config.ingestion_key
         self.batch_endpoint = f"{self.base_url}/api/v1/ingestion/batch"
 
@@ -54,7 +56,14 @@ class IngestionClient:
         b_id = batch_id or f"batch-{uuid.uuid4().hex[:12]}"
         scrape_time = scraped_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
-        serialized_records = [r.to_dict() for r in records]
+        serialized_records = []
+        for r in records:
+            rec_dict = r.to_dict()
+            bw = rec_dict.get("booking_window")
+            if isinstance(bw, str):
+                match = re.search(r"\d+", bw)
+                rec_dict["booking_window"] = int(match.group()) if match else None
+            serialized_records.append(rec_dict)
 
         return {
             "batch_id": b_id,

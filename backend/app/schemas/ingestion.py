@@ -1,5 +1,6 @@
+import re
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -34,6 +35,18 @@ class RawFareRecord(BaseModel):
     @classmethod
     def normalize_cabin_class(cls, v: str) -> str:
         return v.strip().lower()
+
+    @field_validator("booking_window", mode="before")
+    @classmethod
+    def parse_booking_window(cls, v: Any) -> Optional[int]:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            match = re.search(r"\d+", v)
+            if match:
+                return int(match.group())
+            return None
+        return int(v)
 
 
 class IngestionBatchRequest(BaseModel):
