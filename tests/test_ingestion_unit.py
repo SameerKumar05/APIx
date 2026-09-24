@@ -9,13 +9,11 @@ worktree_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if worktree_root not in sys.path:
     sys.path.insert(0, worktree_root)
 
-from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
+from ingestion.base import BaseScraper, RawFareRecord
 from ingestion.client import IngestionClient
 from ingestion.config import (
     BOOKING_WINDOWS,
     DEFAULT_ROUTES,
-    IngestionConfig,
-    VALID_AIRLINE_CODES,
     VALID_IATA_CODES,
 )
 from ingestion.crawlers.easemytrip import EaseMyTripScraper
@@ -132,9 +130,21 @@ class TestEaseMyTripScraper(unittest.TestCase):
         self.assertTrue(url.startswith("https://flight.easemytrip.com"))
 
     def test_url_pattern_matcher(self):
-        self.assertTrue(self.scraper.is_flight_api_url("https://flight.easemytrip.com/Flight/GetFlightList"))
-        self.assertTrue(self.scraper.is_flight_api_url("https://flight.easemytrip.com/api/flight/search?src=DEL"))
-        self.assertFalse(self.scraper.is_flight_api_url("https://flight.easemytrip.com/static/js/bundle.js"))
+        self.assertTrue(
+            self.scraper.is_flight_api_url(
+                "https://flight.easemytrip.com/Flight/GetFlightList"
+            )
+        )
+        self.assertTrue(
+            self.scraper.is_flight_api_url(
+                "https://flight.easemytrip.com/api/flight/search?src=DEL"
+            )
+        )
+        self.assertFalse(
+            self.scraper.is_flight_api_url(
+                "https://flight.easemytrip.com/static/js/bundle.js"
+            )
+        )
 
     def test_parse_flight_json(self):
         raw_payload = {
