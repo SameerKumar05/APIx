@@ -9,6 +9,12 @@ from backend.app.services.anomaly_detector import (
     classify_anomaly,
     detect_anomaly,
 )
+from backend.app.services.arbitrage_detector import (
+    ArbitrageDetector,
+    ArbitrageOpportunity,
+    calculate_spread,
+    get_current_arbitrage_opportunities,
+)
 from backend.app.services.index_engine import (
     DEFAULT_AIRLINE_MARKET_SHARES,
     DEFAULT_BOOKING_WINDOW_WEIGHTS,
@@ -28,12 +34,18 @@ from backend.app.services.index_engine import (
     filter_quotes_tukey,
     weighted_median_values,
 )
+from backend.app.services.streaming_dedup import (
+    DedupResult,
+    FlightBufferState,
+    StreamingDedupEngine,
+)
 try:
     from backend.app.services.index_pipeline import (
         DEFAULT_BASE_FARES,
         DEFAULT_ROUTE_WEIGHTS,
         DEFAULT_WINDOW_WEIGHTS,
         run_daily_index_pipeline,
+        run_streaming_dedup_and_arbitrage,
     )
 except ImportError:
     pass
@@ -67,4 +79,12 @@ __all__ = [
     "DEFAULT_BASE_FARES",
     "DEFAULT_ROUTE_WEIGHTS",
     "DEFAULT_WINDOW_WEIGHTS",
+    "StreamingDedupEngine",
+    "DedupResult",
+    "FlightBufferState",
+    "ArbitrageDetector",
+    "ArbitrageOpportunity",
+    "calculate_spread",
+    "get_current_arbitrage_opportunities",
+    "run_streaming_dedup_and_arbitrage",
 ]
