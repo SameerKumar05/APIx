@@ -324,7 +324,7 @@ export interface ArbitrageResponse {
 // 8. Generic UI / API State
 // ---------------------------------------------------------------------------
 
-export type ActiveTab = 'overview' | 'routes' | 'elasticity' | 'anomalies' | 'telemetry' | 'arbitrage';
+export type ActiveTab = 'overview' | 'econometrics' | 'dgca' | 'routes' | 'elasticity' | 'anomalies' | 'telemetry' | 'arbitrage';
 
 export interface DashboardSummaryData {
   nationalLatest: NationalIndexLatestResponse;
@@ -337,4 +337,131 @@ export interface DashboardSummaryData {
   systemHealth: SystemHealthResponse;
   telemetry: TelemetryResponse;
   arbitrage: ArbitrageResponse;
+  econometricIndices: EconometricIndicesResponse;
+  cpiDivergence: CpiDivergenceResponse;
+  priceElasticity: PriceElasticityResponse;
+  dgcaSurveillance: DgcaSurveillanceResponse;
+}
+
+// ---------------------------------------------------------------------------
+// 9. Econometric Engine & MoSPI CPI Gap Analytics (Cycle 4)
+// ---------------------------------------------------------------------------
+
+export interface EconometricIndexPoint {
+  date: string;
+  laspeyres: number;
+  paasche: number;
+  fisher: number;
+  mospi_cpi: number;
+  route_code?: string;
+  substitution_bias?: number;
+  bias_pct?: number;
+}
+
+export interface EconometricIndicesResponse {
+  base_period: string;
+  laspeyres_index: number;
+  paasche_index: number;
+  fisher_index: number;
+  substitution_bias: number;
+  series: EconometricIndexPoint[];
+  summary?: {
+    current_fisher: number;
+    current_laspeyres: number;
+    current_paasche: number;
+    avg_substitution_bias: number;
+  };
+}
+
+export interface CpiDivergencePoint {
+  date: string;
+  apix_index: number;
+  mospi_cpi: number;
+  gap: number;
+}
+
+export interface CpiDivergenceResponse {
+  current_divergence_pts: number;
+  inflation_lead_days: number;
+  correlation_coefficient: number;
+  divergence_series: CpiDivergencePoint[];
+  summary?: {
+    mean_divergence: number;
+    tracking_error: number;
+    correlation: number;
+    lead_lag_days: number;
+    optimal_lead_days: number;
+  };
+}
+
+export interface PriceElasticityGradientPoint {
+  lead_window: 'T+30' | 'T+15' | 'T+7' | 'T+1' | string;
+  days_before_departure: number;
+  surge_multiplier: number;
+  avg_fare_inr: number;
+  price_elasticity: number;
+  demand_index?: number;
+}
+
+export interface PriceElasticityResponse {
+  route_code?: string;
+  as_of_date?: string;
+  gradient_points: PriceElasticityGradientPoint[];
+  segments?: {
+    t1_t7?: number;
+    t7_t15?: number;
+    t15_t30?: number;
+    avg_lead_time_decay?: number;
+    confidence_score?: number;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 10. DGCA Regulatory Surveillance & Price Gouging Audits (Cycle 4)
+// ---------------------------------------------------------------------------
+
+export type DgcaViolationSeverity = 'WARNING' | 'CRITICAL' | 'SEVERE';
+
+export interface DgcaViolationRecord {
+  id: string;
+  route_code: string;
+  carrier_code: string;
+  carrier_name: string;
+  flight_number: string;
+  flight_date?: string;
+  window?: string;
+  observed_fare_inr: number;
+  statutory_band_cap_inr: number;
+  surge_multiplier: number;
+  severity: DgcaViolationSeverity;
+  compliance_status: 'COMPLIANT' | 'WARNING' | 'BREACH' | 'PENDING';
+  detected_at: string;
+  description: string;
+  violation_code?: string;
+  status?: string;
+}
+
+export interface DgcaCarrierDistribution {
+  carrier_code: string;
+  carrier_name: string;
+  avg_surge_multiplier: number;
+  violations_count: number;
+  compliance_rate: number;
+}
+
+export interface DgcaSurveillanceResponse {
+  total_evaluated: number;
+  total_violations: number;
+  violations: DgcaViolationRecord[];
+  carrier_distribution: DgcaCarrierDistribution[];
+  summary?: {
+    total_violations: number;
+    severe_count: number;
+    critical_count: number;
+    warning_count: number;
+    top_violating_carriers?: Array<{
+      airline_code: string;
+      count: number;
+    }>;
+  };
 }

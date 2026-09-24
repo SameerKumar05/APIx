@@ -25,6 +25,10 @@ import {
   mockTelemetry,
   mockArbitrage,
   mockLiveFares,
+  mockEconometricIndices,
+  mockCpiDivergence,
+  mockPriceElasticity,
+  mockDgcaSurveillance,
   getMockDashboardSummary,
 } from '../src/services/mockData';
 
@@ -35,9 +39,11 @@ import { AnomaliesTab } from '../src/components/AnomaliesTab';
 import { TelemetryTab } from '../src/components/TelemetryTab';
 import { LiveTicker } from '../src/components/LiveTicker';
 import { ArbitrageTab } from '../src/components/ArbitrageTab';
+import { EconometricsTab } from '../src/components/EconometricsTab';
+import { DgcaSurveillanceTab } from '../src/components/DgcaSurveillanceTab';
 async function runCycle2Verification() {
   console.log('===============================================================');
-  console.log('   APIx Frontend Cycle 2 Premier Verification (PS 26056)       ');
+  console.log('   APIx Frontend Cycle 4 Premier Verification (PS 26056)       ');
   console.log('===============================================================\n');
 
   // -------------------------------------------------------------------------
@@ -109,6 +115,17 @@ async function runCycle2Verification() {
   console.log(`✓ Arbitrage Opportunities: ${mockArbitrage.items.length} items (${otaCheaperCount} OTA Cheaper, ${airlineCheaperCount} Airline Cheaper)`);
   console.log(`✓ Peak Arbitrage Spread: +${mockArbitrage.max_spread_percentage}%`);
   console.log(`✓ Live Fare Stream Seed: ${mockLiveFares.length} initial broadcast packets`);
+  // [Cycle 4] Verify Econometric & DGCA Datasets
+  console.log('\n[Cycle 4] Verifying Econometric Engine & DGCA Surveillance Datasets...');
+  if (!mockEconometricIndices.fisher_index || !mockEconometricIndices.laspeyres_index || !mockEconometricIndices.paasche_index) {
+    throw new Error('Invalid mockEconometricIndices');
+  }
+  console.log(`✓ Econometric Indices: Fisher ${mockEconometricIndices.fisher_index} | Laspeyres ${mockEconometricIndices.laspeyres_index} | Paasche ${mockEconometricIndices.paasche_index} (Substitution Bias: Δ ${mockEconometricIndices.substitution_bias} pts)`);
+  console.log(`✓ MoSPI CPI Divergence: +${mockCpiDivergence.current_divergence_pts} pts | Inflation Lead Time: +${mockCpiDivergence.inflation_lead_days} days | Correlation: ${mockCpiDivergence.correlation_coefficient}`);
+  console.log(`✓ Price Elasticity Curve: ${mockPriceElasticity.gradient_points.length} gradient points (T+30 to T+1)`);
+  console.log(`✓ DGCA Surveillance: ${mockDgcaSurveillance.total_violations} violations across ${mockDgcaSurveillance.total_evaluated} flights`);
+  console.log(`✓ Carrier Distribution: ${mockDgcaSurveillance.carrier_distribution.length} scheduled airlines audited`);
+
   // -------------------------------------------------------------------------
   // 2. Verify ApiClient Service Methods
   // -------------------------------------------------------------------------
@@ -116,7 +133,7 @@ async function runCycle2Verification() {
   apiClient.setPreferMock(true);
 
   const summary = await apiClient.getDashboardSummary();
-  if (!summary.nationalLatest || !summary.routes || !summary.leadTimeCurve || !summary.anomalies || !summary.systemHealth) {
+  if (!summary.nationalLatest || !summary.routes || !summary.leadTimeCurve || !summary.anomalies || !summary.systemHealth || !summary.econometricIndices || !summary.cpiDivergence || !summary.priceElasticity || !summary.dgcaSurveillance) {
     throw new Error('Composite summary returned incomplete dataset');
   }
   console.log(`✓ Ingestion Telemetry: ${summary.systemHealth.status} | Scrapers: ${summary.systemHealth.active_scrapers} | Ingested: ${summary.systemHealth.records_ingested_today.toLocaleString()} fares`);
@@ -239,6 +256,38 @@ async function runCycle2Verification() {
     throw new Error('ArbitrageTab missing required arbitrage headers');
   }
   console.log(`  ✓ ArbitrageTab rendered cleanly (${arbitrageHtml.length} bytes HTML).`);
+  // Tab 7: EconometricsTab
+  console.log('  -> Rendering EconometricsTab (Dual-axis composite line chart, Fisher/Laspeyres vs MoSPI, elasticity curve)...');
+  const econometricsHtml = renderToString(
+    React.createElement(EconometricsTab, {
+      indices: summary.econometricIndices,
+      cpiDivergence: summary.cpiDivergence,
+      priceElasticity: summary.priceElasticity,
+    })
+  );
+  if (!econometricsHtml || econometricsHtml.length < 500) {
+    throw new Error('EconometricsTab rendered empty or truncated markup');
+  }
+  if (!econometricsHtml.includes('APIx Econometric Engine') || !econometricsHtml.includes('Substitution Bias')) {
+    throw new Error('EconometricsTab missing required econometric headers');
+  }
+  console.log(`  ✓ EconometricsTab rendered cleanly (${econometricsHtml.length} bytes HTML).`);
+
+  // Tab 8: DgcaSurveillanceTab
+  console.log('  -> Rendering DgcaSurveillanceTab (Statutory violation feed, severity badges, carrier distribution)...');
+  const dgcaHtml = renderToString(
+    React.createElement(DgcaSurveillanceTab, {
+      surveillance: summary.dgcaSurveillance,
+    })
+  );
+  if (!dgcaHtml || dgcaHtml.length < 500) {
+    throw new Error('DgcaSurveillanceTab rendered empty or truncated markup');
+  }
+  if (!dgcaHtml.includes('DGCA TARIFF SURVEILLANCE') || !dgcaHtml.includes('Regulatory Violation Feed')) {
+    throw new Error('DgcaSurveillanceTab missing required surveillance headers');
+  }
+  console.log(`  ✓ DgcaSurveillanceTab rendered cleanly (${dgcaHtml.length} bytes HTML).`);
+
 
   // -------------------------------------------------------------------------
   // 4. Verify DGCA Weight Invariant

@@ -19,6 +19,10 @@ import {
   CrawlerTriggerRequest,
   CrawlerTriggerResponse,
   LiveFareUpdate,
+  EconometricIndicesResponse,
+  CpiDivergenceResponse,
+  PriceElasticityResponse,
+  DgcaSurveillanceResponse,
 } from '../types/api';
 
 import {
@@ -33,6 +37,10 @@ import {
   mockTelemetry,
   mockArbitrage,
   mockLiveFares,
+  mockEconometricIndices,
+  mockCpiDivergence,
+  mockPriceElasticity,
+  mockDgcaSurveillance,
   getMockDashboardSummary,
   generateMockNationalHistory,
 } from './mockData';
@@ -273,6 +281,63 @@ export class ApiClient {
       () => mockArbitrage
     );
   }
+  /**
+   * 8a. Econometric Indices (Laspeyres, Paasche, Fisher, Substitution Bias)
+   */
+  public async getEconometricIndices(routeCode?: string): Promise<EconometricIndicesResponse> {
+    const query = routeCode ? `?route_code=${encodeURIComponent(routeCode)}` : '';
+    return this.request<EconometricIndicesResponse>(
+      `/econometrics/indices${query}`,
+      () => mockEconometricIndices
+    );
+  }
+
+  /**
+   * 8b. MoSPI CPI Divergence & Lead-Lag Tracking
+   */
+  public async getCpiDivergence(startMonth?: string, endMonth?: string): Promise<CpiDivergenceResponse> {
+    const params = new URLSearchParams();
+    if (startMonth) params.append('start_month', startMonth);
+    if (endMonth) params.append('end_month', endMonth);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return this.request<CpiDivergenceResponse>(
+      `/econometrics/cpi-divergence${query}`,
+      () => mockCpiDivergence
+    );
+  }
+
+  /**
+   * 8c. Price Elasticity Gradient Across Lead-Time Windows
+   */
+  public async getPriceElasticity(routeCode?: string): Promise<PriceElasticityResponse> {
+    const query = routeCode ? `?route_code=${encodeURIComponent(routeCode)}` : '';
+    return this.request<PriceElasticityResponse>(
+      `/econometrics/elasticity${query}`,
+      () => mockPriceElasticity
+    );
+  }
+
+  /**
+   * 8d. DGCA Statutory Violation Feed & Carrier Distribution
+   */
+  public async getDgcaSurveillance(params?: {
+    severity?: string;
+    route_code?: string;
+    airline_code?: string;
+    limit?: number;
+  }): Promise<DgcaSurveillanceResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.severity) queryParams.append('severity', params.severity);
+    if (params?.route_code) queryParams.append('route_code', params.route_code);
+    if (params?.airline_code) queryParams.append('airline_code', params.airline_code);
+    if (params?.limit) queryParams.append('limit', String(params.limit));
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
+    return this.request<DgcaSurveillanceResponse>(
+      `/econometrics/dgca-violations${query}`,
+      () => mockDgcaSurveillance
+    );
+  }
+
 
   /**
    * 9. Trigger Manual Crawler Ingestion
@@ -482,6 +547,10 @@ export class ApiClient {
         systemHealth,
         telemetry,
         arbitrage,
+        econometricIndices,
+        cpiDivergence,
+        priceElasticity,
+        dgcaSurveillance,
       ] = await Promise.all([
         this.getNationalIndexLatest(),
         this.getNationalIndexHistory(30),
@@ -493,6 +562,10 @@ export class ApiClient {
         this.getSystemHealth(),
         this.getTelemetry(),
         this.getArbitrage(),
+        this.getEconometricIndices(),
+        this.getCpiDivergence(),
+        this.getPriceElasticity(),
+        this.getDgcaSurveillance(),
       ]);
 
       return {
@@ -506,6 +579,10 @@ export class ApiClient {
         systemHealth,
         telemetry,
         arbitrage,
+        econometricIndices,
+        cpiDivergence,
+        priceElasticity,
+        dgcaSurveillance,
       };
     } catch {
       return getMockDashboardSummary();
