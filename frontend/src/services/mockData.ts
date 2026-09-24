@@ -30,11 +30,17 @@ export const mockNationalLatest: NationalIndexLatestResponse = {
   confidence_interval_upper: 119.48,
   status: 'OFFICIAL',
   weighted_median_fare_inr: 5480,
+  mospi_cpi: 107.40,
+  mospi_cpi_divergence: 11.25,
+  t1_index: 154.20,
+  t7_index: 128.60,
+  t15_index: 114.10,
+  t30_index: 99.40,
 };
-
 export const generateMockNationalHistory = (days: number = 30): NationalIndexPoint[] => {
   const points: NationalIndexPoint[] = [];
   const baseValue = 108.5;
+  const mospiBase = 105.8;
   const now = new Date();
 
   for (let i = days - 1; i >= 0; i--) {
@@ -50,6 +56,19 @@ export const generateMockNationalHistory = (days: number = 30): NationalIndexPoi
     const index_value = Number((baseValue + trend + weekendFactor + noise).toFixed(2));
     const moving_avg_7d = Number((index_value * 0.98 + (baseValue + trend) * 0.02).toFixed(2));
 
+    // MoSPI Transport CPI: smooth monthly official index with conservative slope
+    const mospi_cpi = Number((mospiBase + (days - i) * 0.055 + Math.sin(i * 0.2) * 0.15).toFixed(2));
+
+    // Booking window sub-indices illustrating dynamic surge behavior
+    // T+1: high volatility emergency bookings (140 - 165)
+    const t1_index = Number((index_value * 1.30 + weekendFactor * 3.2 + Math.sin(i * 1.1) * 3.5).toFixed(2));
+    // T+7: near-term booking window (120 - 135)
+    const t7_index = Number((index_value * 1.08 + weekendFactor * 1.4 + Math.cos(i * 0.9) * 1.8).toFixed(2));
+    // T+15: mid-term planning window (110 - 118)
+    const t15_index = Number((index_value * 0.96 + Math.sin(i * 0.5) * 1.2).toFixed(2));
+    // T+30: advance baseline booking window (96 - 103)
+    const t30_index = Number((index_value * 0.84 + Math.cos(i * 0.4) * 0.9).toFixed(2));
+
     points.push({
       timestamp: d.toISOString(),
       index_value,
@@ -58,6 +77,11 @@ export const generateMockNationalHistory = (days: number = 30): NationalIndexPoi
       base_period: '2026-01=100',
       confidence_interval_lower: Number((index_value - 0.95).toFixed(2)),
       confidence_interval_upper: Number((index_value + 0.95).toFixed(2)),
+      mospi_cpi,
+      t1_index,
+      t7_index,
+      t15_index,
+      t30_index,
     });
   }
 
@@ -88,6 +112,9 @@ export const mockRoutes: RouteOverviewItem[] = [
     status: 'ACTIVE',
     active_airlines_count: 5,
     distance_km: 1148,
+    sparkline_7d: [5620, 5680, 5710, 5690, 5750, 5810, 5850],
+    anomaly_count: 2,
+    max_severity: 'CRITICAL',
   },
   {
     route_code: 'DEL-BLR',
@@ -106,6 +133,9 @@ export const mockRoutes: RouteOverviewItem[] = [
     status: 'ACTIVE',
     active_airlines_count: 5,
     distance_km: 1740,
+    sparkline_7d: [6830, 6890, 6940, 7020, 7080, 7150, 7200],
+    anomaly_count: 1,
+    max_severity: 'HIGH',
   },
   {
     route_code: 'BOM-BLR',
@@ -124,6 +154,8 @@ export const mockRoutes: RouteOverviewItem[] = [
     status: 'ACTIVE',
     active_airlines_count: 4,
     distance_km: 842,
+    sparkline_7d: [4490, 4520, 4550, 4610, 4580, 4630, 4600],
+    anomaly_count: 0,
   },
   {
     route_code: 'DEL-CCU',
@@ -142,6 +174,8 @@ export const mockRoutes: RouteOverviewItem[] = [
     status: 'ACTIVE',
     active_airlines_count: 4,
     distance_km: 1305,
+    sparkline_7d: [5390, 5420, 5460, 5510, 5540, 5580, 5600],
+    anomaly_count: 0,
   },
   {
     route_code: 'DEL-HYD',
@@ -160,6 +194,8 @@ export const mockRoutes: RouteOverviewItem[] = [
     status: 'ACTIVE',
     active_airlines_count: 4,
     distance_km: 1253,
+    sparkline_7d: [5250, 5280, 5310, 5340, 5390, 5370, 5350],
+    anomaly_count: 0,
   },
   {
     route_code: 'DEL-MAA',
@@ -178,6 +214,9 @@ export const mockRoutes: RouteOverviewItem[] = [
     status: 'ACTIVE',
     active_airlines_count: 4,
     distance_km: 1760,
+    sparkline_7d: [6520, 6580, 6610, 6640, 6690, 6720, 6750],
+    anomaly_count: 1,
+    max_severity: 'MEDIUM',
   },
   {
     route_code: 'MAA-BOM',
@@ -196,6 +235,8 @@ export const mockRoutes: RouteOverviewItem[] = [
     status: 'ACTIVE',
     active_airlines_count: 4,
     distance_km: 1030,
+    sparkline_7d: [4700, 4720, 4740, 4770, 4780, 4810, 4800],
+    anomaly_count: 0,
   },
   {
     route_code: 'BOM-CCU',
@@ -214,6 +255,9 @@ export const mockRoutes: RouteOverviewItem[] = [
     status: 'ACTIVE',
     active_airlines_count: 3,
     distance_km: 1660,
+    sparkline_7d: [6680, 6720, 6760, 6810, 6840, 6880, 6900],
+    anomaly_count: 1,
+    max_severity: 'MEDIUM',
   },
   {
     route_code: 'BLR-HYD',
@@ -232,6 +276,9 @@ export const mockRoutes: RouteOverviewItem[] = [
     status: 'ACTIVE',
     active_airlines_count: 4,
     distance_km: 505,
+    sparkline_7d: [3370, 3390, 3420, 3450, 3440, 3420, 3400],
+    anomaly_count: 1,
+    max_severity: 'LOW',
   },
   {
     route_code: 'BOM-GOI',
@@ -250,6 +297,9 @@ export const mockRoutes: RouteOverviewItem[] = [
     status: 'ACTIVE',
     active_airlines_count: 4,
     distance_km: 435,
+    sparkline_7d: [3910, 3960, 4020, 4080, 4140, 4190, 4250],
+    anomaly_count: 1,
+    max_severity: 'CRITICAL',
   },
 ];
 
@@ -397,7 +447,9 @@ export const mockAnomalies: AnomalyAlertItem[] = [
     severity: 'CRITICAL',
     observed_fare_inr: 18450,
     expected_fare_inr: 9600,
+    baseline_fare_inr: 9600,
     deviation_percent: 92.2,
+    z_score: 3.68,
     status: 'ACTIVE',
     booking_window: 'T+1',
     description: 'Rapid fare surge detected within T+1 window exceeding 3-sigma historical threshold.',
@@ -413,7 +465,9 @@ export const mockAnomalies: AnomalyAlertItem[] = [
     severity: 'CRITICAL',
     observed_fare_inr: 14200,
     expected_fare_inr: 6400,
+    baseline_fare_inr: 6400,
     deviation_percent: 121.8,
+    z_score: 4.15,
     status: 'ACTIVE',
     booking_window: 'T+3',
     description: 'Weekend tourist corridor surge across online aggregators showing uniform price escalation.',
@@ -429,7 +483,9 @@ export const mockAnomalies: AnomalyAlertItem[] = [
     severity: 'HIGH',
     observed_fare_inr: 15600,
     expected_fare_inr: 9800,
+    baseline_fare_inr: 9800,
     deviation_percent: 59.2,
+    z_score: 2.45,
     status: 'INVESTIGATING',
     booking_window: 'T+3',
     description: 'Sudden price spike detected across peak evening departure slots.',
@@ -445,7 +501,9 @@ export const mockAnomalies: AnomalyAlertItem[] = [
     severity: 'MEDIUM',
     observed_fare_inr: 11400,
     expected_fare_inr: 8100,
+    baseline_fare_inr: 8100,
     deviation_percent: 40.7,
+    z_score: 2.12,
     status: 'ACKNOWLEDGED',
     booking_window: 'T+7',
     description: 'High price variance (>₹3,200) observed between airline direct portal and OTA listings.',
@@ -453,6 +511,24 @@ export const mockAnomalies: AnomalyAlertItem[] = [
   },
   {
     id: 'ALT-2026-9045',
+    route_code: 'DEL-MAA',
+    airline_code: '6E',
+    flight_number: '6E-782',
+    detected_at: new Date(Date.now() - 360 * 60 * 1000).toISOString(),
+    anomaly_type: 'SURGE_SPIKE',
+    severity: 'HIGH',
+    observed_fare_inr: 14800,
+    expected_fare_inr: 9400,
+    baseline_fare_inr: 9400,
+    deviation_percent: 57.4,
+    z_score: 2.28,
+    status: 'ACTIVE',
+    booking_window: 'T+1',
+    description: 'Near-departure business surge exceeding 2-sigma historical bounds.',
+    recommended_action: 'Audit dynamic seat allocation buckets for anti-competitive signaling.',
+  },
+  {
+    id: 'ALT-2026-9046',
     route_code: 'BLR-HYD',
     airline_code: '6E',
     flight_number: '6E-441',
@@ -461,7 +537,9 @@ export const mockAnomalies: AnomalyAlertItem[] = [
     severity: 'LOW',
     observed_fare_inr: 2100,
     expected_fare_inr: 3400,
+    baseline_fare_inr: 3400,
     deviation_percent: -38.2,
+    z_score: 1.55,
     status: 'RESOLVED',
     booking_window: 'T+14',
     description: 'Flash sale fare bucket release on mid-day flights.',

@@ -15,8 +15,8 @@ import {
   Clock,
   ShieldCheck,
   Database,
+  Server,
 } from 'lucide-react';
-
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [loading, setLoading] = useState<boolean>(true);
@@ -98,22 +98,54 @@ export const App: React.FC = () => {
 
             {/* Live Pipeline Telemetry & Controls */}
             <div className="flex items-center gap-3">
-              {/* Pipeline Live Status Badge */}
-              <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <span className="text-slate-300 font-medium">Pipeline:</span>
-                <span className="font-mono text-emerald-400 font-semibold">
-                  {data?.systemHealth.active_scrapers || 8} Scrapers
-                </span>
-                <span className="text-slate-600">|</span>
-                <span className="font-mono text-slate-400">
-                  {data?.systemHealth.records_ingested_today.toLocaleString() || '142,850'} fares
-                </span>
-              </div>
+              {/* Ingestion Run Status Indicator */}
+              <div
+                className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs shadow-inner"
+                title="Ingestion Pipeline Run Status • Continuous Scraper Feeds"
+              >
+                {/* Health Pill */}
+                <div
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-mono font-bold border shadow-sm ${
+                    data?.systemHealth.status === 'HEALTHY'
+                      ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800/80'
+                      : data?.systemHealth.status === 'DEGRADED'
+                      ? 'bg-amber-950/80 text-amber-400 border-amber-800/80'
+                      : 'bg-sky-950/80 text-sky-400 border-sky-800/80'
+                  }`}
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span>{data?.systemHealth.status || 'HEALTHY'}</span>
+                </div>
 
+                {/* Active Scrapers Count */}
+                <div className="flex items-center gap-1 text-slate-300 font-medium">
+                  <Server className="w-3.5 h-3.5 text-sky-400" />
+                  <span className="font-mono text-sky-400 font-semibold">
+                    {data?.systemHealth.active_scrapers ?? 8}
+                  </span>
+                  <span className="text-slate-400 hidden sm:inline">Active Scrapers</span>
+                </div>
+
+                <span className="text-slate-700 hidden md:inline">|</span>
+
+                {/* Last Scrape Timestamp */}
+                <div className="flex items-center gap-1 text-slate-400 font-mono text-[11px]">
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  <span className="text-slate-500 hidden md:inline">Last Scrape:</span>
+                  <span className="text-slate-200 font-semibold">
+                    {data?.systemHealth.last_sync_timestamp
+                      ? new Date(data.systemHealth.last_sync_timestamp).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                        })
+                      : 'Just now'}
+                  </span>
+                </div>
+              </div>
               {/* Data Source Badge with Toggle */}
               <button
                 onClick={toggleMockMode}
@@ -234,6 +266,7 @@ export const App: React.FC = () => {
               <RoutesTab
                 routes={data.routes}
                 nationalIndex={data.nationalLatest.index_value}
+                anomalies={data.anomalies}
               />
             )}
 
