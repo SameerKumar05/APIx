@@ -38,15 +38,25 @@ class RawFareRecord(BaseModel):
 
     @field_validator("booking_window", mode="before")
     @classmethod
-    def parse_booking_window(cls, v: Any) -> Optional[int]:
+    def parse_booking_window(cls, v: Any) -> Optional[Union[int, str]]:
         if v is None:
             return None
+        if isinstance(v, int):
+            return v
         if isinstance(v, str):
-            match = re.search(r"\d+", v)
-            if match:
-                return int(match.group())
-            return None
-        return int(v)
+            clean = v.strip().upper()
+            if clean in ("T1", "T+1"):
+                return "T+1"
+            if clean in ("T7", "T+7"):
+                return "T+7"
+            if clean in ("T15", "T+15"):
+                return "T+15"
+            if clean in ("T30", "T+30"):
+                return "T+30"
+            if clean.isdigit():
+                return int(clean)
+            return clean
+        return v
 
 
 class IngestionBatchRequest(BaseModel):

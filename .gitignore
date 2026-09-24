@@ -15,3 +15,6 @@ dist/
 logs/
 *.log
 artifacts/
+*.db
+*.sqlite
+*.sqlite3

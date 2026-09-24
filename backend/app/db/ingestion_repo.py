@@ -70,7 +70,26 @@ def _normalize_fare_record(
     destination = str(data.get("destination") or data.get("destination_iata") or "").strip().upper()
     airline_code = str(data.get("airline_code") or "").strip().upper()
     flight_number = str(data.get("flight_number") or "").strip().upper()
-    booking_window = str(data.get("booking_window") or "T+1").strip()
+    raw_bw = data.get("booking_window")
+    if raw_bw is not None:
+        if isinstance(raw_bw, int):
+            booking_window = f"T+{raw_bw}"
+        else:
+            bw_clean = str(raw_bw).strip().upper()
+            if bw_clean.isdigit():
+                booking_window = f"T+{bw_clean}"
+            elif bw_clean in ("T1", "T+1"):
+                booking_window = "T+1"
+            elif bw_clean in ("T7", "T+7"):
+                booking_window = "T+7"
+            elif bw_clean in ("T15", "T+15"):
+                booking_window = "T+15"
+            elif bw_clean in ("T30", "T+30"):
+                booking_window = "T+30"
+            else:
+                booking_window = bw_clean
+    else:
+        booking_window = "T+1"
 
     # Dates and times
     departure_val = data.get("departure_time") or data.get("departure_datetime")

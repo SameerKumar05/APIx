@@ -212,61 +212,60 @@ async def get_anomalies(
     # Check if database has any recorded AnomalyAlerts
     try:
         total_db_count = db.query(func.count(AnomalyAlert.id)).scalar() or 0
-    except Exception:
-        total_db_count = 0
-    if total_db_count > 0:
-        query = db.query(AnomalyAlert)
+        if total_db_count > 0:
+            query = db.query(AnomalyAlert)
 
-        if route_code:
-            clean_route = route_code.strip().upper()
-            parts = clean_route.split("-")
-            if len(parts) == 2:
-                query = query.filter(
-                    func.upper(AnomalyAlert.origin) == parts[0],
-                    func.upper(AnomalyAlert.destination) == parts[1],
+            if route_code:
+                clean_route = route_code.strip().upper()
+                parts = clean_route.split("-")
+                if len(parts) == 2:
+                    query = query.filter(
+                        func.upper(AnomalyAlert.origin) == parts[0],
+                        func.upper(AnomalyAlert.destination) == parts[1],
+                    )
+                else:
+                    query = query.filter(
+                        func.upper(AnomalyAlert.origin + "-" + AnomalyAlert.destination) == clean_route
+                    )
+
+            if severity:
+                clean_sev = severity.strip().upper()
+                query = query.filter(func.upper(AnomalyAlert.severity) == clean_sev)
+
+            if status:
+                clean_status = status.strip().upper()
+                if clean_status in ("ACTIVE", "OPEN"):
+                    query = query.filter(func.upper(AnomalyAlert.status).in_(["ACTIVE", "OPEN"]))
+                else:
+                    query = query.filter(func.upper(AnomalyAlert.status) == clean_status)
+
+            db_alerts = query.order_by(AnomalyAlert.created_at.desc(), AnomalyAlert.id.desc()).all()
+            items: List[AnomalyAlertItem] = []
+            for a in db_alerts:
+                dt = a.created_at
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                items.append(
+                    AnomalyAlertItem(
+                        id=f"anom-{a.origin.lower()}-{a.destination.lower()}-{a.id:03d}",
+                        route_code=f"{a.origin}-{a.destination}",
+                        airline_code=a.airline_code or "ALL",
+                        flight_number=None,
+                        detected_at=dt,
+                        anomaly_type=a.alert_type or "SURGE",
+                        severity=(a.severity or "MEDIUM").upper(),
+                        observed_fare_inr=round(a.detected_fare or 0.0, 2),
+                        expected_fare_inr=round(a.baseline_fare or 0.0, 2),
+                        deviation_percent=round(a.pct_change or 0.0, 2),
+                        status=(a.status or "ACTIVE").upper(),
+                    )
                 )
-            else:
-                query = query.filter(
-                    func.upper(AnomalyAlert.origin + "-" + AnomalyAlert.destination) == clean_route
-                )
-
-        if severity:
-            clean_sev = severity.strip().upper()
-            query = query.filter(func.upper(AnomalyAlert.severity) == clean_sev)
-
-        if status:
-            clean_status = status.strip().upper()
-            if clean_status in ("ACTIVE", "OPEN"):
-                query = query.filter(func.upper(AnomalyAlert.status).in_(["ACTIVE", "OPEN"]))
-            else:
-                query = query.filter(func.upper(AnomalyAlert.status) == clean_status)
-
-        db_alerts = query.order_by(AnomalyAlert.created_at.desc(), AnomalyAlert.id.desc()).all()
-        items: List[AnomalyAlertItem] = []
-        for a in db_alerts:
-            dt = a.created_at
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            items.append(
-                AnomalyAlertItem(
-                    id=f"anom-{a.origin.lower()}-{a.destination.lower()}-{a.id:03d}",
-                    route_code=f"{a.origin}-{a.destination}",
-                    airline_code=a.airline_code or "ALL",
-                    flight_number=None,
-                    detected_at=dt,
-                    anomaly_type=a.alert_type or "SURGE",
-                    severity=(a.severity or "MEDIUM").upper(),
-                    observed_fare_inr=round(a.detected_fare or 0.0, 2),
-                    expected_fare_inr=round(a.baseline_fare or 0.0, 2),
-                    deviation_percent=round(a.pct_change or 0.0, 2),
-                    status=(a.status or "ACTIVE").upper(),
-                )
+            return AnomalyAlertsResponse(
+                alerts=items,
+                total_alerts=len(items),
             )
-        return AnomalyAlertsResponse(
-            alerts=items,
-            total_alerts=len(items),
-        )
-
+    except Exception:
+        pass
     # Graceful fallback to seeded realistic sample anomalies if database is unseeded
     alerts = SAMPLE_ANOMALIES
 

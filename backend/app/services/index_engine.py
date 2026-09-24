@@ -88,34 +88,55 @@ class TukeyBounds:
 
 def _extract_field(item: Union[FlightQuote, Mapping[str, Any], Any], field_name: str, default: Any = None) -> Any:
     """Extract field from FlightQuote, dictionary, or generic object with alias resolution."""
-    if isinstance(item, FlightQuote):
-        return getattr(item, field_name, default)
-
-
+    fare_aliases = ("fare", "total_fare", "fare_inr", "price")
     alias_map: Dict[str, Tuple[str, ...]] = {
-        "fare": ("fare", "total_fare", "fare_inr", "price"),
+        "fare": fare_aliases,
+        "total_fare": fare_aliases,
+        "fare_inr": fare_aliases,
+        "price": fare_aliases,
         "source_portal": ("source_portal", "source_platform", "source", "portal"),
         "origin": ("origin", "origin_iata"),
         "destination": ("destination", "destination_iata"),
         "flight_date": ("flight_date", "departure_date"),
+        "is_nonstop": ("is_nonstop", "nonstop", "direct"),
     }
 
     candidates = alias_map.get(field_name, (field_name,))
+
+    if isinstance(item, FlightQuote):
+        for attr in candidates:
+            if hasattr(item, attr):
+                val = getattr(item, attr)
+                if val is not None:
+                    return val
+        if field_name in ("is_nonstop", "nonstop", "direct"):
+            return item.is_nonstop
+        return default
 
     if isinstance(item, Mapping):
         for key in candidates:
             if key in item and item[key] is not None:
                 return item[key]
-        if field_name == "is_nonstop" and "stops" in item:
-            return item["stops"] == 0
+        if field_name in ("is_nonstop", "nonstop", "direct") and "stops" in item:
+            stops_val = item["stops"]
+            if stops_val is not None:
+                try:
+                    return int(stops_val) == 0
+                except (ValueError, TypeError):
+                    return stops_val == 0
         return default
 
     for attr in candidates:
         val = getattr(item, attr, None)
         if val is not None:
             return val
-    if field_name == "is_nonstop" and hasattr(item, "stops"):
-        return getattr(item, "stops") == 0
+    if field_name in ("is_nonstop", "nonstop", "direct") and hasattr(item, "stops"):
+        stops_val = getattr(item, "stops")
+        if stops_val is not None:
+            try:
+                return int(stops_val) == 0
+            except (ValueError, TypeError):
+                return stops_val == 0
     return default
 
 def _normalize_code(code: Any) -> str:
@@ -514,6 +535,9 @@ def calculate_weighted_median(
         weights.append(quote_weight)
 
     return weighted_median_values(fares, weights)
+
+# Alias for compute_weighted_median
+compute_weighted_median = calculate_weighted_median
 
 
 # ---------------------------------------------------------------------------

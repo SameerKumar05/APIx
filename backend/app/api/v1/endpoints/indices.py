@@ -114,28 +114,28 @@ async def get_national_index_latest(
             .order_by(NationalDailyIndex.index_date.desc(), NationalDailyIndex.id.desc())
             .first()
         )
+        if latest is not None:
+            ts = datetime.combine(latest.index_date, datetime.min.time(), tzinfo=timezone.utc)
+            if latest.calculation_timestamp:
+                ts = latest.calculation_timestamp
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+            change_24h = round(latest.inflation_dod_pct or 0.0, 2)
+            change_7d = round(latest.inflation_mom_pct or (change_24h * 3.5), 2)
+            val = round(latest.index_value, 2)
+            return NationalIndexLatestResponse(
+                timestamp=ts,
+                index_value=val,
+                change_24h=change_24h,
+                change_7d=change_7d,
+                sample_size=latest.total_samples or 0,
+                base_period=latest.base_period or "2026-01-01",
+                confidence_interval_lower=round(val * 0.99, 2),
+                confidence_interval_upper=round(val * 1.01, 2),
+                status="published",
+            )
     except Exception:
-        latest = None
-    if latest is not None:
-        ts = datetime.combine(latest.index_date, datetime.min.time(), tzinfo=timezone.utc)
-        if latest.calculation_timestamp:
-            ts = latest.calculation_timestamp
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-        change_24h = round(latest.inflation_dod_pct or 0.0, 2)
-        change_7d = round(latest.inflation_mom_pct or (change_24h * 3.5), 2)
-        val = round(latest.index_value, 2)
-        return NationalIndexLatestResponse(
-            timestamp=ts,
-            index_value=val,
-            change_24h=change_24h,
-            change_7d=change_7d,
-            sample_size=latest.total_samples or 0,
-            base_period=latest.base_period or "2026-01-01",
-            confidence_interval_lower=round(val * 0.99, 2),
-            confidence_interval_upper=round(val * 1.01, 2),
-            status="published",
-        )
+        pass
 
     # Fallback to realistic benchmark mock data if unseeded
     now = datetime.now(timezone.utc)
@@ -169,32 +169,32 @@ async def get_national_index_history(
             .limit(days)
             .all()
         )
-    except Exception:
-        records = None
-    if records:
-        records.reverse()
-        points: List[NationalIndexPoint] = []
-        for r in records:
-            ts = datetime.combine(r.index_date, datetime.min.time(), tzinfo=timezone.utc)
-            if r.calculation_timestamp:
-                ts = r.calculation_timestamp
-                if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
-            chg_24 = round(r.inflation_dod_pct or 0.0, 2)
-            points.append(
-                NationalIndexPoint(
-                    timestamp=ts,
-                    index_value=round(r.index_value, 2),
-                    change_24h=chg_24,
-                    change_7d=round(r.inflation_mom_pct or (chg_24 * 3.5), 2),
-                    sample_size=r.total_samples or 0,
-                    base_period=r.base_period or "2026-01-01",
+        if records:
+            records.reverse()
+            points: List[NationalIndexPoint] = []
+            for r in records:
+                ts = datetime.combine(r.index_date, datetime.min.time(), tzinfo=timezone.utc)
+                if r.calculation_timestamp:
+                    ts = r.calculation_timestamp
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                chg_24 = round(r.inflation_dod_pct or 0.0, 2)
+                points.append(
+                    NationalIndexPoint(
+                        timestamp=ts,
+                        index_value=round(r.index_value, 2),
+                        change_24h=chg_24,
+                        change_7d=round(r.inflation_mom_pct or (chg_24 * 3.5), 2),
+                        sample_size=r.total_samples or 0,
+                        base_period=r.base_period or "2026-01-01",
+                    )
                 )
+            return NationalIndexHistoryResponse(
+                points=points,
+                total_points=len(points),
             )
-        return NationalIndexHistoryResponse(
-            points=points,
-            total_points=len(points),
-        )
+    except Exception:
+        pass
 
     # Fallback to realistic benchmark mock data if unseeded
     now = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -244,72 +244,72 @@ async def get_routes_overview(
 ) -> RouteListResponse:
     try:
         db_routes = db.query(Route).filter(Route.is_active == True).all()
-    except Exception:
-        db_routes = None
-    if db_routes:
-        routes_list: List[RouteOverviewItem] = []
-        for r in db_routes:
-            latest_idx = (
-                db.query(RouteDailyIndex)
-                .filter(
-                    RouteDailyIndex.origin == r.origin,
-                    RouteDailyIndex.destination == r.destination,
-                )
-                .order_by(RouteDailyIndex.index_date.desc(), RouteDailyIndex.id.desc())
-                .first()
-            )
-            if latest_idx:
-                prior_idx = (
+        if db_routes:
+            routes_list: List[RouteOverviewItem] = []
+            for r in db_routes:
+                latest_idx = (
                     db.query(RouteDailyIndex)
                     .filter(
                         RouteDailyIndex.origin == r.origin,
                         RouteDailyIndex.destination == r.destination,
-                        RouteDailyIndex.index_date < latest_idx.index_date,
                     )
-                    .order_by(RouteDailyIndex.index_date.desc())
+                    .order_by(RouteDailyIndex.index_date.desc(), RouteDailyIndex.id.desc())
                     .first()
                 )
-                chg_24 = (
-                    round(((latest_idx.index_value - prior_idx.index_value) / prior_idx.index_value) * 100.0, 2)
-                    if prior_idx and prior_idx.index_value > 0
-                    else 0.0
-                )
-                volatility = round((latest_idx.std_dev / latest_idx.mean_fare) if latest_idx.mean_fare > 0 else 0.35, 2)
-                routes_list.append(
-                    RouteOverviewItem(
-                        route_code=r.route_code,
-                        origin=r.origin,
-                        destination=r.destination,
-                        current_index=round(latest_idx.index_value, 2),
-                        change_24h=chg_24,
-                        avg_fare_inr=round(latest_idx.mean_fare, 2),
-                        min_fare_inr=round(latest_idx.min_fare, 2),
-                        active_flights_tracked=latest_idx.sample_size,
-                        volatility_score=volatility,
+                if latest_idx:
+                    prior_idx = (
+                        db.query(RouteDailyIndex)
+                        .filter(
+                            RouteDailyIndex.origin == r.origin,
+                            RouteDailyIndex.destination == r.destination,
+                            RouteDailyIndex.index_date < latest_idx.index_date,
+                        )
+                        .order_by(RouteDailyIndex.index_date.desc())
+                        .first()
                     )
-                )
-            else:
-                matching_seed = next((s for s in DOMESTIC_ROUTES_SEED if s.route_code == r.route_code), None)
-                if matching_seed:
-                    routes_list.append(matching_seed)
-                else:
+                    chg_24 = (
+                        round(((latest_idx.index_value - prior_idx.index_value) / prior_idx.index_value) * 100.0, 2)
+                        if prior_idx and prior_idx.index_value > 0
+                        else 0.0
+                    )
+                    volatility = round((latest_idx.std_dev / latest_idx.mean_fare) if latest_idx.mean_fare > 0 else 0.35, 2)
                     routes_list.append(
                         RouteOverviewItem(
                             route_code=r.route_code,
                             origin=r.origin,
                             destination=r.destination,
-                            current_index=100.0,
-                            change_24h=0.0,
-                            avg_fare_inr=5000.0,
-                            min_fare_inr=3500.0,
-                            active_flights_tracked=50,
-                            volatility_score=0.30,
+                            current_index=round(latest_idx.index_value, 2),
+                            change_24h=chg_24,
+                            avg_fare_inr=round(latest_idx.mean_fare, 2),
+                            min_fare_inr=round(latest_idx.min_fare, 2),
+                            active_flights_tracked=latest_idx.sample_size,
+                            volatility_score=volatility,
                         )
                     )
-        return RouteListResponse(
-            routes=routes_list,
-            total_routes=len(routes_list),
-        )
+                else:
+                    matching_seed = next((s for s in DOMESTIC_ROUTES_SEED if s.route_code == r.route_code), None)
+                    if matching_seed:
+                        routes_list.append(matching_seed)
+                    else:
+                        routes_list.append(
+                            RouteOverviewItem(
+                                route_code=r.route_code,
+                                origin=r.origin,
+                                destination=r.destination,
+                                current_index=100.0,
+                                change_24h=0.0,
+                                avg_fare_inr=5000.0,
+                                min_fare_inr=3500.0,
+                                active_flights_tracked=50,
+                                volatility_score=0.30,
+                            )
+                        )
+            return RouteListResponse(
+                routes=routes_list,
+                total_routes=len(routes_list),
+            )
+    except Exception:
+        pass
 
     return RouteListResponse(
         routes=DOMESTIC_ROUTES_SEED,
@@ -348,44 +348,47 @@ async def get_route_history(
             .limit(days)
             .all()
         )
-    except Exception:
-        route_indices = None
-    if route_indices:
-        route_indices.reverse()
-        points: List[NationalIndexPoint] = []
-        for idx, r in enumerate(route_indices):
-            ts = datetime.combine(r.index_date, datetime.min.time(), tzinfo=timezone.utc)
-            if r.calculation_timestamp:
-                ts = r.calculation_timestamp
-                if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
-            prev = route_indices[idx - 1] if idx > 0 else None
-            chg_24 = (
-                round(((r.index_value - prev.index_value) / prev.index_value) * 100.0, 2)
-                if prev and prev.index_value > 0
-                else 0.0
-            )
-            points.append(
-                NationalIndexPoint(
-                    timestamp=ts,
-                    index_value=round(r.index_value, 2),
-                    change_24h=chg_24,
-                    change_7d=round(chg_24 * 3.5, 2),
-                    sample_size=r.sample_size,
-                    base_period=r.base_period or "2026-01-01",
+        if route_indices:
+            route_indices.reverse()
+            points: List[NationalIndexPoint] = []
+            for idx, r in enumerate(route_indices):
+                ts = datetime.combine(r.index_date, datetime.min.time(), tzinfo=timezone.utc)
+                if r.calculation_timestamp:
+                    ts = r.calculation_timestamp
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                prev = route_indices[idx - 1] if idx > 0 else None
+                chg_24 = (
+                    round(((r.index_value - prev.index_value) / prev.index_value) * 100.0, 2)
+                    if prev and prev.index_value > 0
+                    else 0.0
                 )
+                points.append(
+                    NationalIndexPoint(
+                        timestamp=ts,
+                        index_value=round(r.index_value, 2),
+                        change_24h=chg_24,
+                        change_7d=round(chg_24 * 3.5, 2),
+                        sample_size=r.sample_size,
+                        base_period=r.base_period or "2026-01-01",
+                    )
+                )
+            return RouteHistoryResponse(
+                route_code=clean_code,
+                origin=origin,
+                destination=dest,
+                points=points,
             )
-        return RouteHistoryResponse(
-            route_code=clean_code,
-            origin=origin,
-            destination=dest,
-            points=points,
-        )
+    except Exception:
+        pass
 
     matching = next((r for r in DOMESTIC_ROUTES_SEED if r.route_code == clean_code), None)
     if not matching:
         # Verify if route is registered in DB
-        db_route = db.query(Route).filter(Route.origin == origin, Route.destination == dest).first()
+        try:
+            db_route = db.query(Route).filter(Route.origin == origin, Route.destination == dest).first()
+        except Exception:
+            db_route = None
         if not db_route:
             # Check if any seed route matches
             base_idx = 108.0
