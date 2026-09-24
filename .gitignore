@@ -5,6 +5,7 @@ Desktop.ini
 worktrees/
 __pycache__/
 *.pyc
+.venv
 .venv/
 venv/
 node_modules/
