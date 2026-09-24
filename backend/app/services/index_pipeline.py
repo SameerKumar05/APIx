@@ -44,6 +44,15 @@ from backend.app.services.index_engine import (
     deduplicate_quotes,
     filter_quotes_tukey,
 )
+from backend.app.services.arbitrage_detector import (
+    ArbitrageDetector,
+    ArbitrageOpportunity,
+    get_current_arbitrage_opportunities,
+)
+from backend.app.services.streaming_dedup import (
+    DedupResult,
+    StreamingDedupEngine,
+)
 
 logger = logging.getLogger("apix.services.index_pipeline")
 
@@ -118,6 +127,30 @@ def normalize_window_code(window_raw: Any) -> str:
         return "T+7"
     w = str(window_raw).strip().upper()
     return WINDOW_NORM_MAP.get(w, w)
+
+
+def run_streaming_dedup_and_arbitrage(
+    quotes: Sequence[Any],
+    window_seconds: float = 86400.0,
+    min_spread_pct: float = 0.0,
+) -> Tuple[StreamingDedupEngine, List[ArbitrageOpportunity]]:
+    """Runs quotes through StreamingDedupEngine and ArbitrageDetector.
+
+    Args:
+        quotes: Sequence of raw fare records, flight quotes, or mappings.
+        window_seconds: Sliding window retention in seconds (default 24h).
+        min_spread_pct: Minimum percentage threshold for actionable arbitrage.
+
+    Returns:
+        Tuple of (StreamingDedupEngine instance, List of ArbitrageOpportunity).
+    """
+    engine = StreamingDedupEngine(window_seconds=window_seconds)
+    engine.ingest_batch(quotes)
+
+    detector = ArbitrageDetector(min_spread_pct=min_spread_pct)
+    opportunities = detector.detect_from_quotes(quotes, min_spread_pct=min_spread_pct)
+
+    return engine, opportunities
 
 
 def get_active_routes(db: Session) -> Dict[str, Route]:
@@ -374,6 +407,23 @@ def _execute_daily_pipeline(
     raw_fares = load_raw_fares_for_date(db, calc_date)
     total_raw_fares = len(raw_fares)
     logger.info("Loaded %d raw fares for calculation date %s", total_raw_fares, calc_date)
+    # Step 1b: Run real-time streaming deduplication & cross-platform arbitrage detection
+    streaming_engine, arbitrage_opportunities = run_streaming_dedup_and_arbitrage(
+        raw_fares,
+        window_seconds=86400.0,
+        min_spread_pct=0.0,
+    )
+    streaming_stats = streaming_engine.stats()
+    logger.info(
+        "Streaming Dedup & Arbitrage: Processed %d quotes, Active flights=%d, "
+        "Duplicates=%d, New minima=%d, Arbitrage opportunities=%d, Avg latency=%.2f us",
+        streaming_stats["total_processed"],
+        streaming_stats["active_buffer_size"],
+        streaming_stats["duplicates_count"],
+        streaming_stats["new_minima_count"],
+        len(arbitrage_opportunities),
+        streaming_stats["avg_latency_us"],
+    )
 
     # Group raw fares by corridor (origin, destination) and canonical booking window
     # key: ((origin, destination), canonical_window) -> list of quotes
@@ -650,6 +700,9 @@ def _execute_daily_pipeline(
         "national_index": national_index_record,
         "route_indices": route_indices_to_persist,
         "anomalies": anomalies_to_persist,
+        "streaming_dedup_stats": streaming_stats,
+        "arbitrage_count": len(arbitrage_opportunities),
+        "arbitrage_opportunities": [opp.to_dict() for opp in arbitrage_opportunities[:50]],
     }
 
 

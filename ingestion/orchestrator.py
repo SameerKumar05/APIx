@@ -1,14 +1,13 @@
 """Master Ingestion Orchestrator for APIx Domestic Airfare Price Index.
 
-Coordinates automated, scheduled, and on-demand scraping across all 40 domestic flight
-slots (10 top DGCA trunk routes x 4 advance booking windows: T+1, T+7, T+15, T+30).
-
-Implements:
-1. Systematic slot traversal with human-like jitter delays (3-6s).
-2. Browser session recycling every N slots to eliminate memory buildup and fingerprinting.
-3. Automated 3-tier crawler fallback (EaseMyTrip Playwright -> Amadeus API -> DGCA Synthetic).
-4. Chunked batch submission to APIx backend endpoint (POST /api/v1/ingestion/batch).
-5. Comprehensive audit logging and execution summary artifact generation (artifacts/run_summary.json).
+Coordinates automated, rate-limited, and jittered airfare data collection across:
+- 10 DGCA Domestic Trunk Routes (DEL, BOM, BLR, HYD, CCU)
+- 4 SIH Mandatory Advance Booking Windows (T+1, T+7, T+15, T+30)
+- Multi-Source Live Scrapers: MakeMyTrip, SpiceJet, EaseMyTrip, Amadeus GDS, and DGCA Synthetic Fallback
+- Anti-bot jitter injection (randomized delays between requests)
+- Periodic browser context and session recycling
+- Micro-batch chunked network dispatch to APIx Backend Ingestion API
+- Automated summary artifact generation for telemetry and auditability
 """
 
 from __future__ import annotations
@@ -23,29 +22,43 @@ import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
 from ingestion.client import IngestionClient
 from ingestion.config import (
     BOOKING_WINDOW_MAP,
     BOOKING_WINDOWS,
-    BookingWindow,
     DEFAULT_ROUTES,
+    BookingWindow,
     IngestionConfig,
     Route,
 )
 from ingestion.crawlers.amadeus import AmadeusFlightClient
 from ingestion.crawlers.easemytrip import EaseMyTripScraper
+from ingestion.crawlers.makemytrip import MakeMyTripScraper
+from ingestion.crawlers.spicejet import SpiceJetScraper
 from ingestion.crawlers.synthetic import SyntheticFlightGenerator
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+    datefmt="%Y-%m-%dT%H:%M:%S",
 )
 logger = logging.getLogger("ingestion.orchestrator")
+
+# Booking window alias map for scheduling compatibility
+WINDOW_ALIAS_MAP: Dict[str, str] = {
+    "1-3d": "T+1",
+    "4-7d": "T+7",
+    "8-14d": "T+15",
+    "15-30d": "T+30",
+    "t+1": "T+1",
+    "t+7": "T+7",
+    "t+15": "T+15",
+    "t+30": "T+30",
+}
 
 
 @dataclass
@@ -98,16 +111,44 @@ class IngestionOrchestrator:
         config: Optional[IngestionConfig] = None,
         client: Optional[IngestionClient] = None,
         scraper: Optional[BaseScraper] = None,
+        scraper_source: Optional[str] = None,
         jitter_range: Tuple[float, float] = (3.0, 6.0),
         session_recycle_every: int = 10,
         artifacts_dir: str = "artifacts",
+        proxy_manager: Optional[Any] = None,
     ) -> None:
         self.config = config or IngestionConfig()
         self.client = client or IngestionClient(config=self.config)
-        self.scraper = scraper or EaseMyTripScraper(config=self.config)
         self.jitter_range = jitter_range
         self.session_recycle_every = session_recycle_every
         self.artifacts_dir = artifacts_dir
+        self.proxy_manager = proxy_manager
+
+        # Resolve scraper source
+        self.scraper_source = (
+            scraper_source
+            or os.getenv("SCRAPER_SOURCE")
+            or "easemytrip"
+        )
+
+        # Initialize crawler registry
+        self.scrapers: Dict[str, BaseScraper] = {
+            "easemytrip": EaseMyTripScraper(config=self.config),
+            "makemytrip": MakeMyTripScraper(config=self.config),
+            "spicejet": SpiceJetScraper(config=self.config),
+            "amadeus": AmadeusFlightClient(config=self.config),
+            "synthetic": SyntheticFlightGenerator(config=self.config),
+        }
+
+        # Handle explicit single scraper injection
+        if scraper is not None:
+            self.scraper = scraper
+            self.scrapers["custom"] = scraper
+            self.scraper_source = "custom"
+        elif self.scraper_source in self.scrapers:
+            self.scraper = self.scrapers[self.scraper_source]
+        else:
+            self.scraper = self.scrapers["easemytrip"]
 
     def _apply_jitter(self, slot_index: int, total_slots: int) -> None:
         """Applies randomized human-like jitter between scraping operations."""
@@ -127,12 +168,24 @@ class IngestionOrchestrator:
     def _recycle_session(self, current_slot: int) -> None:
         """Recycles scraper session/context to prevent memory bloat and evasive pattern profiling."""
         logger.info(
-            "Recycling scraper session at slot %d (recycle interval: %d slots)",
+            "Recycling scraper sessions at slot %d (recycle interval: %d slots)",
             current_slot,
             self.session_recycle_every,
         )
-        # Re-initialize primary scraper instance
-        self.scraper = EaseMyTripScraper(config=self.config)
+        # Re-initialize scrapers
+        self.scrapers = {
+            "easemytrip": EaseMyTripScraper(config=self.config),
+            "makemytrip": MakeMyTripScraper(config=self.config),
+            "spicejet": SpiceJetScraper(config=self.config),
+            "amadeus": AmadeusFlightClient(config=self.config),
+            "synthetic": SyntheticFlightGenerator(config=self.config),
+        }
+        if self.scraper_source in self.scrapers:
+            self.scraper = self.scrapers[self.scraper_source]
+        elif self.scraper_source == "custom":
+            pass
+        else:
+            self.scraper = self.scrapers["easemytrip"]
 
     def run_slot(
         self,
@@ -146,15 +199,22 @@ class IngestionOrchestrator:
         route_str = f"{route.origin}-{route.destination}"
 
         logger.info(
-            "Executing Slot #%02d: %s | Window: %s (%s) | Target Date: %s",
+            "Executing Slot #%02d: %s | Window: %s (%s) | Target Date: %s | Source: %s",
             slot_index + 1,
             route_str,
             window.code,
             f"+{window.days_advance}d",
             target_date.isoformat(),
+            self.scraper_source,
         )
 
-        scrape_res = self.scraper.scrape_route(
+        # Multi-source aggregation execution
+        if self.scraper_source in ("multi_source", "multi"):
+            return self._run_slot_multi_source(route, window, slot_index, target_date)
+
+        # Single designated scraper execution
+        scraper_instance = self.scrapers.get(self.scraper_source, self.scraper)
+        scrape_res = scraper_instance.scrape_route(
             origin=route.origin,
             destination=route.destination,
             target_date=target_date,
@@ -181,6 +241,154 @@ class IngestionOrchestrator:
 
         return scrape_res, summary
 
+    def _run_slot_multi_source(
+        self,
+        route: Route,
+        window: BookingWindow,
+        slot_index: int,
+        target_date: date,
+    ) -> Tuple[ScrapeResult, SlotResultSummary]:
+        """Executes multi-source scraping across MakeMyTrip, SpiceJet, and EaseMyTrip for a slot."""
+        route_str = f"{route.origin}-{route.destination}"
+        start_time = time.time()
+
+        # Primary sources to aggregate
+        sources = ["makemytrip", "spicejet", "easemytrip"]
+        aggregated_records: List[RawFareRecord] = []
+        collected_errors: List[str] = []
+        source_counts: Dict[str, int] = {}
+        highest_tier = 1
+
+        for src_name in sources:
+            scraper_inst = self.scrapers.get(src_name)
+            if not scraper_inst:
+                continue
+            try:
+                sub_res = scraper_inst.scrape_route(
+                    origin=route.origin,
+                    destination=route.destination,
+                    target_date=target_date,
+                    window_code=window.code,
+                )
+                if sub_res.success and sub_res.records:
+                    for r in sub_res.records:
+                        if r.source == "synthetic":
+                            r.source = src_name
+                            r.source_platform = src_name
+                    aggregated_records.extend(sub_res.records)
+                    source_counts[src_name] = len(sub_res.records)
+                else:
+                    source_counts[src_name] = 0
+                    if sub_res.errors:
+                        collected_errors.extend(sub_res.errors)
+
+                tier_val = int(sub_res.metadata.get("tier", 1))
+                if tier_val > highest_tier:
+                    highest_tier = tier_val
+
+            except Exception as src_exc:
+                err = f"Scraper '{src_name}' failed on slot {route_str}: {src_exc}"
+                logger.warning(err)
+                collected_errors.append(err)
+                source_counts[src_name] = 0
+
+        elapsed_ms = round((time.time() - start_time) * 1000, 2)
+        success = len(aggregated_records) > 0
+
+        # Build aggregated ScrapeResult
+        scrape_res = ScrapeResult(
+            source="multi_source",
+            success=success,
+            records=aggregated_records,
+            errors=collected_errors,
+            duration_ms=elapsed_ms,
+            metadata={
+                "tier": highest_tier,
+                "source": "multi_source",
+                "source_counts": source_counts,
+                "records_count": len(aggregated_records),
+                "origin": route.origin,
+                "destination": route.destination,
+                "target_date": target_date.isoformat(),
+                "booking_window": window.code,
+            },
+        )
+
+        summary = SlotResultSummary(
+            slot_index=slot_index + 1,
+            route=route_str,
+            origin=route.origin,
+            destination=route.destination,
+            booking_window=window.code,
+            target_date=target_date.isoformat(),
+            records_count=len(aggregated_records),
+            tier=highest_tier,
+            source_platform="multi_source",
+            duration_ms=elapsed_ms,
+            success=success,
+            errors=collected_errors,
+        )
+
+        return scrape_res, summary
+
+    def scrape_slot(
+        self,
+        origin: Union[str, Route],
+        destination: Optional[str] = None,
+        window_code: Union[str, BookingWindow] = "T+1",
+        target_date: Optional[date] = None,
+        scraper_source: Optional[str] = None,
+    ) -> ScrapeResult:
+        """Convenience method for scheduler and ad-hoc jobs to scrape a single slot.
+
+        Supports both Route objects and (origin, destination) strings, as well as
+        booking window aliases (e.g. '1-3d' -> 'T+1', '4-7d' -> 'T+7').
+        """
+        # Resolve route
+        if isinstance(origin, Route):
+            route_obj = origin
+            orig_str = origin.origin
+            dest_str = origin.destination
+        else:
+            orig_str = str(origin).upper().strip()
+            dest_str = str(destination or "BOM").upper().strip()
+            route_obj = Route(origin=orig_str, destination=dest_str, distance_km=1000, typical_duration_min=120, dgca_weight=0.10)
+
+        # Resolve booking window
+        if isinstance(window_code, BookingWindow):
+            win_obj = window_code
+            canon_window = window_code.code
+        else:
+            raw_code = str(window_code).lower().strip()
+            canon_window = WINDOW_ALIAS_MAP.get(raw_code, raw_code.upper())
+            win_obj = BOOKING_WINDOW_MAP.get(canon_window, BOOKING_WINDOWS[0])
+
+        calc_date = target_date or (date.today() + timedelta(days=win_obj.days_advance))
+
+        # Check scraper override
+        active_source = scraper_source or self.scraper_source
+        if active_source in ("multi_source", "multi"):
+            scrape_res, _ = self._run_slot_multi_source(route_obj, win_obj, 0, calc_date)
+            return scrape_res
+
+        scraper_inst = self.scrapers.get(active_source, self.scraper)
+        return scraper_inst.scrape_route(
+            origin=orig_str,
+            destination=dest_str,
+            target_date=calc_date,
+            window_code=canon_window,
+        )
+
+    def scrape_all(
+        self,
+        routes: Optional[List[Route]] = None,
+        windows: Optional[List[BookingWindow]] = None,
+        base_date: Optional[date] = None,
+        dry_run: bool = False,
+    ) -> OrchestratorRunSummary:
+        """Alias for run_all_slots to provide intuitive scheduling API."""
+        return self.run_all_slots(routes=routes, windows=windows, base_date=base_date, dry_run=dry_run)
+
     def run_all_slots(
         self,
         routes: Optional[List[Route]] = None,
@@ -205,7 +413,12 @@ class IngestionOrchestrator:
             len(target_windows),
             total_slots,
         )
-        logger.info("Ingestion Mode: %s | Dry Run: %s", self.config.ingestion_mode, dry_run)
+        logger.info(
+            "Ingestion Mode: %s | Scraper Source: %s | Dry Run: %s",
+            self.config.ingestion_mode,
+            self.scraper_source,
+            dry_run,
+        )
         logger.info("=" * 80)
 
         all_records: List[RawFareRecord] = []
@@ -246,7 +459,14 @@ class IngestionOrchestrator:
                         failed_slots += 1
 
                 except Exception as slot_exc:
-                    logger.error("Error executing slot %d (%s-%s %s): %s", slot_idx + 1, route.origin, route.destination, window.code, slot_exc)
+                    logger.error(
+                        "Error executing slot %d (%s-%s %s): %s",
+                        slot_idx + 1,
+                        route.origin,
+                        route.destination,
+                        window.code,
+                        slot_exc,
+                    )
                     failed_slots += 1
                     orchestrator_errors.append(f"Slot #{slot_idx + 1} ({route.origin}-{route.destination}) failed: {slot_exc}")
                     slot_summaries.append(
@@ -283,7 +503,7 @@ class IngestionOrchestrator:
             try:
                 batch_responses = self.client.post_records_chunked(
                     records=all_records,
-                    source=f"orchestrator_{self.config.ingestion_mode}",
+                    source=f"orchestrator_{self.scraper_source}_{self.config.ingestion_mode}",
                     chunk_size=self.config.batch_size,
                 )
                 total_batches = len(batch_responses)
@@ -297,7 +517,6 @@ class IngestionOrchestrator:
                 backend_status = "dispatch_error"
         elif dry_run:
             logger.info("Dry-run active: skipping network batch dispatch to API")
-            # Calculate mock batches
             total_batches = (len(all_records) + self.config.batch_size - 1) // max(1, self.config.batch_size)
             successful_batches = total_batches
 
@@ -357,6 +576,12 @@ def main() -> int:
         help="Scraper operational mode (default: synthetic or INGESTION_MODE)",
     )
     parser.add_argument(
+        "--scraper",
+        choices=["multi_source", "makemytrip", "spicejet", "easemytrip", "amadeus", "synthetic"],
+        default=os.getenv("SCRAPER_SOURCE", "multi_source"),
+        help="Active scraper source or multi_source aggregation (default: multi_source)",
+    )
+    parser.add_argument(
         "--no-jitter",
         action="store_true",
         help="Disable inter-slot anti-bot jitter delays for testing and benchmarking",
@@ -408,7 +633,6 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    # Build config
     config = IngestionConfig(
         ingestion_mode=args.mode,
         batch_size=args.batch_size,
@@ -422,6 +646,7 @@ def main() -> int:
 
     orchestrator = IngestionOrchestrator(
         config=config,
+        scraper_source=args.scraper,
         jitter_range=jitter_range,
         session_recycle_every=args.recycle_every,
         artifacts_dir=args.output_dir,
