@@ -101,6 +101,9 @@ ignore = [
     "E501",  # line length handled by black/formatter
     "B008"   # do not perform function calls in argument defaults (FastAPI Depends)
 ]
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402", "F401", "B905"]
+"scripts/*" = ["E402", "F401", "B905"]
 
 [tool.black]
 line-length = 88

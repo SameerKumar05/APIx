@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import os
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 repo_root = Path(__file__).resolve().parent.parent
@@ -26,16 +26,17 @@ import pytest
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
-from backend.app.db.seed import INITIAL_AIRLINES, INITIAL_ROUTES, seed_airlines, seed_all, seed_routes
+
+from backend.app.db.seed import (
+    seed_all,
+)
 from backend.app.db.session import Base
 from backend.app.models import (
-    Airline,
     AnomalyAlert,
     NationalDailyIndex,
     RawFare,
     Route,
     RouteDailyIndex,
-    ScrapingRun,
 )
 
 
@@ -87,7 +88,7 @@ def test_seed_routes_and_airlines(db_session: Session) -> None:
 
 def test_raw_fare_unique_hash(db_session: Session) -> None:
     """Verify RawFare table unique hash constraint for deduplication."""
-    now_utc = datetime.now(timezone.utc)
+    now_utc = datetime.now(UTC)
     fare1 = RawFare(
         batch_id="batch-01",
         origin="DEL",
@@ -126,7 +127,9 @@ def test_raw_fare_unique_hash(db_session: Session) -> None:
 def test_daily_indices_and_alerts(db_session: Session) -> None:
     """Verify creation and query of daily indices and anomaly alerts."""
     seed_all(db_session)
-    route = db_session.execute(select(Route).where(Route.origin == "DEL", Route.destination == "BOM")).scalar_one()
+    route = db_session.execute(
+        select(Route).where(Route.origin == "DEL", Route.destination == "BOM")
+    ).scalar_one()
 
     r_index = RouteDailyIndex(
         route_id=route.id,
@@ -176,4 +179,5 @@ def test_daily_indices_and_alerts(db_session: Session) -> None:
 
 if __name__ == "__main__":
     import pytest
+
     sys.exit(pytest.main(["-v", __file__]))

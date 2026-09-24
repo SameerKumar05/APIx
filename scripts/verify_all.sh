@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# APIx Master Verification Test Harness
+# SIH 2026 Problem Statement 26056 - Real-time Airfare Price Index for India
+#
+# Single one-command test harness executing end-to-end verification across:
+# 1. Database ORM Models & DGCA Seeding Baseline
+# 2. Mathematical Invariants & Quant Statistical Pricing Formulations
+# 3. Ingestion Scraper Framework & Synthetic Data Generator
+# 4. FastAPI Backend Application Endpoints & Security Auth
+# 5. Schema Contract Alignment (Ingestion <-> Database <-> API <-> Quant)
+# 6. Master Pytest Suite (Coverage, Models, Contracts, Math)
+# 7. Frontend SPA Types, Mock Contracts & TypeScript Build
+# ==============================================================================
+
+set -o pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT" || exit 1
+
+# Color formatting
+BOLD="\033[1m"
+GREEN="\033[32m"
+RED="\033[31m"
+YELLOW="\033[33m"
+CYAN="\033[36m"
+BLUE="\033[34m"
+RESET="\033[0m"
+
+# Print banner
+echo -e "${CYAN}${BOLD}"
+echo "================================================================================"
+echo "          APIx Cycle 1 Master Verification Test Harness                         "
+echo "  SIH 2026 PS 26056 - Real-time Airfare Price Index for CPI Augmentation        "
+echo "================================================================================"
+echo -e "${RESET}"
+
+# Locate Python environment
+if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
+    PYTHON_BIN="$REPO_ROOT/.venv/bin/python"
+    PYTEST_BIN="$REPO_ROOT/.venv/bin/pytest"
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python3)"
+    PYTEST_BIN="$(command -v pytest 2>/dev/null || echo "$PYTHON_BIN -m pytest")"
+else
+    echo -e "${RED}[ERROR] Python 3 executable not found in .venv or PATH.${RESET}"
+    exit 1
+fi
+
+echo -e "${BLUE}▶ Python Interpreter: ${BOLD}$("$PYTHON_BIN" --version)${RESET} (${PYTHON_BIN})"
+echo -e "${BLUE}▶ Repository Root:    ${BOLD}$REPO_ROOT${RESET}"
+echo ""
+
+START_TIME=$(date +%s)
+FAILED_STEPS=()
+PASSED_STEPS=()
+
+run_step() {
+    local step_num="$1"
+    local step_name="$2"
+    local cmd="$3"
+
+    echo -e "${YELLOW}${BOLD}[STEP $step_num] $step_name...${RESET}"
+    echo -e "${CYAN}Executing:${RESET} $cmd"
+    
+    local step_start
+    step_start=$(date +%s)
+
+    eval "$cmd"
+    local exit_code=$?
+    local step_end
+    step_end=$(date +%s)
+    local step_duration=$((step_end - step_start))
+
+    if [ $exit_code -eq 0 ]; then
+        echo -e "${GREEN}${BOLD}✓ [STEP $step_num PASSED]${RESET} ${step_name} (${step_duration}s)\n"
+        PASSED_STEPS+=("$step_name")
+    else
+        echo -e "${RED}${BOLD}✗ [STEP $step_num FAILED]${RESET} ${step_name} (Exit code: $exit_code, ${step_duration}s)\n"
+        FAILED_STEPS+=("$step_name")
+    fi
+    return $exit_code
+}
+
+# ------------------------------------------------------------------------------
+# 1. Database ORM Models & DGCA Seeding Baseline
+# ------------------------------------------------------------------------------
+run_step "1/7" "Database Models & DGCA Seed Invariants" \
+    "\"$PYTHON_BIN\" scripts/test_db_models.py"
+
+# ------------------------------------------------------------------------------
+# 2. Mathematical Invariants & Statistical Quant Engine
+# ------------------------------------------------------------------------------
+run_step "2/7" "Mathematical Invariants & Quant Formulations" \
+    "\"$PYTHON_BIN\" scripts/test_math_engine.py"
+
+# ------------------------------------------------------------------------------
+# 3. Ingestion Scraper Framework & Synthetic Data Generator
+# ------------------------------------------------------------------------------
+run_step "3/7" "Ingestion Scraper Framework & Multi-Window Generator" \
+    "\"$PYTHON_BIN\" scripts/test_ingestion_synthetic.py"
+
+# ------------------------------------------------------------------------------
+# 4. FastAPI Backend Application Endpoints & Security
+# ------------------------------------------------------------------------------
+run_step "4/7" "FastAPI Backend Endpoints & API Authentication" \
+    "\"$PYTHON_BIN\" scripts/test_api_endpoints.py"
+
+# ------------------------------------------------------------------------------
+# 5. Schema Contract Alignment (Ingestion <-> DB <-> API)
+# ------------------------------------------------------------------------------
+run_step "5/7" "Schema Contract Alignment Verification" \
+    "\"$PYTHON_BIN\" -m pytest tests/test_contracts.py -v"
+
+# ------------------------------------------------------------------------------
+# 6. Master Pytest Full Suite
+# ------------------------------------------------------------------------------
+run_step "6/7" "Master Pytest Full Test Suite" \
+    "\"$PYTHON_BIN\" -m pytest tests/ -v"
+
+# ------------------------------------------------------------------------------
+# 7. Frontend SPA Types & Verification
+# ------------------------------------------------------------------------------
+if command -v bun >/dev/null 2>&1 && [ -d "$REPO_ROOT/frontend" ]; then
+    run_step "7/7" "Frontend Types, Mock Contracts & Verification" \
+        "cd \"$REPO_ROOT/frontend\" && bun scripts/verify-mock-data.ts"
+elif [ -d "$REPO_ROOT/frontend" ]; then
+    echo -e "${YELLOW}[STEP 7/7 SKIPPED] Bun not found; skipping frontend mock data execution.${RESET}\n"
+fi
+
+# ------------------------------------------------------------------------------
+# Final Summary & Exit
+# ------------------------------------------------------------------------------
+END_TIME=$(date +%s)
+TOTAL_DURATION=$((END_TIME - START_TIME))
+
+echo "================================================================================"
+echo -e "${BOLD}APIx MASTER VERIFICATION SUMMARY${RESET}"
+echo "================================================================================"
+echo -e "Total Elapsed Time: ${TOTAL_DURATION}s"
+echo -e "Steps Passed: ${GREEN}${BOLD}${#PASSED_STEPS[@]}${RESET}"
+echo -e "Steps Failed: ${RED}${BOLD}${#FAILED_STEPS[@]}${RESET}"
+echo "--------------------------------------------------------------------------------"
+
+if [ ${#FAILED_STEPS[@]} -eq 0 ]; then
+    echo -e "${GREEN}${BOLD}>>> ALL MASTER VERIFICATION STEPS PASSED SUCCESSFULLY! <<<\n${RESET}"
+    exit 0
+else
+    echo -e "${RED}${BOLD}>>> VERIFICATION FAILED ON THE FOLLOWING STEPS: <<<\n${RESET}"
+    for failed in "${FAILED_STEPS[@]}"; do
+        echo -e "  ${RED}✗ $failed${RESET}"
+    done
+    echo ""
+    exit 1
+fi
