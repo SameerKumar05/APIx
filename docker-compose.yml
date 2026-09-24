@@ -1,0 +1,137 @@
+# ==============================================================================
+# APIx Local Stack Container Orchestration
+# SIH 2026 Problem Statement 26056: Real-time Airfare Price Index for India
+#
+# Quickstart:
+#   docker compose up -d --build
+#
+# Services:
+#   - db: PostgreSQL 16 with TimescaleDB time-series extensions
+#   - backend: FastAPI ASGI web service on port 8000
+#   - frontend: React 19 Vite SPA served via Nginx on port 3000
+#   - scraper (optional profile): On-demand ingestion container
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # PostgreSQL & TimescaleDB Database Engine
+  # ----------------------------------------------------------------------------
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: apix-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-apix_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-apix_password}
+      POSTGRES_DB: ${POSTGRES_DB:-apix_db}
+    volumes:
+      - apix_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-apix_user} -d ${POSTGRES_DB:-apix_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - apix-network
+
+  # ----------------------------------------------------------------------------
+  # FastAPI ASGI Backend Web Service
+  # ----------------------------------------------------------------------------
+  backend:
+    container_name: apix-backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: development
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      LOG_LEVEL: INFO
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-apix_user}:${POSTGRES_PASSWORD:-apix_password}@db:5432/${POSTGRES_DB:-apix_db}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-apix_user}:${POSTGRES_PASSWORD:-apix_password}@db:5432/${POSTGRES_DB:-apix_db}
+      SECRET_KEY: ${SECRET_KEY:-dev_jwt_secret_key_change_in_production_minimum_32_bytes_long}
+      INGESTION_API_KEY: ${INGESTION_API_KEY:-apix-ingestion-secret-key-2026}
+      BACKEND_CORS_ORIGINS: "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173,http://localhost:80,http://localhost"
+      INDEX_BASE_PERIOD: "2026-01"
+      INDEX_BASE_VALUE: "100.0"
+      ANOMALY_ZSCORE_THRESHOLD: "2.5"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - apix-network
+
+  # ----------------------------------------------------------------------------
+  # React 19 Frontend Dashboard (Vite SPA via Nginx)
+  # ----------------------------------------------------------------------------
+  frontend:
+    container_name: apix-frontend
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000/api/v1
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - apix-network
+
+  # ----------------------------------------------------------------------------
+  # Scraper & Ingestion Orchestrator (On-Demand Runner Profile)
+  # ----------------------------------------------------------------------------
+  scraper:
+    container_name: apix-scraper
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    environment:
+      INGESTION_ENDPOINT_URL: http://backend:8000
+      API_BASE_URL: http://backend:8000
+      INGESTION_API_KEY: ${INGESTION_API_KEY:-apix-ingestion-secret-key-2026}
+      AMADEUS_CLIENT_ID: ${AMADEUS_CLIENT_ID:-}
+      AMADEUS_CLIENT_SECRET: ${AMADEUS_CLIENT_SECRET:-}
+      INGESTION_MODE: synthetic
+      SCRAPER_SOURCES: synthetic
+      PLAYWRIGHT_HEADLESS: "true"
+      PYTHONPATH: /app
+    command: ["python", "-m", "ingestion.orchestrator"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    profiles:
+      - scraper
+    networks:
+      - apix-network
+
+volumes:
+  apix_postgres_data:
+    driver: local
+
+networks:
+  apix-network:
+    driver: bridge
