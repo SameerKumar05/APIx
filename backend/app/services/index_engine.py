@@ -91,9 +91,14 @@ def _extract_field(item: Union[FlightQuote, Mapping[str, Any], Any], field_name:
     if isinstance(item, FlightQuote):
         return getattr(item, field_name, default)
     if isinstance(item, Mapping):
-        return item.get(field_name, default)
-    return getattr(item, field_name, default)
-
+        val = item.get(field_name)
+        if val is None and field_name == "fare":
+            val = item.get("total_fare", item.get("fare_inr"))
+        return val if val is not None else default
+    val = getattr(item, field_name, None)
+    if val is None and field_name == "fare":
+        val = getattr(item, "total_fare", getattr(item, "fare_inr", None))
+    return val if val is not None else default
 
 def _normalize_code(code: Any) -> str:
     """Normalize airport or airline code to uppercase stripped string."""

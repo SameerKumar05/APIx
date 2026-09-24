@@ -178,6 +178,13 @@ class RawFare(Base):
         self.total_fare = value
 
     @property
+    def fare(self) -> float:
+        return self.total_fare
+
+    @fare.setter
+    def fare(self, value: float) -> None:
+        self.total_fare = value
+    @property
     def cabin_class(self) -> str:
         return self.fare_class
 
