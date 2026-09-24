@@ -24,6 +24,15 @@ from backend.app.services.index_engine import (
     filter_quotes_tukey,
     weighted_median_values,
 )
+try:
+    from backend.app.services.index_pipeline import (
+        DEFAULT_BASE_FARES,
+        DEFAULT_ROUTE_WEIGHTS,
+        DEFAULT_WINDOW_WEIGHTS,
+        run_daily_index_pipeline,
+    )
+except ImportError:
+    pass
 
 __all__ = [
     "DEFAULT_AIRLINE_MARKET_SHARES",
@@ -46,4 +55,7 @@ __all__ = [
     "calculate_z_score",
     "classify_anomaly",
     "detect_anomaly",
+    "run_daily_index_pipeline",
+    "DEFAULT_BASE_FARES",
+    "DEFAULT_ROUTE_WEIGHTS",
 ]
