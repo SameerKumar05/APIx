@@ -9,11 +9,14 @@
 2. [FastAPI Backend Deployment on Render](#2-fastapi-backend-deployment-on-render)
 3. [React Dashboard Deployment on Vercel](#3-react-dashboard-deployment-on-vercel)
 4. [Distributed Scraper Automation on GitHub Actions](#4-distributed-scraper-automation-on-github-actions)
-5. [Environment Variables & Secrets Reference](#5-environment-variables--secrets-reference)
-6. [Secret Rotation & Security Protocol](#6-secret-rotation--security-protocol)
-7. [Cold-Start Mitigation & Performance Tuning](#7-cold-start-mitigation--performance-tuning)
-8. [Monitoring, Observability & Incident Response](#8-monitoring-observability--incident-response)
-9. [Local Containerized Deployment (Docker Compose)](#9-local-containerized-deployment-docker-compose)
+5. [Production Proxy Pool & Scraping Infrastructure](#5-production-proxy-pool--scraping-infrastructure)
+6. [Audit Archive & Regulatory Retention (DGCA Rule 135)](#6-audit-archive--regulatory-retention-dgca-rule-135)
+7. [Nginx Reverse Proxy & WebSocket Streaming Gateway](#7-nginx-reverse-proxy--websocket-streaming-gateway)
+8. [Environment Variables & Secrets Reference](#8-environment-variables--secrets-reference)
+9. [Secret Rotation & Security Protocol](#9-secret-rotation--security-protocol)
+10. [Cold-Start Mitigation & Performance Tuning](#10-cold-start-mitigation--performance-tuning)
+11. [Monitoring, Observability & Incident Response](#11-monitoring-observability--incident-response)
+12. [Local Containerized Deployment (Docker Compose)](#12-local-containerized-deployment-docker-compose)
 
 ---
 
@@ -21,37 +24,39 @@
 
 The APIx platform is designed as a cloud-native, decoupled system distributed across resilient managed providers to achieve high availability, cost efficiency, and zero maintenance overhead:
 
-```
-  +-----------------------------------------------------------------------------------+
-  |                               GitHub Actions Runner                               |
-  |  - Scheduled Cron (02:00 UTC / 07:30 IST)                                         |
-  |  - Playwright Chromium Headless Scrapers (EaseMyTrip, MakeMyTrip)                 |
-  |  - Amadeus GDS Flight Offers API Client                                           |
-  |  - Ingestion Orchestrator (ingestion.orchestrator)                                |
-  +-----------------------------------------+-----------------------------------------+
-                                            |
-                         HTTPS POST /api/v1/ingestion/batch
-                         (Header: X-Ingestion-Key)
-                                            |
-                                            v
-  +-----------------------------------------------------------------------------------+
-  |                                Render Web Service                                 |
-  |  - FastAPI ASGI Backend (Uvicorn 4 Workers)                                       |
-  |  - Quant Statistical Engine (Fisher, Laspeyres, Paasche, Weighted Median)          |
-  |  - DGCA Passenger Traffic Weighting & Anomaly Detection (Z-Score >= 2.5)          |
-  |  - RESTful API Router (/api/v1)                                                   |
-  +------------------------------------+----------------------------------------------+
-                                       |
-                  +--------------------+--------------------+
-                  |                                         |
-                  v                                         v
-+------------------------------------+    +------------------------------------+
-|     Managed PostgreSQL / Timescale |    |         Vercel Edge Network        |
-|  - Raw Fare Observations           |    |  - React 19 SPA (Vite + Tailwind)  |
-|  - Daily Aggregated Indices        |    |  - Recharts Visualization Suite    |
-|  - Route Pair & Window Baselines   |    |  - DGCA Route Analysis Dashboard   |
-|  - Alembic Schema Migrations       |    |  - Static Edge CDN Delivery        |
-+------------------------------------+    +------------------------------------+
+```mermaid
+flowchart TD
+    subgraph Ingestion["GitHub Actions Runner (Scheduled Cron 02:00 UTC / 07:30 IST)"]
+        Scraper["Playwright Chromium Scrapers<br/>(EaseMyTrip, MakeMyTrip, SpiceJet)"]
+        GDS["Amadeus GDS Flight Offers Client<br/>(Tier 2 Fallback)"]
+        Synthetic["DGCA Deterministic Synthetic Generator<br/>(Tier 3 Fallback)"]
+        Orch["Ingestion Orchestrator<br/>(40 Discrete Slots: 10 Routes x 4 Horizons)"]
+        Scraper --> Orch
+        GDS --> Orch
+        Synthetic --> Orch
+    end
+
+    subgraph Backend["Render Web Service (FastAPI ASGI / Uvicorn 4 Workers)"]
+        API["REST & WebSocket API Gateway<br/>(/api/v1)"]
+        Dedup["Streaming Deduplication Engine<br/>(SHA-256 Content Hashing)"]
+        Quant["Quant Econometric & Index Engine<br/>(Fisher, Laspeyres, Paasche, Anomaly Z-Score)"]
+        API --> Dedup
+        Dedup --> Quant
+    end
+
+    subgraph Database["Managed Database Infrastructure"]
+        DB[("PostgreSQL 16 / TimescaleDB<br/>14 Production Normalized Tables")]
+    end
+
+    subgraph Edge["Vercel Edge Network"]
+        UI["React 19 SPA + Recharts Analytics Dashboard<br/>(Vite + Tailwind CSS)"]
+    end
+
+    Orch -->|"HTTPS POST /api/v1/ingestion/batch<br/>Header: X-Ingestion-Key"| API
+    Quant -->|"Persist Fares, Indices & Spikes"| DB
+    DB -.->|"Query Baselines & Traffic Weights"| Quant
+    UI -->|"HTTPS REST Queries"| API
+    UI -.->|"WSS /api/v1/stream/fares<br/>(Live Ticker Broadcast)"| API
 ```
 
 ---
@@ -72,9 +77,9 @@ Render hosts the FastAPI ASGI application as an auto-scaling, managed containeri
      ```bash
      pip install --upgrade pip && pip install -r requirements.txt
      ```
-   - **Pre-Deploy Command** (executes database migrations prior to routing live traffic):
+   - **Pre-Deploy Command** (executes schema initialization via `init_db()` and seeds DGCA baseline routes, traffic weights, and carrier market shares prior to routing live traffic):
      ```bash
-     alembic upgrade head
+     python -m backend.app.db.seed
      ```
    - **Start Command**:
      ```bash
@@ -170,32 +175,153 @@ Navigate to **Settings** -> **Secrets and variables** -> **Actions** in your Git
 
 ---
 
-## 5. Environment Variables & Secrets Reference
+## 5. Production Proxy Pool & Scraping Infrastructure
 
-### 5.1 Backend Service (Render)
+### 5.1 Architecture & Multi-Source Routing
+The Tier 1 live multi-source scraping engine (targeting EaseMyTrip, MakeMyTrip, and SpiceJet) operates through an adaptive, self-healing proxy pool. This insulates scrapers from IP-based rate limiting, cloud provider CIDR blocks, and Cloudflare/Akamai bot-management systems while maintaining full compliance with DGCA surveillance mandates.
+
+```mermaid
+flowchart LR
+    Scraper["Scraper Worker"] --> Selector["EWMA Proxy Selector"]
+    Selector -->|"Score-Weighted Route"| Pool[("Active Proxy Pool")]
+    Pool --> Target["Domestic Travel Portals"]
+    Target -->|"HTTP 200 OK"| Feedback["Latency Scorer"]
+    Target -->|"HTTP 429 / 403 / Timeout"| Blacklist["Quarantine Manager"]
+    Feedback -->|"Update EWMA"| Pool
+    Blacklist -->|"300s Cooldown"| Pool
+```
+
+### 5.2 EWMA Latency Scoring Engine
+To ensure requests are dispatched through the lowest-latency, highest-reliability proxies, the proxy manager dynamically maintains an Exponentially Weighted Moving Average (EWMA) score for each node $i$:
+
+$$\text{Score}_i^{(t)} = \alpha \cdot \text{Latency}_i^{(t)} + (1 - \alpha) \cdot \text{Score}_i^{(t-1)} + \text{Penalty}_i$$
+
+Where:
+- $\alpha = 0.3$: Smoothing parameter giving 30% weight to instantaneous latency and 70% to historical performance.
+- $\text{Latency}_i^{(t)}$: Measured round-trip response time in milliseconds from TCP connect to first byte received (TTFB).
+- $\text{Penalty}_i = 1000\,\text{ms}$: Applied on soft errors (HTTP 429 Too Many Requests, connection timeout, non-200 responses).
+- Node Selection: Proxies with lower composite scores are prioritized in round-robin and weighted selection queues.
+
+### 5.3 Dynamic Blacklisting & Cooldown Lifecycle
+1. **Quarantine Threshold**: A proxy that records 3 consecutive connection failures, HTTP 403 Forbidden, or HTTP 429 Too Many Requests is automatically quarantined into the blacklisted pool.
+2. **Cooldown Window**: Quarantined proxies remain quarantined for a configurable 300-second (5-minute) cooldown window (`PROXY_COOLDOWN_SEC=300`), after which they receive a single low-impact health-check probe.
+3. **Emergency Unblacklisting Fallback**: To prevent catastrophic scraping pipeline deadlocks during network volatility, if the available active proxy count drops below a minimum threshold ($N_{\text{active}} < 3$), the orchestrator executes an emergency flush—re-enlisting the oldest quarantined proxies with an elevated latency penalty.
+
+### 5.4 Anti-Bot Jitter & Behavioral Masking
+- **Request Jitter**: Request intervals incorporate an intentional random uniform jitter:
+  $$\Delta t \sim \mathcal{U}(5.0\,\text{s},\, 15.0\,\text{s})$$
+  between consecutive calls to the same domestic travel portal.
+- **Fingerprint Randomization**: Headless Chromium instances employ Playwright stealth configurations, randomized viewport dimensions ($1920\times1080$, $1440\times900$, $1366\times768$), and rotating modern User-Agent strings matching recent Chrome and Edge releases on Linux and Windows.
+
+---
+
+## 6. Audit Archive & Regulatory Retention (DGCA Rule 135)
+
+### 6.1 Statutory Authority & Regulatory Mandate
+Under the Aircraft Rules 1937, Rule 135(1-3), the Directorate General of Civil Aviation (DGCA) Tariff Monitoring Unit (TMU) is empowered to monitor airline fare tariffs to prevent predatory pricing, dynamic surge exploitation during natural calamities, and anti-competitive cartelization. Airfare data collected by APIx serves as official empirical evidence for regulatory investigations, requiring tamper-evident auditability.
+
+### 6.2 3-Tier Storage Hierarchy
+
+| Storage Tier | Storage Medium | Retention Period | Data Scope & Format | Purpose |
+|:---|:---|:---:|:---|:---|
+| **Tier 1 (Hot)** | PostgreSQL / TimescaleDB | 30 Days (raw fares) / Permanent (indices) | Relational SQL schema, 14 production normalized tables | Live dashboard queries, quant index computation, anomaly detection |
+| **Tier 2 (Warm)** | GitHub Actions Artifacts & S3/R2 Bucket | 30 Days (GHA) / 90 Days (Staging) | Compressed JSONL (`run_summary_YYYY-MM-DD.json.gz`), 40 discrete slots | Telemetry audit, provider SLA tracking, route-level fallback analysis |
+| **Tier 3 (Cold / WORM)** | S3 Glacier Deep Archive | 7 Years (2,555 Days statutory) | Encrypted Apache Parquet with Write-Once-Read-Many (WORM) Object Lock | Court-admissible tariff compliance audits, MoSPI macroeconomic verification |
+
+### 6.3 Tamper-Evident Cryptographic Provenance
+Each ingestion batch is stamped with a cryptographic SHA-256 digest:
+
+$$\text{BatchDigest} = \text{SHA256}\left(\sum_{k=1}^M \text{SHA256}(\text{fare\_id}_k \mathbin{\Vert} \text{price}_k \mathbin{\Vert} \text{carrier}_k \mathbin{\Vert} \text{timestamp}_k)\right)$$
+
+Digests are logged in the `ingestion_batches` audit table, enabling cryptographic proof of non-repudiation and chain of custody for regulatory inspection.
+
+---
+
+## 7. Nginx Reverse Proxy & WebSocket Streaming Gateway
+
+### 7.1 Real-Time Streaming Protocol Requirement
+The APIx frontend dashboard consumes high-frequency fare observations and price updates via WebSockets at `/api/v1/stream/fares` (RFC 6455). Standard HTTP reverse proxies assume short-lived request/response transactions and will terminate or buffer persistent connections unless configured with explicit protocol upgrade handshakes.
+
+### 7.2 Production Nginx Configuration
+The production Alpine Nginx web server (`Dockerfile` Stage 3) is configured as follows:
+
+```nginx
+server {
+    listen 80;
+    server_name localhost;
+
+    # Frontend SPA static distribution
+    location / {
+        root /usr/share/nginx/html;
+        index index.html index.htm;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Backend REST & WebSocket reverse proxy
+    location /api/ {
+        proxy_pass http://backend:8000/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Extended timeouts for persistent WebSocket streaming
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+        proxy_buffering off;
+    }
+
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root /usr/share/nginx/html;
+    }
+}
+```
+
+### 7.3 Technical Directives Breakdown
+- `proxy_http_version 1.1`: Crucial because Nginx defaults to HTTP/1.0 for upstream connections, which strips hop-by-hop headers required for WebSocket handshakes.
+- `proxy_set_header Upgrade $http_upgrade`: Passes the client's `Upgrade: websocket` header to the ASGI backend (FastAPI/Uvicorn).
+- `proxy_set_header Connection "upgrade"`: Signals the backend that the connection is transitioning from HTTP/1.1 to full-duplex WebSocket framing.
+- `proxy_read_timeout 86400s` & `proxy_send_timeout 86400s`: Extends timeout from Nginx's default 60 seconds to 24 hours, ensuring idle keepalive tickers or quiet night hours do not cause unintended disconnections.
+- `proxy_buffering off`: Ensures WebSocket frames and streaming SSE responses are transmitted immediately with zero intermediary buffering latency.
+
+---
+
+## 8. Environment Variables & Secrets Reference
+
+### 8.1 Backend Service (Render)
 
 | Variable | Required | Default / Example | Purpose |
 |:---|:---:|:---|:---|
-| `ENVIRONMENT` | Yes | `production` | Execution environment mode |
+| `ENVIRONMENT` | Yes | `production` | Execution environment mode (`development` \| `production` \| `testing`) |
 | `API_HOST` | Yes | `0.0.0.0` | ASGI bind host |
 | `API_PORT` | Yes | `8000` (Render overrides with `$PORT`) | ASGI bind port |
-| `LOG_LEVEL` | No | `INFO` | Logging verbosity |
-| `DATABASE_URL` | Yes | `postgresql://user:pass@host:5432/apix_db` | Connection string for database engine |
-| `DATABASE_URL_SYNC` | Yes | `postgresql://user:pass@host:5432/apix_db` | Synchronous URL for Alembic migrations |
+| `LOG_LEVEL` | No | `INFO` | Logging verbosity (`DEBUG` \| `INFO` \| `WARNING` \| `ERROR`) |
+| `DATABASE_URL` | Yes | `postgresql+asyncpg://user:pass@host:5432/apix_db` | Async connection string for FastAPI backend engine |
+| `DATABASE_URL_SYNC` | Yes | `postgresql://user:pass@host:5432/apix_db` | Synchronous URL for Alembic migrations & seed scripts |
 | `SECRET_KEY` | Yes | Cryptographic 64-char hex string | JWT token signing & session crypto |
-| `INGESTION_API_KEY` | Yes | Cryptographic 64-char hex string | Shared secret for `/api/v1/ingestion/*` |
-| `BACKEND_CORS_ORIGINS` | Yes | `https://apix.vercel.app,http://localhost:3000` | Allowed origins for browser CORS |
+| `INGESTION_API_KEY` | Yes | `apix-prod-ingest-sec-9f8a7b6c5d4e3f2a1` | Shared secret for `/api/v1/ingestion/*` (`X-Ingestion-Key`) |
+| `BACKEND_CORS_ORIGINS` | Yes | `https://apix.vercel.app,http://localhost:3000,http://localhost:5173` | Allowed origins for browser CORS |
 | `INDEX_BASE_PERIOD` | No | `2026-01` | Baseline reference period for Laspeyres/Fisher index |
 | `INDEX_BASE_VALUE` | No | `100.0` | Initial baseline index value |
 | `ANOMALY_ZSCORE_THRESHOLD` | No | `2.5` | Threshold for statistical anomaly flag |
+| `PROXY_ROTATION_STRATEGY` | No | `ewma_latency` | Strategy for proxy pool node selection |
+| `PROXY_EWMA_ALPHA` | No | `0.3` | EWMA smoothing parameter |
+| `PROXY_FAILURE_THRESHOLD` | No | `3` | Consecutive failures before quarantine |
+| `PROXY_COOLDOWN_SEC` | No | `300` | Cooldown period before re-probing |
+| `AUDIT_ARCHIVE_STORAGE` | No | `local` (`s3` \| `gcs` \| `r2`) | Target storage provider for audit archives |
+| `AUDIT_RETENTION_DAYS` | No | `2555` | Statutory retention period (7 years) |
 
-### 5.2 Frontend Dashboard (Vercel)
+### 8.2 Frontend Dashboard (Vercel)
 
 | Variable | Required | Default / Example | Purpose |
 |:---|:---:|:---|:---|
 | `VITE_API_BASE_URL` | Yes | `https://apix-backend-api.onrender.com/api/v1` | Root endpoint for backend REST API |
 
-### 5.3 Ingestion Runners (GitHub Actions)
+### 8.3 Ingestion Runners (GitHub Actions)
 
 | Variable / Secret | Required | Default / Example | Purpose |
 |:---|:---:|:---|:---|
@@ -209,17 +335,17 @@ Navigate to **Settings** -> **Secrets and variables** -> **Actions** in your Git
 
 ---
 
-## 6. Secret Rotation & Security Protocol
+## 9. Secret Rotation & Security Protocol
 
 To ensure continuous compliance and zero downtime, secrets must follow a defined rotation cadence.
 
-### 6.1 Rotation Schedule
+### 9.1 Rotation Schedule
 - **Ingestion API Key (`INGESTION_API_KEY`)**: Rotated every 90 days.
 - **Amadeus API Credentials**: Rotated every 180 days.
 - **Backend Application Key (`SECRET_KEY`)**: Rotated every 180 days.
 - **Database Credentials**: Rotated annually or immediately upon suspected compromise.
 
-### 6.2 Zero-Downtime `INGESTION_API_KEY` Rotation Procedure
+### 9.2 Zero-Downtime `INGESTION_API_KEY` Rotation Procedure
 1. **Prepare Dual-Key Backend**:
    - The backend `verify_ingestion_key` dependency supports validating against primary or secondary keys:
      ```python
@@ -240,7 +366,7 @@ To ensure continuous compliance and zero downtime, secrets must follow a defined
 6. **Step 4: Promote New Key on Render**:
    - Update Render `INGESTION_API_KEY=<new_token>` and remove `INGESTION_API_KEY_SECONDARY`.
 
-### 6.3 Emergency Compromise Runbook
+### 9.3 Emergency Compromise Runbook
 If credentials leak:
 1. Immediately change `INGESTION_API_KEY` in Render environment variables. This instantly drops active rogue connections.
 2. Update GitHub Secrets with the new key.
@@ -255,9 +381,9 @@ If credentials leak:
 
 ---
 
-## 7. Cold-Start Mitigation & Performance Tuning
+## 10. Cold-Start Mitigation & Performance Tuning
 
-### 7.1 Free/Starter Tier Spin-Down Handling
+### 10.1 Free/Starter Tier Spin-Down Handling
 Render starter and free-tier web services enter sleep mode after 15 minutes of inactivity. When a new request arrives, a cold start delay of 30–50 seconds may occur.
 
 #### Mitigation Architecture:
@@ -301,14 +427,14 @@ Render starter and free-tier web services enter sleep mode after 15 minutes of i
 
 ---
 
-## 8. Monitoring, Observability & Incident Response
+## 11. Monitoring, Observability & Incident Response
 
-### 8.1 Health & Diagnostics Endpoints
+### 11.1 Health & Diagnostics Endpoints
 - `GET /health`: Liveness probe verifying process runtime and UTC clock.
 - `GET /`: Service metadata, API documentation links, and operational status.
 - `GET /api/v1/system/status`: Database connectivity, table row counts, latest ingestion timestamp, and quant index readiness.
 
-### 8.2 Logging Standards
+### 11.2 Logging Standards
 All backend and ingestion logs output formatted structured logs with ISO 8601 timestamps, log level, correlation IDs, and context:
 ```json
 {
@@ -322,7 +448,7 @@ All backend and ingestion logs output formatted structured logs with ISO 8601 ti
 }
 ```
 
-### 8.3 Alerting & Failure Thresholds
+### 11.3 Alerting & Failure Thresholds
 1. **Scraper Pipeline Failure**:
    - If GitHub Actions `scrape.yml` fails, GitHub sends automated email alerts to repository maintainers.
    - Run summary JSON records failure reasons per route (`artifacts/run_summary.json`).
@@ -340,11 +466,11 @@ All backend and ingestion logs output formatted structured logs with ISO 8601 ti
 
 ---
 
-## 9. Local Containerized Deployment (Docker Compose)
+## 12. Local Containerized Deployment (Docker Compose)
 
 The repository includes a complete local stack orchestration via `docker-compose.yml`.
 
-### 9.1 Starting the Complete Stack
+### 12.1 Starting the Complete Stack
 ```bash
 # Build and run backend, database, and frontend in background
 docker compose up -d --build
@@ -356,12 +482,12 @@ docker compose ps
 docker compose logs -f
 ```
 
-### 9.2 Exposed Services
+### 12.2 Exposed Services
 - **FastAPI API & Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Frontend SPA Dashboard**: [http://localhost:3000](http://localhost:3000)
 - **PostgreSQL Database**: `localhost:5432` (`user: apix_user`, `password: apix_password`, `database: apix_db`)
 
-### 9.3 Executing Migrations & Seeding in Docker
+### 12.3 Executing Migrations & Seeding in Docker
 ```bash
 # Run database migrations
 docker compose exec backend alembic upgrade head

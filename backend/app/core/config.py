@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
 
+    # Quant & Index Parameters
+    INDEX_BASE_PERIOD: str = "2026-01"
+    INDEX_BASE_VALUE: float = 100.0
+    ANOMALY_ZSCORE_THRESHOLD: float = 2.5
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
