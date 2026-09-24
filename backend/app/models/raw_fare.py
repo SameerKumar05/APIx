@@ -34,6 +34,22 @@ class RawFare(Base):
         Index("ix_raw_fares_date_window", "flight_date", "booking_window"),
         Index("ix_raw_fares_batch_airline", "batch_id", "airline_code"),
         Index("ix_raw_fares_scraped_at", "scraped_at"),
+        # Optimized composite indexes for fast time-series queries and index calculations
+        Index(
+            "ix_raw_fares_route_window_date",
+            "origin",
+            "destination",
+            "booking_window",
+            "flight_date",
+        ),
+        Index(
+            "ix_raw_fares_route_window_scraped",
+            "origin",
+            "destination",
+            "booking_window",
+            "scraped_at",
+        ),
+        Index("ix_raw_fares_retention_prune", "scraped_at", "flight_date"),
     )
 
     id: Mapped[int] = mapped_column(
