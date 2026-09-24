@@ -6,6 +6,7 @@ from backend.app.models.index import NationalDailyIndex, RouteDailyIndex
 from backend.app.models.raw_fare import RawFare
 from backend.app.models.route import Route
 from backend.app.models.scraping import ScrapingRun
+from backend.app.models.telemetry import ProxyHealthRecord, ScraperTelemetry
 
 __all__ = [
     "Route",
@@ -15,4 +16,6 @@ __all__ = [
     "NationalDailyIndex",
     "AnomalyAlert",
     "ScrapingRun",
+    "ScraperTelemetry",
+    "ProxyHealthRecord",
 ]
