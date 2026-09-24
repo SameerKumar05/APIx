@@ -103,12 +103,14 @@ class ElasticityGradientPoint(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     lead_window: str = Field(..., description="Advance booking window tag: 'T+30', 'T+15', 'T+7', 'T+1'")
+    window: str | None = Field(None, description="Alias for lead_window")
     days_before_departure: int = Field(..., description="Days remaining until scheduled departure (1, 7, 15, 30)")
     surge_multiplier: float = Field(..., description="Relative price multiplier versus 30-day baseline")
     avg_fare_inr: float = Field(..., description="Average observed fare in INR at this horizon")
     price_elasticity: float = Field(..., description="Estimated point elasticity of demand / price responsiveness")
     arc_elasticity: float | None = Field(None, description="Midpoint arc elasticity relative to adjacent window")
     demand_index: float | None = Field(None, description="Normalized passenger booking intensity index")
+    demand_type: str | None = Field(None, description="'inelastic' | 'elastic'")
 
 
 class ElasticitySegments(BaseModel):

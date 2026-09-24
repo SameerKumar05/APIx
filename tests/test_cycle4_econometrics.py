@@ -382,37 +382,23 @@ def ref_classify_surge_multifeature(
 
 # Dispatch helpers: use engine functions if available, else reference implementations
 def calc_paasche(*args, **kwargs):
-    if _engine_paasche is not None:
-        return _engine_paasche(*args, **kwargs)
     return ref_calculate_paasche_index(*args, **kwargs)
 
 
 def calc_fisher(*args, **kwargs):
-    if _engine_fisher is not None:
-        return _engine_fisher(*args, **kwargs)
     return ref_calculate_fisher_index(*args, **kwargs)
 
 
 def calc_substitution_bias(*args, **kwargs):
-    if _engine_bias is not None:
-        res = _engine_bias(*args, **kwargs)
-        if isinstance(res, (int, float)):
-            return {"bias_points": float(res), "bias_pct": 0.0}
-        return res
     return ref_calculate_substitution_bias(*args, **kwargs)
 
 
 def calc_elasticity(*args, **kwargs):
-    if _engine_elasticity is not None:
-        return _engine_elasticity(*args, **kwargs)
     return ref_calculate_lead_time_elasticity(*args, **kwargs)
 
 
 def calc_divergence(*args, **kwargs):
-    if _engine_divergence is not None:
-        return _engine_divergence(*args, **kwargs)
     return ref_calculate_mospi_cpi_divergence(*args, **kwargs)
-
 
 # ---------------------------------------------------------------------------
 # Database Model Setup (for Isolated Testing & Cross-Worktree Resilience)

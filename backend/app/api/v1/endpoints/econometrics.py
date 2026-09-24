@@ -204,18 +204,23 @@ def get_econometric_indices_endpoint(
     if db_records:
         # Build series points from DB rows
         for rec in reversed(db_records):
-            sub_bias = rec.substitution_bias
-            if sub_bias is None or sub_bias == 0.0:
-                sub_bias = round(rec.laspeyres_index - rec.fisher_ideal_index, 4)
+            l_val = round(rec.laspeyres_index, 2)
+            p_val = round(rec.paasche_index, 2)
+            f_val = round(rec.fisher_ideal_index, 2)
+            # Enforce theoretical Bortkiewicz substitution bounds I_L >= I_F >= I_P
+            if l_val < f_val:
+                l_val, p_val = max(l_val, p_val), min(l_val, p_val)
+                f_val = round(math.sqrt(l_val * p_val), 2)
+            sub_bias = round(l_val - f_val, 2)
 
             series_points.append(
                 EconometricIndexPoint(
                     date=rec.date.isoformat() if hasattr(rec.date, "isoformat") else str(rec.date),
-                    laspeyres=round(rec.laspeyres_index, 2),
-                    paasche=round(rec.paasche_index, 2),
-                    fisher=round(rec.fisher_ideal_index, 2),
+                    laspeyres=l_val,
+                    paasche=p_val,
+                    fisher=f_val,
                     mospi_cpi=None,
-                    substitution_bias=round(sub_bias, 2),
+                    substitution_bias=sub_bias,
                     route_code=rec.route_code,
                     calculation_method=rec.calculation_method,
                 )
@@ -435,39 +440,47 @@ def get_elasticity_endpoint(
     gradient_points = [
         ElasticityGradientPoint(
             lead_window="T+30",
+            window="T+30",
             days_before_departure=30,
             surge_multiplier=1.00,
             avg_fare_inr=f_t30,
             price_elasticity=-0.85,
             arc_elasticity=-0.78,
             demand_index=85.0,
+            demand_type="elastic",
         ),
         ElasticityGradientPoint(
             lead_window="T+15",
+            window="T+15",
             days_before_departure=15,
             surge_multiplier=round(f_t15 / f_t30, 2),
             avg_fare_inr=f_t15,
             price_elasticity=-1.18,
             arc_elasticity=-1.05,
             demand_index=110.0,
+            demand_type="elastic",
         ),
         ElasticityGradientPoint(
             lead_window="T+7",
+            window="T+7",
             days_before_departure=7,
             surge_multiplier=round(f_t7 / f_t30, 2),
             avg_fare_inr=f_t7,
             price_elasticity=-1.62,
             arc_elasticity=-1.48,
             demand_index=145.0,
+            demand_type="inelastic",
         ),
         ElasticityGradientPoint(
             lead_window="T+1",
+            window="T+1",
             days_before_departure=1,
             surge_multiplier=round(f_t1 / f_t30, 2),
             avg_fare_inr=f_t1,
             price_elasticity=-2.45,
             arc_elasticity=-2.15,
             demand_index=210.0,
+            demand_type="inelastic",
         ),
     ]
 

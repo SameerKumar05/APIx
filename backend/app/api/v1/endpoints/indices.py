@@ -109,7 +109,12 @@ async def get_national_index_latest(
     db: Session = Depends(get_db),
 ) -> NationalIndexLatestResponse:
     try:
+        base_query = db.query(NationalDailyIndex).filter(NationalDailyIndex.booking_window == "COMPOSITE")
         latest = (
+            base_query.filter(NationalDailyIndex.index_type == "laspeyres")
+            .order_by(NationalDailyIndex.index_date.desc())
+            .first()
+        ) or base_query.order_by(NationalDailyIndex.index_date.desc(), NationalDailyIndex.id.desc()).first() or (
             db.query(NationalDailyIndex)
             .order_by(NationalDailyIndex.index_date.desc(), NationalDailyIndex.id.desc())
             .first()

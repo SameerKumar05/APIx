@@ -782,22 +782,37 @@ def _execute_daily_pipeline(
         _persist_national_index(db, n_rec)
     _persist_anomaly_alerts(db, anomalies_to_persist)
 
-    # Forward-compatible persistence into EconometricIndex if model is present
+    # Forward-compatible persistence into EconometricIndex if model is present (idempotent upsert)
     try:
         from backend.app.models.econometrics import EconometricIndex
-        econ_rec = EconometricIndex(
-            date=calc_date,
-            route_code="NATIONAL",
-            laspeyres_index=round(national_index_val, 4),
-            paasche_index=round(paasche_index_val, 4),
-            fisher_ideal_index=round(fisher_index_val, 4),
-            substitution_bias=round(substitution_bias.bias_points, 4),
-            calculation_method="dgca_traffic_weighted",
-            created_at=datetime.now(UTC),
+        existing_econ = (
+            db.query(EconometricIndex)
+            .filter(
+                EconometricIndex.date == calc_date,
+                EconometricIndex.route_code == "NATIONAL",
+                EconometricIndex.calculation_method == "dgca_traffic_weighted",
+            )
+            .first()
         )
-        db.add(econ_rec)
-    except Exception:
-        pass
+        if existing_econ:
+            existing_econ.laspeyres_index = round(national_index_val, 4)
+            existing_econ.paasche_index = round(paasche_index_val, 4)
+            existing_econ.fisher_ideal_index = round(fisher_index_val, 4)
+            existing_econ.substitution_bias = round(substitution_bias.bias_points, 4)
+        else:
+            econ_rec = EconometricIndex(
+                date=calc_date,
+                route_code="NATIONAL",
+                laspeyres_index=round(national_index_val, 4),
+                paasche_index=round(paasche_index_val, 4),
+                fisher_ideal_index=round(fisher_index_val, 4),
+                substitution_bias=round(substitution_bias.bias_points, 4),
+                calculation_method="dgca_traffic_weighted",
+                created_at=datetime.now(UTC),
+            )
+            db.add(econ_rec)
+    except Exception as e:
+        logger.warning("Could not persist EconometricIndex: %s", e)
 
     db.commit()
 

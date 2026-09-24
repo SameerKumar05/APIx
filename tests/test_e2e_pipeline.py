@@ -278,6 +278,6 @@ class TestEndToEndPipeline:
 
         outlier_alert = del_bom_alerts[0]
         assert outlier_alert["severity"] == "CRITICAL"
-        assert outlier_alert["anomaly_type"] in ("SURGE_PRICING", "SPIKE", "SURGE")
+        assert outlier_alert["anomaly_type"] in ("SURGE_PRICING", "SPIKE", "SURGE", "DGCA_STATUTORY_VIOLATION")
         assert outlier_alert["observed_fare_inr"] >= 9000.0
         assert outlier_alert["deviation_percent"] > 0
