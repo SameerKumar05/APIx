@@ -6,20 +6,15 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Geist', 'sans-serif'],
+        mono: ['Geist Mono', 'monospace'],
+      },
       colors: {
-        brand: {
-          50: '#f0f7ff',
-          100: '#e0effe',
-          200: '#b9ddfd',
-          300: '#7cc2fc',
-          400: '#36a3f8',
-          500: '#0c87eb',
-          600: '#006bc9',
-          700: '#0155a3',
-          800: '#064986',
-          900: '#0b3e6f',
-          950: '#072749',
-        },
+        canvas: '#0a0a0a',
+        surface: '#171717',
+        border: '#262626',
+        muted: '#a3a3a3',
       },
     },
   },

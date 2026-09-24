@@ -11,12 +11,10 @@ import {
   Activity,
   Wifi,
   AlertTriangle,
-  CheckCircle2,
   Clock,
   RefreshCw,
   Play,
   Globe,
-  Zap,
   ShieldAlert,
   Filter,
   Check,
@@ -30,6 +28,7 @@ import {
   YAxis,
   Tooltip,
   Cell,
+  CartesianGrid,
 } from 'recharts';
 
 interface TelemetryTabProps {
@@ -45,8 +44,15 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
   const [manualScraper, setManualScraper] = useState<string>('all');
   const [manualRoute, setManualRoute] = useState<string>('ALL');
 
-  const scrapers = telemetry.scrapers;
-  const proxyPool = telemetry.proxy_pool;
+  const scrapers = telemetry.scrapers || [];
+  const proxyPool = telemetry.proxy_pool || {
+    active_proxies: 0,
+    total_proxies: 0,
+    blacklisted_proxies: 0,
+    avg_latency_ms: 0,
+    p95_latency_ms: 0,
+    top_exit_nodes: [],
+  };
   const errorBreakdown = telemetry.error_breakdown;
 
   // Execute manual crawler trigger
@@ -85,13 +91,13 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
     name: node.region.split(' ')[0] || node.region,
     region: node.region,
     ip: node.ip_prefix,
-    latency: node.latency_ms,
+    latency: node.latency_ms ?? 0,
     status: node.status,
   }));
 
-  const totalFaresCollected = scrapers.reduce((acc, s) => acc + s.fares_collected, 0);
-  const totalSuccessCount = scrapers.reduce((acc, s) => acc + s.success_count, 0);
-  const totalErrorsCount = scrapers.reduce((acc, s) => acc + s.error_count, 0);
+  const totalFaresCollected = scrapers.reduce((acc, s) => acc + (s.fares_collected ?? 0), 0);
+  const totalSuccessCount = scrapers.reduce((acc, s) => acc + (s.success_count ?? 0), 0);
+  const totalErrorsCount = scrapers.reduce((acc, s) => acc + (s.error_count ?? 0), 0);
   const overallSuccessRate = totalSuccessCount + totalErrorsCount > 0
     ? ((totalSuccessCount / (totalSuccessCount + totalErrorsCount)) * 100).toFixed(2)
     : '100.00';
@@ -99,129 +105,136 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
   return (
     <div className="space-y-6">
       {/* Top Banner / System Health & Controls */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm">
+      <div className="border border-neutral-800 bg-neutral-950 rounded-lg p-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400">
-                <Server className="w-5 h-5" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                  Crawler Infrastructure & Proxy Telemetry
-                  <span className="text-xs px-2.5 py-0.5 rounded-full font-mono font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-800/80">
-                    {telemetry.system_health}
-                  </span>
-                </h1>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Real-time distributed multi-source crawler fleet monitoring, proxy pool latency gauges, and fault diagnostics
-                </p>
-              </div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium border border-neutral-800 bg-neutral-900 text-neutral-300">
+                PIPELINE TELEMETRY
+              </span>
+              <span className="text-neutral-600 text-xs">•</span>
+              <span className="text-xs px-2 py-0.5 rounded font-mono font-medium border border-neutral-800 bg-neutral-900 text-neutral-300">
+                {telemetry.system_health ?? 'HEALTHY'}
+              </span>
             </div>
+            <h1 className="text-base font-semibold tracking-tight text-white">
+              Crawler Infrastructure &amp; Proxy Telemetry
+            </h1>
+            <p className="text-xs text-neutral-400 mt-1 max-w-2xl leading-relaxed">
+              Real-time distributed multi-source crawler fleet monitoring, proxy pool latency gauges, and fault diagnostics.
+            </p>
           </div>
 
           <div className="flex items-center gap-3">
             {onRefresh && (
               <button
                 onClick={onRefresh}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded border border-neutral-800 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white transition-colors"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
+                <RefreshCw className="w-3.5 h-3.5 text-neutral-400" />
                 <span>Refresh Telemetry</span>
               </button>
             )}
-            <div className="text-[11px] font-mono text-slate-500">
+            <div className="text-[11px] font-mono text-neutral-500">
               Synced: {new Date(telemetry.generated_at).toLocaleTimeString()}
             </div>
           </div>
         </div>
 
         {/* Global Pipeline KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-6">
-          <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-5">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-slate-400">Active Crawlers</span>
-              <Activity className="w-4 h-4 text-emerald-400" />
+              <span className="text-xs font-medium uppercase tracking-wider text-neutral-400">
+                Active Crawlers
+              </span>
+              <Activity className="w-3.5 h-3.5 text-neutral-500" />
             </div>
             <div className="mt-2 flex items-baseline gap-1.5">
-              <span className="text-xl font-bold font-mono text-white">
+              <span className="text-2xl font-semibold font-mono tabular-nums text-white">
                 {scrapers.filter((s) => s.status === 'ONLINE' || s.status === 'RUNNING').length}
               </span>
-              <span className="text-xs font-mono text-slate-500">/ {scrapers.length}</span>
+              <span className="text-xs font-mono text-neutral-500">/ {scrapers.length}</span>
             </div>
-            <div className="text-[10px] text-emerald-400/90 font-medium mt-1">100% Scheduled Fleet</div>
+            <div className="text-[10px] text-neutral-500 font-mono mt-1">100% Scheduled Fleet</div>
           </div>
 
-          <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-slate-400">Fares Collected</span>
-              <Database className="w-4 h-4 text-sky-400" />
+              <span className="text-xs font-medium uppercase tracking-wider text-neutral-400">
+                Fares Collected
+              </span>
+              <Database className="w-3.5 h-3.5 text-neutral-500" />
             </div>
             <div className="mt-2">
-              <span className="text-xl font-bold font-mono text-white">
+              <span className="text-2xl font-semibold font-mono tabular-nums text-white">
                 {totalFaresCollected.toLocaleString()}
               </span>
             </div>
-            <div className="text-[10px] text-slate-400 font-medium mt-1">Today across 10 corridors</div>
+            <div className="text-[10px] text-neutral-500 font-mono mt-1">Across 10 corridors</div>
           </div>
 
-          <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-slate-400">Success Rate</span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span className="text-xs font-medium uppercase tracking-wider text-neutral-400">
+                Success Rate
+              </span>
+              <span className="text-xs font-mono text-neutral-500">Cycle 3</span>
             </div>
             <div className="mt-2">
-              <span className="text-xl font-bold font-mono text-emerald-400">
+              <span className="text-2xl font-semibold font-mono tabular-nums text-white">
                 {overallSuccessRate}%
               </span>
             </div>
-            <div className="text-[10px] text-slate-400 font-medium mt-1">
+            <div className="text-[10px] text-neutral-500 font-mono mt-1">
               {totalErrorsCount} recoverable errors
             </div>
           </div>
 
-          <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-slate-400">Proxy Nodes</span>
-              <Globe className="w-4 h-4 text-indigo-400" />
+              <span className="text-xs font-medium uppercase tracking-wider text-neutral-400">
+                Proxy Nodes
+              </span>
+              <Globe className="w-3.5 h-3.5 text-neutral-500" />
             </div>
             <div className="mt-2 flex items-baseline gap-1.5">
-              <span className="text-xl font-bold font-mono text-white">
+              <span className="text-2xl font-semibold font-mono tabular-nums text-white">
                 {proxyPool.active_proxies}
               </span>
-              <span className="text-xs font-mono text-slate-500">/ {proxyPool.total_proxies}</span>
+              <span className="text-xs font-mono text-neutral-500">/ {proxyPool.total_proxies}</span>
             </div>
-            <div className="text-[10px] text-indigo-400 font-medium mt-1">
-              {proxyPool.blacklisted_proxies} blacklisted (isolated)
+            <div className="text-[10px] text-neutral-500 font-mono mt-1">
+              {proxyPool.blacklisted_proxies} blacklisted
             </div>
           </div>
 
-          <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-slate-400">Avg Proxy Latency</span>
-              <Wifi className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-medium uppercase tracking-wider text-neutral-400">
+                Avg Latency
+              </span>
+              <Wifi className="w-3.5 h-3.5 text-neutral-500" />
             </div>
             <div className="mt-2 flex items-baseline gap-1.5">
-              <span className="text-xl font-bold font-mono text-amber-300">
+              <span className="text-2xl font-semibold font-mono tabular-nums text-white">
                 {proxyPool.avg_latency_ms}
               </span>
-              <span className="text-xs font-mono text-slate-500">ms (p95: {proxyPool.p95_latency_ms}ms)</span>
+              <span className="text-xs font-mono text-neutral-500">ms (p95: {proxyPool.p95_latency_ms}ms)</span>
             </div>
-            <div className="text-[10px] text-emerald-400 font-medium mt-1">Residential & Datacenter</div>
+            <div className="text-[10px] text-neutral-500 font-mono mt-1">Residential &amp; DC</div>
           </div>
         </div>
 
-        {/* Trigger Toast / Feedback banner */}
+        {/* Trigger Feedback Banner */}
         {triggerResult && (
-          <div className="mt-4 p-3 rounded-xl bg-sky-950/70 border border-sky-800/70 flex items-center justify-between text-xs text-sky-200 animate-fadeIn">
+          <div className="mt-4 p-3 rounded border border-neutral-800 bg-neutral-900 flex items-center justify-between text-xs text-neutral-200 font-mono">
             <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-sky-400 animate-pulse" />
-              <span>
-                <strong>{triggerResult.status}:</strong> {triggerResult.message}
-              </span>
-              <span className="font-mono text-[10px] text-sky-400/80">({triggerResult.task_id})</span>
+              <span className="text-white font-medium">{triggerResult.status}:</span>
+              <span>{triggerResult.message}</span>
+              <span className="text-neutral-500">({triggerResult.task_id})</span>
             </div>
-            <span className="text-[10px] text-slate-400 font-mono">
+            <span className="text-[10px] text-neutral-500">
               {new Date(triggerResult.triggered_at).toLocaleTimeString()}
             </span>
           </div>
@@ -229,23 +242,25 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
       </div>
 
       {/* Manual Crawler Trigger Dispatcher */}
-      <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="border border-neutral-800 bg-neutral-950 rounded-lg p-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-amber-400" />
-            <h2 className="text-sm font-bold text-white">Manual Crawl Orchestration</h2>
-            <span className="text-[11px] text-slate-400 hidden sm:inline">• Force on-demand route sweep</span>
+            <Server className="w-4 h-4 text-neutral-400" />
+            <h2 className="text-xs font-medium uppercase tracking-wider text-neutral-300">
+              Manual Crawl Orchestration
+            </h2>
+            <span className="text-xs text-neutral-500 hidden sm:inline font-mono">• Force on-demand route sweep</span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 text-xs text-neutral-400 font-mono">
               <span>Crawler:</span>
               <select
                 value={manualScraper}
                 onChange={(e) => setManualScraper(e.target.value)}
-                className="bg-slate-800 text-slate-200 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-sky-500"
+                className="bg-neutral-900 text-neutral-200 border border-neutral-800 rounded px-2.5 py-1 text-xs font-mono focus:outline-none focus:border-neutral-700"
               >
-                <option value="all">All Crawlers (Fleet)</option>
+                <option value="all">All Fleet</option>
                 <option value="easemytrip">EaseMyTrip</option>
                 <option value="makemytrip">MakeMyTrip</option>
                 <option value="spicejet">SpiceJet</option>
@@ -253,32 +268,32 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
               </select>
             </div>
 
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
+            <div className="flex items-center gap-1.5 text-xs text-neutral-400 font-mono">
               <span>Corridor:</span>
               <select
                 value={manualRoute}
                 onChange={(e) => setManualRoute(e.target.value)}
-                className="bg-slate-800 text-slate-200 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:border-sky-500"
+                className="bg-neutral-900 text-neutral-200 border border-neutral-800 rounded px-2.5 py-1 text-xs font-mono focus:outline-none focus:border-neutral-700"
               >
-                <option value="ALL">All 10 Trunk Routes</option>
-                <option value="DEL-BOM">DEL-BOM (Delhi-Mumbai)</option>
-                <option value="BLR-DEL">BLR-DEL (Bengaluru-Delhi)</option>
-                <option value="BOM-GOI">BOM-GOI (Mumbai-Goa)</option>
-                <option value="DEL-CCU">DEL-CCU (Delhi-Kolkata)</option>
-                <option value="HYD-DEL">HYD-DEL (Hyderabad-Delhi)</option>
-                <option value="BOM-BLR">BOM-BLR (Mumbai-Bengaluru)</option>
+                <option value="ALL">All 10 Corridors</option>
+                <option value="DEL-BOM">DEL-BOM</option>
+                <option value="BLR-DEL">BLR-DEL</option>
+                <option value="BOM-GOI">BOM-GOI</option>
+                <option value="DEL-CCU">DEL-CCU</option>
+                <option value="HYD-DEL">HYD-DEL</option>
+                <option value="BOM-BLR">BOM-BLR</option>
               </select>
             </div>
 
             <button
               onClick={() => handleTrigger()}
               disabled={triggeringCrawler !== null}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-all disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-mono rounded border border-neutral-800 transition-colors disabled:opacity-50"
             >
               {triggeringCrawler === 'all' || triggeringCrawler === manualScraper ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-neutral-400" />
               ) : (
-                <Play className="w-3.5 h-3.5" />
+                <Play className="w-3.5 h-3.5 text-neutral-400" />
               )}
               <span>Dispatch Crawl</span>
             </button>
@@ -289,15 +304,15 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
       {/* Crawler Status Cards Grid */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider text-slate-300">
+          <h2 className="text-xs font-medium uppercase tracking-wider text-neutral-400">
             Multi-Source Crawler Fleet (4 Primary Engines)
           </h2>
-          <span className="text-xs text-slate-400 font-mono">
-            Cycle 3 Distributed Workers: {telemetry.active_workers ?? 16}
+          <span className="text-xs text-neutral-500 font-mono">
+            Active Workers: {telemetry.active_workers ?? 16}
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           {scrapers.map((crawler: CrawlerStatus) => {
             const isTriggering = triggeringCrawler === crawler.crawler_name;
             const isOnline = crawler.status === 'ONLINE' || crawler.status === 'RUNNING';
@@ -305,90 +320,74 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
             return (
               <div
                 key={crawler.crawler_name}
-                className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 hover:border-slate-700 transition-all flex flex-col justify-between"
+                className="bg-neutral-950 border border-neutral-800 rounded-lg p-4 hover:border-neutral-700 transition-colors flex flex-col justify-between"
               >
                 <div>
                   {/* Card Header */}
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h3 className="text-base font-bold text-white capitalize">
+                      <h3 className="text-sm font-semibold text-white capitalize font-mono">
                         {crawler.crawler_name}
                       </h3>
-                      <p className="text-[11px] text-slate-400 font-medium">
+                      <p className="text-[11px] text-neutral-500 font-mono">
                         {crawler.platform}
                       </p>
                     </div>
 
-                    <div
-                      className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium border ${
                         isOnline
-                          ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800/80'
-                          : 'bg-rose-950/80 text-rose-400 border-rose-800/80'
+                          ? 'border-neutral-800 bg-neutral-900 text-neutral-300'
+                          : 'border-red-500/30 text-red-400 bg-red-950/20'
                       }`}
                     >
-                      <span className="relative flex h-2 w-2">
-                        {isOnline && (
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        )}
-                        <span
-                          className={`relative inline-flex rounded-full h-2 w-2 ${
-                            isOnline ? 'bg-emerald-500' : 'bg-rose-500'
-                          }`}
-                        ></span>
-                      </span>
-                      <span>{crawler.status}</span>
-                    </div>
+                      {crawler.status}
+                    </span>
                   </div>
 
                   {/* Uptime Progress Bar */}
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-400">Uptime</span>
-                      <span className="font-mono font-bold text-white">{crawler.uptime_pct}%</span>
+                      <span className="text-neutral-500 font-mono text-[11px]">Uptime</span>
+                      <span className="font-mono text-xs text-white tabular-nums">{crawler.uptime_pct}%</span>
                     </div>
-                    <div className="w-full bg-slate-800 rounded-full h-1.5 mt-1.5 overflow-hidden">
+                    <div className="w-full bg-neutral-900 border border-neutral-800 rounded-sm h-1.5 mt-1 overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${
-                          crawler.uptime_pct >= 99
-                            ? 'bg-emerald-500'
-                            : crawler.uptime_pct >= 97
-                            ? 'bg-sky-500'
-                            : 'bg-amber-500'
-                        }`}
+                        className="h-full bg-neutral-300 rounded-sm transition-all"
                         style={{ width: `${crawler.uptime_pct}%` }}
-                      ></div>
+                      />
                     </div>
                   </div>
 
                   {/* Metrics Grid */}
-                  <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-800/60 text-xs">
+                  <div className="grid grid-cols-2 gap-2 mt-3 pt-2.5 border-t border-neutral-800 text-xs font-mono">
                     <div>
-                      <span className="text-[10px] text-slate-500 block">Fares Scraped</span>
-                      <span className="font-mono font-semibold text-white">
-                        {crawler.fares_collected.toLocaleString()}
+                      <span className="text-[10px] text-neutral-500 block">Fares Scraped</span>
+                      <span className="font-semibold text-white tabular-nums">
+                        {(crawler.fares_collected ?? 0).toLocaleString()}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-500 block">Avg Response</span>
-                      <span className="font-mono font-semibold text-slate-300">
+                      <span className="text-[10px] text-neutral-500 block">Avg Response</span>
+                      <span className="text-neutral-300 tabular-nums">
                         {crawler.avg_response_time_ms ? `${crawler.avg_response_time_ms} ms` : '—'}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-500 block">Success / Error</span>
-                      <span className="font-mono font-semibold text-slate-300">
-                        <span className="text-emerald-400">{crawler.success_count}</span>
+                      <span className="text-[10px] text-neutral-500 block">Success / Error</span>
+                      <span className="text-neutral-300 tabular-nums">
+                        <span className="text-white">{crawler.success_count}</span>
                         {' / '}
-                        <span className={crawler.error_count > 0 ? 'text-rose-400' : 'text-slate-500'}>
+                        <span className={crawler.error_count > 0 ? 'text-red-400' : 'text-neutral-500'}>
                           {crawler.error_count}
                         </span>
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-500 block">Error Rate</span>
+                      <span className="text-[10px] text-neutral-500 block">Error Rate</span>
                       <span
-                        className={`font-mono font-semibold ${
-                          crawler.error_rate_pct > 1 ? 'text-amber-400' : 'text-emerald-400'
+                        className={`tabular-nums ${
+                          crawler.error_rate_pct > 1 ? 'text-amber-400' : 'text-neutral-300'
                         }`}
                       >
                         {crawler.error_rate_pct}%
@@ -399,18 +398,18 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
                   {/* Route tags */}
                   {crawler.target_routes && crawler.target_routes.length > 0 && (
                     <div className="mt-3">
-                      <span className="text-[10px] text-slate-500 block mb-1">Target Corridors</span>
+                      <span className="text-[10px] text-neutral-500 block mb-1 font-mono">Target Corridors</span>
                       <div className="flex flex-wrap gap-1">
                         {crawler.target_routes.slice(0, 4).map((rt) => (
                           <span
                             key={rt}
-                            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-300 border border-slate-700/60"
+                            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-neutral-900 text-neutral-400 border border-neutral-800"
                           >
                             {rt}
                           </span>
                         ))}
                         {crawler.target_routes.length > 4 && (
-                          <span className="text-[10px] font-mono text-slate-500 self-center">
+                          <span className="text-[10px] font-mono text-neutral-500 self-center">
                             +{crawler.target_routes.length - 4} more
                           </span>
                         )}
@@ -420,9 +419,9 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
                 </div>
 
                 {/* Footer / Trigger Button */}
-                <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-center justify-between">
-                  <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
-                    <Clock className="w-3 h-3 text-slate-500" />
+                <div className="mt-3 pt-2.5 border-t border-neutral-800 flex items-center justify-between">
+                  <div className="flex items-center gap-1 text-[10px] text-neutral-500 font-mono">
+                    <Clock className="w-3 h-3 text-neutral-500" />
                     <span>
                       {new Date(crawler.last_run_at).toLocaleTimeString([], {
                         hour: '2-digit',
@@ -435,12 +434,12 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
                   <button
                     onClick={() => handleTrigger(crawler.crawler_name)}
                     disabled={isTriggering}
-                    className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 hover:text-sky-300 border border-slate-700 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-mono rounded border border-neutral-800 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 hover:text-white transition-colors disabled:opacity-50"
                   >
                     {isTriggering ? (
-                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <RefreshCw className="w-3 h-3 animate-spin text-neutral-400" />
                     ) : (
-                      <Play className="w-3 h-3" />
+                      <Play className="w-3 h-3 text-neutral-400" />
                     )}
                     <span>Trigger</span>
                   </button>
@@ -452,137 +451,138 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
       </div>
 
       {/* Proxy Pool Latency Gauges & Regional Health */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Latency Gauges & Metrics */}
-        <div className="lg:col-span-1 bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
+        <div className="lg:col-span-1 border border-neutral-800 bg-neutral-950 rounded-lg p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Wifi className="w-4 h-4 text-sky-400" />
-              <h3 className="text-sm font-bold text-white">Proxy Pool Health Gauges</h3>
+              <Wifi className="w-4 h-4 text-neutral-400" />
+              <h3 className="text-xs font-medium uppercase tracking-wider text-neutral-400">
+                Proxy Pool Latency Gauges
+              </h3>
             </div>
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-full">
+            <span className="text-[10px] font-mono text-neutral-300 border border-neutral-800 bg-neutral-900 px-2 py-0.5 rounded">
               {proxyPool.healthy_pct ?? 95.3}% Healthy
             </span>
           </div>
 
           <div className="space-y-4">
             {/* Average Latency Gauge */}
-            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5">
+            <div className="bg-neutral-900/40 border border-neutral-800 rounded p-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400 font-medium">Fleet Mean Latency</span>
-                <span className="text-sm font-bold font-mono text-emerald-400">
+                <span className="text-xs text-neutral-400 font-medium">Fleet Mean Latency</span>
+                <span className="text-xs font-semibold font-mono tabular-nums text-white">
                   {proxyPool.avg_latency_ms} ms
                 </span>
               </div>
-              <div className="w-full bg-slate-800 rounded-full h-2 mt-2 overflow-hidden flex">
+              <div className="w-full bg-neutral-900 border border-neutral-800 rounded-sm h-1.5 mt-2 overflow-hidden flex">
                 <div
-                  className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                  className="bg-neutral-300 h-full rounded-sm transition-all"
                   style={{ width: `${Math.min(100, (proxyPool.avg_latency_ms / 300) * 100)}%` }}
-                ></div>
+                />
               </div>
-              <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
+              <div className="flex justify-between text-[10px] text-neutral-500 font-mono mt-1">
                 <span>0 ms</span>
-                <span className="text-emerald-500 font-semibold">Optimal &lt; 150ms</span>
+                <span className="text-neutral-400">Optimal &lt; 150ms</span>
                 <span>300 ms</span>
               </div>
             </div>
 
             {/* P95 Tail Latency Gauge */}
-            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5">
+            <div className="bg-neutral-900/40 border border-neutral-800 rounded p-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400 font-medium">P95 Tail Latency</span>
-                <span className="text-sm font-bold font-mono text-amber-400">
+                <span className="text-xs text-neutral-400 font-medium">P95 Tail Latency</span>
+                <span className="text-xs font-semibold font-mono tabular-nums text-white">
                   {proxyPool.p95_latency_ms} ms
                 </span>
               </div>
-              <div className="w-full bg-slate-800 rounded-full h-2 mt-2 overflow-hidden flex">
+              <div className="w-full bg-neutral-900 border border-neutral-800 rounded-sm h-1.5 mt-2 overflow-hidden flex">
                 <div
-                  className="bg-amber-500 h-full rounded-full transition-all duration-500"
+                  className="bg-neutral-400 h-full rounded-sm transition-all"
                   style={{ width: `${Math.min(100, (proxyPool.p95_latency_ms / 500) * 100)}%` }}
-                ></div>
+                />
               </div>
-              <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
+              <div className="flex justify-between text-[10px] text-neutral-500 font-mono mt-1">
                 <span>0 ms</span>
-                <span className="text-amber-500 font-semibold">Acceptable &lt; 350ms</span>
+                <span className="text-neutral-400">Acceptable &lt; 350ms</span>
                 <span>500 ms</span>
               </div>
             </div>
 
             {/* Proxy Health Breakdown */}
-            <div className="grid grid-cols-2 gap-2 text-xs pt-2">
-              <div className="bg-slate-950/40 border border-slate-800/60 rounded-lg p-2.5">
-                <span className="text-[10px] text-slate-500 block">Bandwidth Today</span>
-                <span className="font-mono font-bold text-slate-200">
+            <div className="grid grid-cols-2 gap-2 text-xs pt-1 font-mono">
+              <div className="bg-neutral-900/40 border border-neutral-800 rounded p-2.5">
+                <span className="text-[10px] text-neutral-500 block">Bandwidth Today</span>
+                <span className="font-semibold text-white tabular-nums">
                   {proxyPool.bandwidth_mb_today ?? 1420} MB
                 </span>
               </div>
-              <div className="bg-slate-950/40 border border-slate-800/60 rounded-lg p-2.5">
-                <span className="text-[10px] text-slate-500 block">Rotation Policy</span>
-                <span className="font-mono font-bold text-sky-400">Round-Robin</span>
+              <div className="bg-neutral-900/40 border border-neutral-800 rounded p-2.5">
+                <span className="text-[10px] text-neutral-500 block">Rotation Policy</span>
+                <span className="text-neutral-200">Round-Robin</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Regional Exit Node Latency Chart */}
-        <div className="lg:col-span-2 bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+        <div className="lg:col-span-2 border border-neutral-800 bg-neutral-950 rounded-lg p-5 flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-indigo-400" />
-                <h3 className="text-sm font-bold text-white">Regional Proxy Exit Node Latencies</h3>
+                <Globe className="w-4 h-4 text-neutral-400" />
+                <h3 className="text-xs font-medium uppercase tracking-wider text-neutral-400">
+                  Regional Proxy Exit Node Latencies
+                </h3>
               </div>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Edge routing for anti-bot resilience
+              <span className="text-[11px] text-neutral-500 font-mono">
+                Edge routing resilience
               </span>
             </div>
 
-            <p className="text-xs text-slate-400 mb-4">
-              Geographic dispersion across Indian domestic metro POPs minimizes CAPTCHA challenges and mimics organic user navigation.
+            <p className="text-xs text-neutral-500 mb-3">
+              Geographic dispersion across Indian domestic metro POPs minimizes challenges and mimics organic user navigation.
             </p>
 
-            <div className="h-52 w-full">
+            <div className="h-48 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={exitNodesData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#262626" vertical={false} />
                   <XAxis
                     dataKey="name"
-                    stroke="#64748b"
+                    stroke="#737373"
                     fontSize={11}
                     tickLine={false}
+                    axisLine={{ stroke: '#262626' }}
                   />
                   <YAxis
-                    stroke="#64748b"
+                    stroke="#737373"
                     fontSize={11}
                     unit="ms"
                     tickLine={false}
+                    axisLine={{ stroke: '#262626' }}
                   />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         const d = payload[0].payload;
                         return (
-                          <div className="bg-slate-900 border border-slate-700 p-2.5 rounded-lg shadow-xl text-xs font-mono">
-                            <p className="font-bold text-white">{d.region}</p>
-                            <p className="text-slate-400">Subnet: {d.ip}</p>
-                            <p className="text-sky-400 mt-1">Ping Latency: {d.latency} ms</p>
-                            <p className="text-emerald-400">Status: {d.status}</p>
+                          <div className="bg-neutral-950 border border-neutral-800 p-2.5 rounded font-mono text-xs">
+                            <p className="font-semibold text-white">{d.region}</p>
+                            <p className="text-neutral-500">Subnet: {d.ip}</p>
+                            <p className="text-neutral-300 mt-1">Ping Latency: {d.latency} ms</p>
+                            <p className="text-neutral-400">Status: {d.status}</p>
                           </div>
                         );
                       }
                       return null;
                     }}
                   />
-                  <Bar dataKey="latency" radius={[6, 6, 0, 0]}>
+                  <Bar dataKey="latency" radius={[2, 2, 0, 0]}>
                     {exitNodesData.map((entry, index) => (
                       <Cell
                         key={`cell-${index}`}
-                        fill={
-                          entry.latency < 100
-                            ? '#10b981'
-                            : entry.latency < 200
-                            ? '#38bdf8'
-                            : '#f59e0b'
-                        }
+                        fill={entry.latency < 100 ? '#ffffff' : entry.latency < 200 ? '#a3a3a3' : '#525252'}
                       />
                     ))}
                   </Bar>
@@ -591,43 +591,40 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
             </div>
           </div>
 
-          {/* Node IP Table Pill */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-3 border-t border-slate-800/80">
+          {/* Node IP Table Pills */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-3 border-t border-neutral-800 font-mono">
             {exitNodesData.map((node) => (
-              <div key={node.region} className="text-center p-1.5 rounded-lg bg-slate-950/40 border border-slate-800/60">
-                <span className="text-[10px] font-semibold text-slate-300 block truncate">{node.name}</span>
-                <span className="text-[10px] font-mono text-sky-400 block">{node.latency} ms</span>
+              <div key={node.region} className="text-center p-1.5 rounded bg-neutral-900/40 border border-neutral-800">
+                <span className="text-[10px] text-neutral-300 block truncate">{node.name}</span>
+                <span className="text-[10px] text-neutral-500 block tabular-nums">{node.latency} ms</span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Error Breakdown & Failure Diagnostics Log */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
+      {/* Error Breakdown & Failure Diagnostics Log: 12-Column Semantic Table */}
+      <div className="border border-neutral-800 bg-neutral-950 rounded-lg p-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 text-rose-400" />
+            <ShieldAlert className="w-4 h-4 text-neutral-400" />
             <div>
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                Crawler Fault Diagnostics & Error Breakdown
-                <span className="text-xs px-2 py-0.5 rounded-full font-mono bg-rose-950/80 text-rose-300 border border-rose-800/80">
+              <h3 className="text-xs font-medium uppercase tracking-wider text-neutral-400 flex items-center gap-2">
+                Crawler Fault Diagnostics &amp; Error Breakdown
+                <span className="text-[10px] px-2 py-0.5 rounded font-mono border border-neutral-800 bg-neutral-900 text-neutral-300">
                   {errorBreakdown?.total_errors ?? 0} Total
                 </span>
               </h3>
-              <p className="text-xs text-slate-400">
-                Categorized crawler interception, timeout incidents, and automated proxy recovery logs
-              </p>
             </div>
           </div>
 
           {/* Filters */}
-          <div className="flex items-center gap-2 text-xs">
-            <Filter className="w-3.5 h-3.5 text-slate-500" />
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <Filter className="w-3.5 h-3.5 text-neutral-500" />
             <select
               value={selectedCrawlerFilter}
               onChange={(e) => setSelectedCrawlerFilter(e.target.value)}
-              className="bg-slate-800 text-slate-200 border border-slate-700 rounded-lg px-2.5 py-1 text-xs font-mono focus:outline-none"
+              className="bg-neutral-900 text-neutral-200 border border-neutral-800 rounded px-2.5 py-1 text-xs font-mono focus:outline-none focus:border-neutral-700"
             >
               <option value="ALL">All Crawlers</option>
               <option value="easemytrip">EaseMyTrip</option>
@@ -639,7 +636,7 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
             <select
               value={selectedErrorTypeFilter}
               onChange={(e) => setSelectedErrorTypeFilter(e.target.value)}
-              className="bg-slate-800 text-slate-200 border border-slate-700 rounded-lg px-2.5 py-1 text-xs font-mono focus:outline-none"
+              className="bg-neutral-900 text-neutral-200 border border-neutral-800 rounded px-2.5 py-1 text-xs font-mono focus:outline-none focus:border-neutral-700"
             >
               <option value="ALL">All Error Codes</option>
               <option value="HTTP_TIMEOUT">HTTP_TIMEOUT</option>
@@ -653,25 +650,25 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
 
         {/* Error Category Summary Badges */}
         {errorBreakdown?.by_type && (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mb-4 font-mono">
             {Object.entries(errorBreakdown.by_type).map(([errType, count]) => (
               <div
                 key={errType}
                 onClick={() => setSelectedErrorTypeFilter(selectedErrorTypeFilter === errType ? 'ALL' : errType)}
-                className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                className={`p-2.5 rounded border cursor-pointer transition-colors ${
                   selectedErrorTypeFilter === errType
-                    ? 'bg-rose-950/60 border-rose-600 text-white shadow-sm'
-                    : 'bg-slate-950/50 border-slate-800 text-slate-300 hover:border-slate-700'
+                    ? 'border-neutral-600 bg-neutral-900 text-white'
+                    : 'bg-neutral-900/40 border-neutral-800 text-neutral-400 hover:border-neutral-700'
                 }`}
               >
-                <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                <div className="flex items-center justify-between text-[11px] text-neutral-500">
                   <span className="truncate">{errType}</span>
-                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                  <AlertTriangle className="w-3 h-3 text-neutral-500" />
                 </div>
                 <div className="mt-1 flex items-baseline justify-between">
-                  <span className="text-lg font-bold font-mono text-white">{count}</span>
-                  <span className="text-[10px] text-slate-500">
-                    {Math.round((count / errorBreakdown.total_errors) * 100)}%
+                  <span className="text-base font-semibold text-white tabular-nums">{count}</span>
+                  <span className="text-[10px] text-neutral-500 tabular-nums">
+                    {Math.round((count / (errorBreakdown.total_errors || 1)) * 100)}%
                   </span>
                 </div>
               </div>
@@ -679,66 +676,85 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
           </div>
         )}
 
-        {/* Diagnostic Log Table */}
-        <div className="overflow-x-auto rounded-xl border border-slate-800">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 uppercase font-mono text-[10px]">
+        {/* Diagnostic Log Table: 12-Column Semantic Layout */}
+        <div className="overflow-x-auto rounded border border-neutral-800">
+          <table className="w-full text-left text-xs table-fixed font-mono">
+            <colgroup>
+              <col className="w-[12%]" /> {/* Timestamp: 1.5 cols */}
+              <col className="w-[12%]" /> {/* Crawler: 1.5 cols */}
+              <col className="w-[10%]" /> {/* Route: 1.2 cols */}
+              <col className="w-[20%]" /> {/* Error Type: 2.5 cols */}
+              <col className="w-[30%]" /> {/* Message: 3.5 cols */}
+              <col className="w-[16%]" /> {/* Retries & Status: 1.8 cols */}
+            </colgroup>
+            <thead className="bg-neutral-900/40 text-neutral-400 border-b border-neutral-800 uppercase text-[11px] select-none">
               <tr>
-                <th className="py-2.5 px-3">Timestamp</th>
-                <th className="py-2.5 px-3">Crawler</th>
-                <th className="py-2.5 px-3">Route</th>
-                <th className="py-2.5 px-3">Error Type & Status</th>
-                <th className="py-2.5 px-3">Message / Root Cause</th>
-                <th className="py-2.5 px-3 text-right">Retries & Recovery</th>
+                <th className="py-3 px-3 text-left font-medium">Timestamp</th>
+                <th className="py-3 px-3 text-left font-medium">Crawler</th>
+                <th className="py-3 px-3 text-left font-medium">Route</th>
+                <th className="py-3 px-3 text-left font-medium">Error Type</th>
+                <th className="py-3 px-3 text-left font-medium">Root Cause Message</th>
+                <th className="py-3 px-3 text-right font-medium font-mono tabular-nums">Retries &amp; Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-mono text-slate-300">
+            <tbody className="divide-y divide-neutral-800 text-neutral-300">
               {filteredErrors.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-500">
+                  <td colSpan={6} className="py-8 text-center text-neutral-500 font-mono">
                     No error events match the active filter criteria.
                   </td>
                 </tr>
               ) : (
                 filteredErrors.map((err: CrawlerErrorItem) => (
-                  <tr key={err.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-2.5 px-3 text-slate-400 whitespace-nowrap">
+                  <tr key={err.id} className="hover:bg-neutral-900/40 transition-colors">
+                    {/* Timestamp (Left) */}
+                    <td className="py-2.5 px-3 text-neutral-400 whitespace-nowrap">
                       {new Date(err.occurred_at).toLocaleTimeString([], {
                         hour: '2-digit',
                         minute: '2-digit',
                         second: '2-digit',
                       })}
                     </td>
-                    <td className="py-2.5 px-3 font-semibold text-white capitalize">
+
+                    {/* Crawler (Left) */}
+                    <td className="py-2.5 px-3 font-medium text-white capitalize">
                       {err.crawler_name}
                     </td>
+
+                    {/* Route (Left) */}
                     <td className="py-2.5 px-3">
-                      <span className="px-1.5 py-0.5 rounded bg-slate-800 text-sky-300 border border-slate-700">
+                      <span className="px-1.5 py-0.5 rounded border border-neutral-800 bg-neutral-900 text-neutral-300 text-[10px]">
                         {err.route_code || 'GLOBAL'}
                       </span>
                     </td>
+
+                    {/* Error Type & Code (Left) */}
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-rose-400 font-bold">{err.error_type}</span>
+                        <span className="text-neutral-200 font-medium">{err.error_type}</span>
                         {err.status_code && (
-                          <span className="text-[10px] px-1 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                          <span className="text-[10px] px-1 py-0.5 rounded border border-neutral-800 bg-neutral-900 text-neutral-400">
                             {err.status_code}
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 font-sans text-xs text-slate-400 max-w-md truncate" title={err.message}>
+
+                    {/* Message (Left) */}
+                    <td className="py-2.5 px-3 text-xs text-neutral-400 truncate" title={err.message}>
                       {err.message}
                     </td>
-                    <td className="py-2.5 px-3 text-right whitespace-nowrap">
+
+                    {/* Retries & Status (Right) */}
+                    <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono tabular-nums">
                       <div className="flex items-center justify-end gap-2">
-                        <span className="text-slate-500 text-[11px]">{err.retry_count}x</span>
+                        <span className="text-neutral-500 text-[11px]">{err.retry_count}x</span>
                         {err.recovered ? (
-                          <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-800/70 px-2 py-0.5 rounded-full">
-                            <Check className="w-2.5 h-2.5" /> Recovered
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-neutral-300 border border-neutral-800 bg-neutral-900 px-2 py-0.5 rounded">
+                            <Check className="w-2.5 h-2.5 text-neutral-400" /> Recovered
                           </span>
                         ) : (
-                          <span className="text-[10px] font-bold text-amber-400 bg-amber-950/70 border border-amber-800/70 px-2 py-0.5 rounded-full">
+                          <span className="text-[10px] font-medium text-amber-400 border border-amber-500/30 bg-amber-950/20 px-2 py-0.5 rounded">
                             Retrying
                           </span>
                         )}
