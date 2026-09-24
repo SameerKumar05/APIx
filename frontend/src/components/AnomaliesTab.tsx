@@ -390,20 +390,20 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
               {dgcaValidation.violations.map((v) => {
                 const isBreach = v.compliance_status === 'BREACH';
                 const isWarning = v.compliance_status === 'WARNING';
-                const utilization = (v.observed_max_fare_inr / v.statutory_band_cap_inr) * 100;
+                const utilization = (((v.observed_max_fare_inr ?? 0) / (v.statutory_band_cap_inr ?? 1))) * 100;
 
                 return (
                   <tr key={v.route_code} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 px-3 font-sans font-bold text-white">{v.route_code}</td>
                     <td className="py-3 px-3 text-slate-300">
-                      ₹{v.statutory_band_cap_inr.toLocaleString('en-IN')}
+                      ₹{(v.statutory_band_cap_inr ?? v.band_cap ?? v.cap ?? 0).toLocaleString('en-IN')}
                     </td>
                     <td
                       className={`py-3 px-3 font-bold ${
                         isBreach ? 'text-rose-400' : isWarning ? 'text-amber-400' : 'text-slate-200'
                       }`}
                     >
-                      ₹{v.observed_max_fare_inr.toLocaleString('en-IN')}
+                      ₹{(v.observed_max_fare_inr ?? v.observed_fare ?? v.max_fare ?? 0).toLocaleString('en-IN')}
                     </td>
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2">
@@ -465,8 +465,8 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
             const zScore = alert.z_score ?? Number((alert.deviation_percent / 25).toFixed(2));
             const isCriticalZ = zScore >= 3.0 || alert.severity === 'CRITICAL';
             const isWarningZ = (zScore >= 2.0 && zScore < 3.0) || alert.severity === 'HIGH';
-            const baseline = alert.baseline_fare_inr || alert.expected_fare_inr;
-            const variance = alert.observed_fare_inr - baseline;
+            const baseline = alert.baseline_fare_inr ?? alert.expected_fare_inr ?? 0;
+            const variance = (alert.observed_fare_inr ?? 0) - baseline;
 
             return (
               <div
@@ -541,21 +541,21 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
                         <div>
                           <span className="text-[10px] text-slate-500 block">Baseline Expected</span>
                           <span className="font-bold text-slate-300 text-sm">
-                            ₹{baseline.toLocaleString('en-IN')}
+                            ₹{(baseline ?? 0).toLocaleString('en-IN')}
                           </span>
                         </div>
 
                         <div>
                           <span className="text-[10px] text-slate-500 block">Observed Surge</span>
                           <span className="font-bold text-rose-400 text-sm">
-                            ₹{alert.observed_fare_inr.toLocaleString('en-IN')}
+                            ₹{(alert.observed_fare_inr ?? alert.fare_inr ?? alert.observed_fare ?? alert.fare ?? 0).toLocaleString('en-IN')}
                           </span>
                         </div>
 
                         <div>
                           <span className="text-[10px] text-slate-500 block">Spread Above Base</span>
                           <span className="font-bold text-rose-400 text-sm">
-                            {variance >= 0 ? `+₹${variance.toLocaleString('en-IN')}` : `-₹${Math.abs(variance).toLocaleString('en-IN')}`}
+                            {variance >= 0 ? `+₹${(variance ?? 0).toLocaleString('en-IN')}` : `-₹${Math.abs(variance ?? 0).toLocaleString('en-IN')}`}
                           </span>
                         </div>
 
@@ -573,13 +573,13 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
                         <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden flex">
                           <div
                             className="bg-sky-500 h-2"
-                            style={{ width: `${Math.min(100, (baseline / alert.observed_fare_inr) * 100)}%` }}
-                            title={`Baseline Fare: ₹${baseline.toLocaleString()}`}
+                            style={{ width: `${Math.min(100, (baseline / (alert.observed_fare_inr ?? alert.fare_inr ?? 1)) * 100)}%` }}
+                            title={`Baseline Fare: ₹${(baseline ?? 0).toLocaleString()}`}
                           ></div>
                           <div
                             className="bg-rose-500 h-2"
-                            style={{ width: `${Math.max(0, 100 - (baseline / alert.observed_fare_inr) * 100)}%` }}
-                            title={`Surge Markup: +₹${variance.toLocaleString()}`}
+                            style={{ width: `${Math.max(0, 100 - (baseline / (alert.observed_fare_inr ?? alert.fare_inr ?? 1)) * 100)}%` }}
+                            title={`Surge Markup: +₹${(variance ?? 0).toLocaleString()}`}
                           ></div>
                         </div>
                         <div className="flex justify-between text-[10px] text-slate-500 mt-1">

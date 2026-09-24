@@ -530,7 +530,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                       </span>
                     </td>
                     <td className="py-2.5 text-slate-300">{(route.weight * 100).toFixed(1)}%</td>
-                    <td className="py-2.5 text-white">₹{route.median_fare_inr.toLocaleString('en-IN')}</td>
+                    <td className="py-2.5 text-white">₹{(route.median_fare_inr ?? route.median_fare ?? route.avg_fare_inr ?? route.avg_fare ?? 0).toLocaleString('en-IN')}</td>
                     <td className="py-2.5 text-sky-400">{route.current_index.toFixed(1)}</td>
                     <td className="py-2.5 text-right">
                       <span className={route.change_24h >= 0 ? 'text-rose-400' : 'text-emerald-400'}>
@@ -592,7 +592,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   </div>
                   <p className="text-[11px] text-slate-300 mt-1 line-clamp-1">{a.description}</p>
                   <div className="text-[10px] text-slate-500 font-mono mt-1 flex items-center justify-between">
-                    <span>Observed: ₹{a.observed_fare_inr.toLocaleString('en-IN')} (Z={a.z_score ?? '3.2'})</span>
+                    <span>Observed: ₹{(a.observed_fare_inr ?? a.fare_inr ?? a.observed_fare ?? a.fare ?? 0).toLocaleString('en-IN')} (Z={a.z_score ?? '3.2'})</span>
                     <span>Window: {a.booking_window}</span>
                   </div>
                 </div>

@@ -432,10 +432,10 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                     {/* Median Fare */}
                     <td className="py-3.5 px-4">
                       <div className="font-bold text-white text-sm">
-                        ₹{route.median_fare_inr.toLocaleString('en-IN')}
+                        ₹{(route.median_fare_inr ?? route.median_fare ?? route.avg_fare_inr ?? route.avg_fare ?? 0).toLocaleString('en-IN')}
                       </div>
                       <div className="text-[10px] text-slate-500">
-                        ₹{route.min_fare_inr?.toLocaleString('en-IN')} – ₹{route.max_fare_inr?.toLocaleString('en-IN')}
+                        ₹{(route.min_fare_inr ?? route.min_fare ?? 0).toLocaleString('en-IN')} – ₹{(route.max_fare_inr ?? route.max_fare ?? 0).toLocaleString('en-IN')}
                       </div>
                     </td>
 
@@ -481,7 +481,7 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                     <td className="py-3.5 px-4 text-center">
                       <div className="flex justify-center">
                         <Sparkline
-                          data={route.sparkline_7d || [route.median_fare_inr * 0.96, route.median_fare_inr]}
+                          data={route.sparkline_7d || [((route.median_fare_inr ?? 5000) * 0.96), (route.median_fare_inr ?? 5000)]}
                           isSurge={isSurge}
                         />
                       </div>
@@ -533,7 +533,7 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Detailed corridor telemetry • Sample size: {selectedRoute.sample_size.toLocaleString()} observations
+                Detailed corridor telemetry • Sample size: {(selectedRoute.sample_size ?? selectedRoute.active_flights_tracked ?? 0).toLocaleString()} observations
               </p>
             </div>
 
@@ -557,10 +557,10 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
             <div className="bg-slate-950/60 p-3.5 rounded-lg border border-slate-800">
               <span className="text-[11px] text-slate-400">Representative Fare Band</span>
               <div className="text-lg font-bold text-white font-mono mt-1">
-                ₹{selectedRoute.median_fare_inr.toLocaleString('en-IN')}
+                ₹{(selectedRoute.median_fare_inr ?? selectedRoute.median_fare ?? selectedRoute.avg_fare_inr ?? selectedRoute.avg_fare ?? 0).toLocaleString('en-IN')}
               </div>
               <span className="text-[10px] text-slate-500">
-                Floor ₹{selectedRoute.min_fare_inr?.toLocaleString('en-IN')} • Ceiling ₹{selectedRoute.max_fare_inr?.toLocaleString('en-IN')}
+                Floor ₹{(selectedRoute.min_fare_inr ?? selectedRoute.min_fare ?? 0).toLocaleString('en-IN')} • Ceiling ₹{(selectedRoute.max_fare_inr ?? selectedRoute.max_fare ?? 0).toLocaleString('en-IN')}
               </span>
             </div>
 
@@ -591,7 +591,7 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
               {selectedRouteAlerts.map((alt) => (
                 <div key={alt.id} className="text-xs text-slate-300 flex items-center justify-between font-mono bg-slate-950/80 p-2 rounded">
                   <span>
-                    {alt.airline_code} {alt.flight_number} • {alt.anomaly_type} • Observed ₹{alt.observed_fare_inr.toLocaleString('en-IN')} (Z={alt.z_score ?? 3.2})
+                    {alt.airline_code} {alt.flight_number} • {alt.anomaly_type} • Observed ₹{(alt.observed_fare_inr ?? alt.fare_inr ?? alt.observed_fare ?? alt.fare ?? 0).toLocaleString('en-IN')} (Z={alt.z_score ?? 3.2})
                   </span>
                   <span className="text-rose-400 font-bold">+{alt.deviation_percent}%</span>
                 </div>

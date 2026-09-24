@@ -97,9 +97,9 @@ export const DgcaSurveillanceTab: React.FC<DgcaSurveillanceTabProps> = ({ survei
       v.flight_number,
       v.route_code,
       v.window || 'N/A',
-      v.observed_fare_inr,
-      v.statutory_band_cap_inr,
-      v.observed_fare_inr - v.statutory_band_cap_inr,
+      v.observed_fare_inr ?? 0,
+      v.statutory_band_cap_inr ?? 0,
+      (v.observed_fare_inr ?? 0) - (v.statutory_band_cap_inr ?? 0),
       v.surge_multiplier.toFixed(2),
       v.severity,
       v.compliance_status,
@@ -192,7 +192,7 @@ export const DgcaSurveillanceTab: React.FC<DgcaSurveillanceTabProps> = ({ survei
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl font-bold font-mono text-white">
-              {totalEvaluated.toLocaleString('en-IN')}
+              {(totalEvaluated ?? 0).toLocaleString('en-IN')}
             </span>
             <span className="text-xs font-mono text-slate-400">flights</span>
           </div>
@@ -474,8 +474,9 @@ export const DgcaSurveillanceTab: React.FC<DgcaSurveillanceTabProps> = ({ survei
               ) : (
                 filteredViolations.map((v) => {
                   const isNoticeIssued = noticeMap[v.id];
-                  const capDiff = v.observed_fare_inr - v.statutory_band_cap_inr;
-
+                  const obsFare = v.observed_fare_inr ?? v.fare_inr ?? v.observed_fare ?? v.fare ?? 0;
+                  const bandCap = v.statutory_band_cap_inr ?? v.band_cap ?? v.cap ?? 0;
+                  const capDiff = obsFare - bandCap;
                   return (
                     <tr key={v.id} className="hover:bg-slate-800/40 transition-colors">
                       {/* Violation ID & Flight */}
@@ -499,7 +500,7 @@ export const DgcaSurveillanceTab: React.FC<DgcaSurveillanceTabProps> = ({ survei
                       {/* Observed Fare */}
                       <td className="py-3 px-3">
                         <div className="font-bold text-rose-400">
-                          ₹{v.observed_fare_inr.toLocaleString('en-IN')}
+                          ₹{obsFare.toLocaleString('en-IN')}
                         </div>
                         <div className="text-[10px] text-rose-300">
                           +₹{capDiff.toLocaleString('en-IN')} over cap
@@ -509,7 +510,7 @@ export const DgcaSurveillanceTab: React.FC<DgcaSurveillanceTabProps> = ({ survei
                       {/* Statutory Cap */}
                       <td className="py-3 px-3">
                         <div className="text-slate-300">
-                          ₹{v.statutory_band_cap_inr.toLocaleString('en-IN')}
+                          ₹{bandCap.toLocaleString('en-IN')}
                         </div>
                         <div className="text-[10px] text-slate-500">Upper Band Cap</div>
                       </td>

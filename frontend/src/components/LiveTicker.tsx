@@ -297,7 +297,7 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
                 <div className="mt-2.5 flex items-baseline justify-between">
                   <div className="flex items-baseline gap-1">
                     <span className="text-lg font-bold font-mono text-white tracking-tight">
-                      ₹{fare.fare_inr.toLocaleString()}
+                      ₹{(fare.fare_inr ?? (fare as unknown as { fare?: number }).fare ?? 0).toLocaleString()}
                     </span>
                     <span className="text-[10px] text-slate-500 font-sans uppercase">INR</span>
                   </div>
@@ -378,7 +378,7 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
                     {fare.origin} → {fare.destination}
                   </td>
                   <td className="py-1.5 px-3 text-white font-bold">
-                    ₹{fare.fare_inr.toLocaleString()}
+                    ₹{(fare.fare_inr ?? (fare as unknown as { fare?: number }).fare ?? 0).toLocaleString()}
                   </td>
                   <td className="py-1.5 px-3 text-slate-400 text-[11px] capitalize">
                     {fare.source}

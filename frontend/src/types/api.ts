@@ -65,9 +65,15 @@ export interface RouteOverviewItem {
   current_index: number; // e.g. 124.5
   change_24h: number; // e.g. -0.8
   change_7d: number; // e.g. +3.2
-  median_fare_inr: number; // representative fare in INR
+  median_fare_inr?: number;
+  median_fare?: number;
+  avg_fare_inr?: number;
+  avg_fare?: number;
   min_fare_inr?: number;
+  min_fare?: number;
   max_fare_inr?: number;
+  max_fare?: number;
+  active_flights_tracked?: number;
   weight: number; // DGCA traffic passenger share (0-1), e.g. 0.142
   sample_size: number;
   status: string; // "ACTIVE" | "MONITORED"
@@ -138,9 +144,14 @@ export interface AnomalyAlertItem {
   detected_at: string;
   anomaly_type: 'SURGE_SPIKE' | 'PRICE_GOUGING' | 'FLASH_DROP' | 'DISPERSION_SPIKE' | string;
   severity: SeverityLevel;
-  observed_fare_inr: number;
-  expected_fare_inr: number;
-  baseline_fare_inr?: number; // baseline comparison fare
+  observed_fare_inr?: number;
+  fare_inr?: number;
+  observed_fare?: number;
+  fare?: number;
+  expected_fare_inr?: number;
+  expected_fare?: number;
+  baseline_fare_inr?: number;
+  baseline_fare?: number;
   deviation_percent: number; // e.g. +78.4%
   z_score?: number; // statistical surge Z-score (e.g. 3.42, 2.15)
   status: 'ACTIVE' | 'ACKNOWLEDGED' | 'INVESTIGATING' | 'RESOLVED';
@@ -156,8 +167,12 @@ export interface AnomalyAlertsResponse {
 
 export interface DGCAValidationViolation {
   route_code: string;
-  statutory_band_cap_inr: number;
-  observed_max_fare_inr: number;
+  statutory_band_cap_inr?: number;
+  band_cap?: number;
+  cap?: number;
+  observed_max_fare_inr?: number;
+  observed_fare?: number;
+  max_fare?: number;
   violations_count: number;
   compliance_status: ComplianceStatus;
 }
@@ -274,6 +289,7 @@ export interface LiveFareUpdate {
   origin: string;
   destination: string;
   fare_inr: number;
+  fare?: number;
   source: string;
   cabin_class: string;
   departure_datetime: string;
@@ -430,8 +446,13 @@ export interface DgcaViolationRecord {
   flight_number: string;
   flight_date?: string;
   window?: string;
-  observed_fare_inr: number;
-  statutory_band_cap_inr: number;
+  observed_fare_inr?: number;
+  fare_inr?: number;
+  observed_fare?: number;
+  fare?: number;
+  statutory_band_cap_inr?: number;
+  band_cap?: number;
+  cap?: number;
   surge_multiplier: number;
   severity: DgcaViolationSeverity;
   compliance_status: 'COMPLIANT' | 'WARNING' | 'BREACH' | 'PENDING';
