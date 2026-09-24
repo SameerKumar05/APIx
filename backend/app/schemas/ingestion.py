@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Union
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -15,7 +15,7 @@ class RawFareRecord(BaseModel):
     cabin_class: str = Field("economy", description="Cabin class (economy, premium_economy, business)")
     stops: int = Field(0, ge=0, description="Number of layovers/stops (0 for direct flights)")
     source: str = Field("ota_scraper", description="Data source provider (e.g., makemytrip, easemytrip, airline_direct)")
-    booking_window: Optional[int] = Field(None, ge=0, description="Lead time in days before departure")
+    booking_window: Optional[Union[int, str]] = Field(None, description="Lead time in days or window code (e.g. 7 or 'T+7')")
 
     @field_validator("origin", "destination")
     @classmethod
