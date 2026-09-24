@@ -300,3 +300,24 @@ class SyntheticFlightGenerator(BaseScraper):
     ) -> List[ScrapeResult]:
         """Implements BaseScraper.scrape_all for synthetic crawler."""
         return self.generate_all_slots(routes=routes, windows=windows)
+
+    def generate_40_route_window_records(
+        self,
+        routes: Optional[List[Route]] = None,
+        windows: Optional[List[BookingWindow]] = None,
+        capture_time: Optional[datetime] = None,
+    ) -> List[RawFareRecord]:
+        """Generates exactly 40 synthetic route-window fare records (1 per route-window slot)."""
+        target_routes = routes or DEFAULT_ROUTES
+        target_windows = windows or BOOKING_WINDOWS
+        records: List[RawFareRecord] = []
+        for route in target_routes:
+            for window in target_windows:
+                slot_result = self.generate_slot(route, window, capture_time=capture_time)
+                if slot_result.records:
+                    records.append(slot_result.records[0])
+        return records
+
+
+# Canonical alias for crawler nomenclature
+SyntheticCrawler = SyntheticFlightGenerator

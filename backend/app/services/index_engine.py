@@ -117,7 +117,6 @@ def _extract_field(item: Union[FlightQuote, Mapping[str, Any], Any], field_name:
         return getattr(item, "stops") == 0
     return default
 
-
 def _normalize_code(code: Any) -> str:
     """Normalize airport or airline code to uppercase stripped string."""
     return str(code).strip().upper() if code is not None else ""
