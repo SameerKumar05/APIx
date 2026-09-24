@@ -131,7 +131,8 @@ class IngestionConfig:
     """Runtime configuration for scrapers and ingestion clients."""
 
     api_base_url: str = field(
-        default_factory=lambda: os.getenv("API_BASE_URL", "http://localhost:8000")
+        default_factory=lambda: os.getenv("INGESTION_ENDPOINT_URL")
+        or os.getenv("API_BASE_URL", "http://localhost:8000")
     )
     ingestion_key: str = field(
         default_factory=lambda: os.getenv("INGESTION_API_KEY", "apix-ingestion-secret-key-2026")
@@ -156,5 +157,17 @@ class IngestionConfig:
     )
     playwright_headless: bool = field(
         default_factory=lambda: os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() == "true"
+    )
+    amadeus_client_id: str = field(
+        default_factory=lambda: os.getenv("AMADEUS_CLIENT_ID", "")
+    )
+    amadeus_client_secret: str = field(
+        default_factory=lambda: os.getenv("AMADEUS_CLIENT_SECRET", "")
+    )
+    amadeus_hostname: str = field(
+        default_factory=lambda: os.getenv("AMADEUS_HOSTNAME", "test.api.amadeus.com")
+    )
+    ingestion_mode: str = field(
+        default_factory=lambda: os.getenv("INGESTION_MODE", "synthetic")
     )
     user_agents: List[str] = field(default_factory=lambda: list(DEFAULT_USER_AGENTS))
