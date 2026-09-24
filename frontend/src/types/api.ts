@@ -21,6 +21,11 @@ export interface NationalIndexPoint {
   moving_avg_7d?: number;
   confidence_interval_lower?: number;
   confidence_interval_upper?: number;
+  mospi_cpi?: number; // MoSPI Consumer Price Index (Transport) benchmark
+  t1_index?: number; // T+1 Booking window sub-index
+  t7_index?: number; // T+7 Booking window sub-index
+  t15_index?: number; // T+15 Booking window sub-index
+  t30_index?: number; // T+30 Booking window sub-index
 }
 
 export interface NationalIndexLatestResponse {
@@ -34,6 +39,12 @@ export interface NationalIndexLatestResponse {
   confidence_interval_upper?: number;
   status: string; // "OFFICIAL" | "PRELIMINARY"
   weighted_median_fare_inr?: number;
+  mospi_cpi?: number;
+  mospi_cpi_divergence?: number;
+  t1_index?: number;
+  t7_index?: number;
+  t15_index?: number;
+  t30_index?: number;
 }
 
 export interface NationalIndexHistoryResponse {
@@ -62,6 +73,9 @@ export interface RouteOverviewItem {
   status: string; // "ACTIVE" | "MONITORED"
   active_airlines_count?: number;
   distance_km?: number;
+  sparkline_7d?: number[]; // 7-day median fare trend
+  anomaly_count?: number;
+  max_severity?: SeverityLevel;
 }
 
 export interface RoutesOverviewResponse {
@@ -126,7 +140,9 @@ export interface AnomalyAlertItem {
   severity: SeverityLevel;
   observed_fare_inr: number;
   expected_fare_inr: number;
+  baseline_fare_inr?: number; // baseline comparison fare
   deviation_percent: number; // e.g. +78.4%
+  z_score?: number; // statistical surge Z-score (e.g. 3.42, 2.15)
   status: 'ACTIVE' | 'ACKNOWLEDGED' | 'INVESTIGATING' | 'RESOLVED';
   description?: string;
   recommended_action?: string;
