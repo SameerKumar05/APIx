@@ -18,10 +18,11 @@ from __future__ import annotations
 import logging
 import math
 from collections import defaultdict
-from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from collections.abc import Sequence
+from datetime import UTC, date, datetime, time, timedelta
+from typing import Any
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from backend.app.db.seed import INITIAL_ROUTES
@@ -34,6 +35,17 @@ from backend.app.services.anomaly_detector import (
     calculate_z_score,
     compute_baseline_stats,
 )
+from backend.app.services.arbitrage_detector import (
+    ArbitrageDetector,
+    ArbitrageOpportunity,
+)
+from backend.app.services.econometric_engine import (
+    calculate_fisher_index,
+    calculate_lead_time_elasticity,
+    calculate_mospi_cpi_divergence,
+    calculate_paasche_index,
+    calculate_substitution_bias,
+)
 from backend.app.services.index_engine import (
     DEFAULT_AIRLINE_MARKET_SHARES,
     _compute_percentile_linear,
@@ -44,13 +56,10 @@ from backend.app.services.index_engine import (
     deduplicate_quotes,
     filter_quotes_tukey,
 )
-from backend.app.services.arbitrage_detector import (
-    ArbitrageDetector,
-    ArbitrageOpportunity,
-    get_current_arbitrage_opportunities,
+from backend.app.services.ml_anomaly_detector import (
+    classify_surge_multifeature,
 )
 from backend.app.services.streaming_dedup import (
-    DedupResult,
     StreamingDedupEngine,
 )
 
@@ -62,7 +71,7 @@ logger = logging.getLogger("apix.services.index_pipeline")
 
 # Advance booking purchase window weights (DGCA lead-time distribution)
 # Formula: P_{r,t} = 0.20*T1 + 0.35*T7 + 0.30*T15 + 0.15*T30
-DEFAULT_WINDOW_WEIGHTS: Dict[str, float] = {
+DEFAULT_WINDOW_WEIGHTS: dict[str, float] = {
     "T1": 0.20,
     "T+1": 0.20,
     "T7": 0.35,
@@ -74,10 +83,10 @@ DEFAULT_WINDOW_WEIGHTS: Dict[str, float] = {
 }
 
 # Canonical 4 advance booking purchase windows
-CANONICAL_WINDOWS: List[str] = ["T+1", "T+7", "T+15", "T+30"]
+CANONICAL_WINDOWS: list[str] = ["T+1", "T+7", "T+15", "T+30"]
 
 # Mapping to canonical window tags
-WINDOW_NORM_MAP: Dict[str, str] = {
+WINDOW_NORM_MAP: dict[str, str] = {
     "T1": "T+1",
     "T+1": "T+1",
     "1": "T+1",
@@ -93,7 +102,7 @@ WINDOW_NORM_MAP: Dict[str, str] = {
 }
 
 # Top 10 Indian domestic directional flight corridors (DGCA traffic weights sum to 1.000)
-DEFAULT_ROUTE_WEIGHTS: Dict[str, float] = {
+DEFAULT_ROUTE_WEIGHTS: dict[str, float] = {
     "DEL-BOM": 0.175,
     "BOM-DEL": 0.175,
     "BLR-DEL": 0.125,
@@ -107,7 +116,7 @@ DEFAULT_ROUTE_WEIGHTS: Dict[str, float] = {
 }
 
 # Benchmark Base Period Fares (Base 100.0 Reference)
-DEFAULT_BASE_FARES: Dict[str, float] = {
+DEFAULT_BASE_FARES: dict[str, float] = {
     "DEL-BOM": 5500.0,
     "BOM-DEL": 5450.0,
     "BLR-DEL": 6200.0,
@@ -133,7 +142,7 @@ def run_streaming_dedup_and_arbitrage(
     quotes: Sequence[Any],
     window_seconds: float = 86400.0,
     min_spread_pct: float = 0.0,
-) -> Tuple[StreamingDedupEngine, List[ArbitrageOpportunity]]:
+) -> tuple[StreamingDedupEngine, list[ArbitrageOpportunity]]:
     """Runs quotes through StreamingDedupEngine and ArbitrageDetector.
 
     Args:
@@ -153,9 +162,9 @@ def run_streaming_dedup_and_arbitrage(
     return engine, opportunities
 
 
-def get_active_routes(db: Session) -> Dict[str, Route]:
+def get_active_routes(db: Session) -> dict[str, Route]:
     """Load active domestic routes from DB, fallback to INITIAL_ROUTES mapping."""
-    routes_by_code: Dict[str, Route] = {}
+    routes_by_code: dict[str, Route] = {}
     try:
         stmt = select(Route).where(Route.is_active == True)  # noqa: E712
         db_routes = db.execute(stmt).scalars().all()
@@ -167,9 +176,9 @@ def get_active_routes(db: Session) -> Dict[str, Route]:
     return routes_by_code
 
 
-def get_route_weights(db: Session) -> Dict[str, float]:
+def get_route_weights(db: Session) -> dict[str, float]:
     """Retrieve normalized route weights from DB or fallback constants."""
-    weights: Dict[str, float] = {}
+    weights: dict[str, float] = {}
     routes = get_active_routes(db)
     if routes:
         for code, r in routes.items():
@@ -187,13 +196,13 @@ def get_route_weights(db: Session) -> Dict[str, float]:
 def load_raw_fares_for_date(
     db: Session,
     calculation_date: date,
-) -> List[RawFare]:
+) -> list[RawFare]:
     """Loads all raw flight fares for a specific observation/calculation date.
 
     Matches either flight_date == calculation_date OR scraped_at on calculation_date.
     """
-    start_of_day = datetime.combine(calculation_date, time.min).replace(tzinfo=timezone.utc)
-    end_of_day = datetime.combine(calculation_date, time.max).replace(tzinfo=timezone.utc)
+    start_of_day = datetime.combine(calculation_date, time.min).replace(tzinfo=UTC)
+    end_of_day = datetime.combine(calculation_date, time.max).replace(tzinfo=UTC)
 
     stmt = select(RawFare).where(
         or_(
@@ -216,7 +225,7 @@ def get_rolling_30day_baseline(
     booking_window: str,
     calculation_date: date,
     lookback_days: int = 30,
-) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+) -> tuple[float | None, float | None, float | None]:
     """Retrieves rolling 30-day baseline statistics from historical RouteDailyIndex records.
 
     Returns:
@@ -256,12 +265,12 @@ def evaluate_anomaly_condition(
     destination: str,
     booking_window: str,
     current_fare: float,
-    baseline_mean: Optional[float],
-    baseline_std: Optional[float],
-    previous_fare: Optional[float],
+    baseline_mean: float | None,
+    baseline_std: float | None,
+    previous_fare: float | None,
     calculation_date: date,
-    route_id: Optional[int] = None,
-) -> Optional[AnomalyAlert]:
+    route_id: int | None = None,
+) -> AnomalyAlert | None:
     """Evaluates rolling 30-day Z-scores and DoD surges for anomaly alerts.
 
     Thresholds:
@@ -291,7 +300,7 @@ def evaluate_anomaly_condition(
                         f"({booking_window}) exceeds 40.0% regulatory threshold."
                     ),
                     status="OPEN",
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(UTC),
                 )
         return None
 
@@ -304,28 +313,48 @@ def evaluate_anomaly_condition(
     if previous_fare is not None and previous_fare > 0:
         dod_surge = calculate_dod_surge(current_fare, previous_fare)
 
+    # Map booking window to advance purchase lead days
+    win_str = str(booking_window).upper()
+    if "1" in win_str and "15" not in win_str:
+        lead_days = 1
+    elif "7" in win_str:
+        lead_days = 7
+    elif "15" in win_str:
+        lead_days = 15
+    elif "30" in win_str:
+        lead_days = 30
+    else:
+        lead_days = 7
+
+    # Multi-feature ML anomaly evaluation
+    ml_res = classify_surge_multifeature(
+        fare=float(current_fare),
+        baseline_mean=float(baseline_mean),
+        baseline_std=float(std_to_use),
+        lead_time_days=lead_days,
+        previous_fare=previous_fare,
+        route_median=float(baseline_mean),
+        route_code=f"{origin}-{destination}",
+        booking_window=booking_window,
+    )
+
     is_z_anomaly = z_score >= 2.0
     is_dod_surge = dod_surge is not None and dod_surge >= 0.40
 
-    if not is_z_anomaly and not is_dod_surge:
+    if not is_z_anomaly and not is_dod_surge and not ml_res.is_anomaly:
         return None
 
     # Determine severity and alert type
-    if z_score >= 3.0 or is_dod_surge:
+    if ml_res.is_dgca_violation or z_score >= 3.0 or is_dod_surge:
         severity = "CRITICAL"
-        alert_type = "SURGE_PRICING" if is_dod_surge else "SPIKE"
+        alert_type = (
+            "DGCA_STATUTORY_VIOLATION"
+            if ml_res.is_dgca_violation
+            else ("SURGE_PRICING" if is_dod_surge else "SPIKE")
+        )
     else:
         severity = "HIGH"
         alert_type = "SPIKE"
-
-    reasons: List[str] = []
-    if z_score >= 3.0:
-        reasons.append(f"Z-score {z_score:.2f} >= 3.0 (3-sigma critical surge)")
-    elif z_score >= 2.0:
-        reasons.append(f"Z-score {z_score:.2f} >= 2.0 (statistically elevated fare)")
-
-    if is_dod_surge and dod_surge is not None:
-        reasons.append(f"DoD surge {dod_surge * 100:.1f}% >= 40.0%")
 
     pct_change = (
         round(dod_surge * 100.0, 2)
@@ -333,8 +362,7 @@ def evaluate_anomaly_condition(
         else round(((current_fare - baseline_mean) / baseline_mean) * 100.0, 2)
     )
 
-    description = f"Anomaly on {origin}-{destination} ({booking_window}): " + "; ".join(reasons)
-
+    description = ml_res.explanation
     return AnomalyAlert(
         route_id=route_id,
         origin=origin,
@@ -350,7 +378,7 @@ def evaluate_anomaly_condition(
         pct_change=pct_change,
         description=description,
         status="OPEN",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
 
@@ -360,9 +388,9 @@ def evaluate_anomaly_condition(
 
 
 def run_daily_index_pipeline(
-    db: Optional[Session] = None,
-    calculation_date: Union[date, str, None] = None,
-) -> Dict[str, Any]:
+    db: Session | None = None,
+    calculation_date: date | str | None = None,
+) -> dict[str, Any]:
     """Executes the daily airfare index calculation pipeline and DB persistence.
 
     Args:
@@ -383,12 +411,12 @@ def run_daily_index_pipeline(
 
 def _execute_daily_pipeline(
     db: Session,
-    calculation_date: Union[date, str, None] = None,
-) -> Dict[str, Any]:
+    calculation_date: date | str | None = None,
+) -> dict[str, Any]:
     """Internal implementation of daily index pipeline with guaranteed session scope."""
     # 1. Resolve calculation_date
     if calculation_date is None:
-        calc_date = datetime.now(timezone.utc).date()
+        calc_date = datetime.now(UTC).date()
     elif isinstance(calculation_date, str):
         calc_date = date.fromisoformat(calculation_date.strip())
     elif isinstance(calculation_date, datetime):
@@ -427,7 +455,7 @@ def _execute_daily_pipeline(
 
     # Group raw fares by corridor (origin, destination) and canonical booking window
     # key: ((origin, destination), canonical_window) -> list of quotes
-    grouped_fares: Dict[Tuple[Tuple[str, str], str], List[RawFare]] = defaultdict(list)
+    grouped_fares: dict[tuple[tuple[str, str], str], list[RawFare]] = defaultdict(list)
     for rf in raw_fares:
         orig = str(rf.origin).strip().upper()
         dest = str(rf.destination).strip().upper()
@@ -435,7 +463,7 @@ def _execute_daily_pipeline(
         grouped_fares[((orig, dest), win)].append(rf)
 
     # Track all distinct monitored corridors
-    monitored_corridors: List[Tuple[str, str]] = []
+    monitored_corridors: list[tuple[str, str]] = []
     if routes_map:
         for r in routes_map.values():
             corridor = (r.origin, r.destination)
@@ -453,11 +481,11 @@ def _execute_daily_pipeline(
             monitored_corridors.append((orig, dest))
 
     # Containers for generated domain entities
-    route_indices_to_persist: List[RouteDailyIndex] = []
-    anomalies_to_persist: List[AnomalyAlert] = []
+    route_indices_to_persist: list[RouteDailyIndex] = []
+    anomalies_to_persist: list[AnomalyAlert] = []
 
     # Mapping of route_code -> composite fare for National Laspeyres calculation
-    route_composite_fares: Dict[str, float] = {}
+    route_composite_fares: dict[str, float] = {}
     total_samples_all_routes = 0
 
     # 4. Steps 2, 3, 4: Deduplicate, Tukey trim, Weighted Median, Composite Fare
@@ -468,7 +496,7 @@ def _execute_daily_pipeline(
         base_fare = base_fares.get(route_code, 5000.0)
 
         # Store representative fares for all available booking windows on this route
-        window_rep_fares: Dict[str, float] = {}
+        window_rep_fares: dict[str, float] = {}
         route_sample_size_total = 0
 
         for win in CANONICAL_WINDOWS:
@@ -548,7 +576,7 @@ def _execute_daily_pipeline(
                 std_dev=round(std_dev, 2),
                 index_value=window_index_value,
                 base_period="2026-01-01",
-                calculation_timestamp=datetime.now(timezone.utc),
+                calculation_timestamp=datetime.now(UTC),
             )
             route_indices_to_persist.append(r_window_index)
 
@@ -604,7 +632,7 @@ def _execute_daily_pipeline(
                 std_dev=0.0,
                 index_value=route_index_value,
                 base_period="2026-01-01",
-                calculation_timestamp=datetime.now(timezone.utc),
+                calculation_timestamp=datetime.now(UTC),
             )
             route_indices_to_persist.append(r_composite_index)
 
@@ -654,33 +682,133 @@ def _execute_daily_pipeline(
             ((national_index_val - mom_nat.index_value) / mom_nat.index_value) * 100.0, 4
         )
 
-    national_index_record = NationalDailyIndex(
-        index_date=calc_date,
-        booking_window="COMPOSITE",
-        index_type="laspeyres",
-        index_value=round(national_index_val, 4),
-        weighted_median_fare=round(weighted_national_mean, 2),
-        weighted_mean_fare=round(weighted_national_mean, 2),
-        total_samples=total_samples_all_routes,
-        routes_covered=len(route_composite_fares),
-        inflation_dod_pct=inflation_dod_pct,
-        inflation_mom_pct=inflation_mom_pct,
-        base_period="2026-01-01",
-        calculation_timestamp=datetime.now(timezone.utc),
+    # 5b. Econometric Price Indices: Paasche, Fisher Ideal Index, Substitution Bias
+    if route_composite_fares:
+        paasche_index_val = calculate_paasche_index(
+            current_fares=route_composite_fares,
+            base_fares=base_fares,
+            current_weights=route_weights,
+            base_value=100.0,
+        )
+        fisher_index_val = calculate_fisher_index(
+            laspeyres_index=national_index_val,
+            paasche_index=paasche_index_val,
+        )
+        substitution_bias = calculate_substitution_bias(
+            laspeyres_index=national_index_val,
+            fisher_index=fisher_index_val,
+            paasche_index=paasche_index_val,
+        )
+    else:
+        paasche_index_val = 100.0
+        fisher_index_val = 100.0
+        substitution_bias = calculate_substitution_bias(100.0, 100.0, 100.0)
+
+    # 5c. Lead-Time Price Elasticity Curve
+    window_avg_fares: dict[str, float] = {}
+    for win in CANONICAL_WINDOWS:
+        fares_for_win = [
+            ri.median_fare
+            for ri in route_indices_to_persist
+            if ri.booking_window == win and ri.median_fare > 0
+        ]
+        if fares_for_win:
+            window_avg_fares[win] = sum(fares_for_win) / len(fares_for_win)
+
+    if len(window_avg_fares) >= 2:
+        lead_time_elasticity = calculate_lead_time_elasticity(
+            window_fares=window_avg_fares,
+            window_pax_shares=DEFAULT_WINDOW_WEIGHTS,
+        )
+    else:
+        lead_time_elasticity = calculate_lead_time_elasticity(
+            window_fares={"T+1": 6500.0, "T+7": 5200.0, "T+15": 4500.0, "T+30": 3800.0},
+        )
+
+    # 5d. MoSPI CPI Transport Sub-Index Divergence Analytics
+    cpi_divergence = calculate_mospi_cpi_divergence(
+        apix_index_series=[{"date": calc_date.isoformat(), "index_value": national_index_val}],
     )
 
-    # 6. Step 7: Persist RouteDailyIndex, NationalDailyIndex, and AnomalyAlerts idempotently
+    # Construct NationalDailyIndex records for all 3 superlative index formulations
+    national_records_to_persist = [
+        NationalDailyIndex(
+            index_date=calc_date,
+            booking_window="COMPOSITE",
+            index_type="laspeyres",
+            index_value=round(national_index_val, 4),
+            weighted_median_fare=round(weighted_national_mean, 2),
+            weighted_mean_fare=round(weighted_national_mean, 2),
+            total_samples=total_samples_all_routes,
+            routes_covered=len(route_composite_fares),
+            inflation_dod_pct=inflation_dod_pct,
+            inflation_mom_pct=inflation_mom_pct,
+            base_period="2026-01-01",
+            calculation_timestamp=datetime.now(UTC),
+        ),
+        NationalDailyIndex(
+            index_date=calc_date,
+            booking_window="COMPOSITE",
+            index_type="paasche",
+            index_value=round(paasche_index_val, 4),
+            weighted_median_fare=round(weighted_national_mean, 2),
+            weighted_mean_fare=round(weighted_national_mean, 2),
+            total_samples=total_samples_all_routes,
+            routes_covered=len(route_composite_fares),
+            inflation_dod_pct=inflation_dod_pct,
+            inflation_mom_pct=inflation_mom_pct,
+            base_period="2026-01-01",
+            calculation_timestamp=datetime.now(UTC),
+        ),
+        NationalDailyIndex(
+            index_date=calc_date,
+            booking_window="COMPOSITE",
+            index_type="fisher",
+            index_value=round(fisher_index_val, 4),
+            weighted_median_fare=round(weighted_national_mean, 2),
+            weighted_mean_fare=round(weighted_national_mean, 2),
+            total_samples=total_samples_all_routes,
+            routes_covered=len(route_composite_fares),
+            inflation_dod_pct=inflation_dod_pct,
+            inflation_mom_pct=inflation_mom_pct,
+            base_period="2026-01-01",
+            calculation_timestamp=datetime.now(UTC),
+        ),
+    ]
+
+    # 6. Step 7: Persist RouteDailyIndex, NationalDailyIndex (all types), and AnomalyAlerts idempotently
     _persist_route_indices(db, route_indices_to_persist)
-    _persist_national_index(db, national_index_record)
+    for n_rec in national_records_to_persist:
+        _persist_national_index(db, n_rec)
     _persist_anomaly_alerts(db, anomalies_to_persist)
+
+    # Forward-compatible persistence into EconometricIndex if model is present
+    try:
+        from backend.app.models.econometrics import EconometricIndex
+        econ_rec = EconometricIndex(
+            date=calc_date,
+            route_code="NATIONAL",
+            laspeyres_index=round(national_index_val, 4),
+            paasche_index=round(paasche_index_val, 4),
+            fisher_ideal_index=round(fisher_index_val, 4),
+            substitution_bias=round(substitution_bias.bias_points, 4),
+            calculation_method="dgca_traffic_weighted",
+            created_at=datetime.now(UTC),
+        )
+        db.add(econ_rec)
+    except Exception:
+        pass
 
     db.commit()
 
     logger.info(
         "Successfully completed daily index pipeline for %s: "
-        "National Index=%.2f, Routes=%d, Route Indices Saved=%d, Anomalies=%d",
+        "Laspeyres=%.2f, Paasche=%.2f, Fisher=%.2f, SubBias=%.2f pts, Routes=%d, Route Indices Saved=%d, Anomalies=%d",
         calc_date,
         national_index_val,
+        paasche_index_val,
+        fisher_index_val,
+        substitution_bias.bias_points,
         len(route_composite_fares),
         len(route_indices_to_persist),
         len(anomalies_to_persist),
@@ -692,12 +820,24 @@ def _execute_daily_pipeline(
         "total_raw_fares": total_raw_fares,
         "routes_covered": len(route_composite_fares),
         "national_index_value": round(national_index_val, 4),
+        "laspeyres_index_value": round(national_index_val, 4),
+        "paasche_index_value": round(paasche_index_val, 4),
+        "fisher_index_value": round(fisher_index_val, 4),
+        "substitution_bias": substitution_bias,
+        "substitution_bias_points": substitution_bias.bias_points,
+        "substitution_bias_pct": substitution_bias.bias_pct,
+        "lead_time_elasticity": lead_time_elasticity.to_dict(),
+        "cpi_divergence": cpi_divergence.to_dict(),
         "weighted_national_mean_fare": round(weighted_national_mean, 2),
         "inflation_dod_pct": inflation_dod_pct,
         "inflation_mom_pct": inflation_mom_pct,
         "route_indices_count": len(route_indices_to_persist),
         "anomalies_count": len(anomalies_to_persist),
-        "national_index": national_index_record,
+        "national_index": national_records_to_persist[0],
+        "laspeyres_index": national_records_to_persist[0],
+        "paasche_index": national_records_to_persist[1],
+        "fisher_index": national_records_to_persist[2],
+        "national_records": national_records_to_persist,
         "route_indices": route_indices_to_persist,
         "anomalies": anomalies_to_persist,
         "streaming_dedup_stats": streaming_stats,
@@ -706,7 +846,7 @@ def _execute_daily_pipeline(
     }
 
 
-def _persist_route_indices(db: Session, records: List[RouteDailyIndex]) -> None:
+def _persist_route_indices(db: Session, records: list[RouteDailyIndex]) -> None:
     """Idempotently upserts RouteDailyIndex records."""
     for rec in records:
         stmt = select(RouteDailyIndex).where(
@@ -754,7 +894,7 @@ def _persist_national_index(db: Session, record: NationalDailyIndex) -> None:
         db.add(record)
 
 
-def _persist_anomaly_alerts(db: Session, alerts: List[AnomalyAlert]) -> None:
+def _persist_anomaly_alerts(db: Session, alerts: list[AnomalyAlert]) -> None:
     """Persists newly identified AnomalyAlert records avoiding duplicate open alerts."""
     for alert in alerts:
         stmt = select(AnomalyAlert).where(
