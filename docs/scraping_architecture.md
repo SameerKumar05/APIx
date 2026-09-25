@@ -80,16 +80,16 @@ Every ingestion sweep evaluates exactly **40 discrete slots** ($10 \text{ routes
 
 | Slot Range | Origin - Destination | Distance (km) | Typical Flight Time | DGCA Route Weight ($w_r$) | Evaluated Booking Horizons |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| Slots 01–04 | **DEL - BOM** | 1,148 km | 130 min | 0.15 | $T+1, T+7, T+15, T+30$ |
-| Slots 05–08 | **BOM - DEL** | 1,148 km | 130 min | 0.15 | $T+1, T+7, T+15, T+30$ |
-| Slots 09–12 | **DEL - BLR** | 1,740 km | 165 min | 0.12 | $T+1, T+7, T+15, T+30$ |
-| Slots 13–16 | **BLR - DEL** | 1,740 km | 165 min | 0.12 | $T+1, T+7, T+15, T+30$ |
-| Slots 17–20 | **BOM - BLR** | 842 km | 105 min | 0.10 | $T+1, T+7, T+15, T+30$ |
-| Slots 21–24 | **BLR - BOM** | 842 km | 105 min | 0.10 | $T+1, T+7, T+15, T+30$ |
-| Slots 25–28 | **DEL - HYD** | 1,253 km | 135 min | 0.07 | $T+1, T+7, T+15, T+30$ |
-| Slots 29–32 | **HYD - DEL** | 1,253 km | 135 min | 0.07 | $T+1, T+7, T+15, T+30$ |
-| Slots 33–36 | **DEL - CCU** | 1,305 km | 135 min | 0.06 | $T+1, T+7, T+15, T+30$ |
-| Slots 37–40 | **CCU - DEL** | 1,305 km | 135 min | 0.06 | $T+1, T+7, T+15, T+30$ |
+| Slots 01–04 | **DEL - BOM** | 1,148 km | 130 min | 0.175 | $T+1, T+7, T+15, T+30$ |
+| Slots 05–08 | **BOM - DEL** | 1,148 km | 130 min | 0.175 | $T+1, T+7, T+15, T+30$ |
+| Slots 09–12 | **DEL - BLR** | 1,740 km | 165 min | 0.125 | $T+1, T+7, T+15, T+30$ |
+| Slots 13–16 | **BLR - DEL** | 1,740 km | 165 min | 0.125 | $T+1, T+7, T+15, T+30$ |
+| Slots 17–20 | **BOM - BLR** | 842 km | 105 min | 0.090 | $T+1, T+7, T+15, T+30$ |
+| Slots 21–24 | **BLR - BOM** | 842 km | 105 min | 0.090 | $T+1, T+7, T+15, T+30$ |
+| Slots 25–28 | **DEL - CCU** | 1,305 km | 135 min | 0.065 | $T+1, T+7, T+15, T+30$ |
+| Slots 29–32 | **CCU - DEL** | 1,305 km | 135 min | 0.065 | $T+1, T+7, T+15, T+30$ |
+| Slots 33–36 | **DEL - HYD** | 1,253 km | 135 min | 0.045 | $T+1, T+7, T+15, T+30$ |
+| Slots 37–40 | **HYD - DEL** | 1,253 km | 135 min | 0.045 | $T+1, T+7, T+15, T+30$ |
 
 #### 2.3 Advance Booking Horizons & Economic Calibration
 Advance purchase windows capture the steep non-linear price trajectory characteristic of airline yield management:
@@ -102,7 +102,7 @@ Advance purchase windows capture the steep non-linear price trajectory character
 
 ### 3. End-to-End Ingestion & Scheduling Topology
 
-The ingestion architecture coordinates asynchronous scheduled sweeping, dynamic proxy assignment, anti-bot obfuscation, schema normalization, and micro-batch network dispatch.
+The ingestion architecture coordinates durable queue dispatch, asynchronous scheduled sweeping, dynamic proxy assignment, anti-bot obfuscation, schema normalization, and micro-batch network dispatch. Trigger acceptance is durable: `POST /api/v1/ingestion/trigger` returns 401 without a key, 503 without a fresh worker (`No active crawler worker available`) or with unavailable DB (`Database unavailable`), and 202 `QUEUED` only after a committed `crawler_jobs` row plus a fresh `worker_heartbeats` signal; identical in-flight triggers deduplicate to the same task ID. The consumer is the standalone `python -m ingestion.worker` process (`ingestion/worker.py`), also the Compose `apix-worker` service (`docker-compose.yml`); the API no longer calls a process-local scheduler. Evidence: `.debug-journal.md` 2026-09-25T16:38Z queue records, `.omo/ulw-research/20260925-180203/evidence/trigger-idempotency-8014.json`, `evidence/trigger-liveness-8014.json`. Live OTA execution through this path is unverified because the verified worker ran in synthetic mode.
 
 ```mermaid
 flowchart TD
@@ -118,10 +118,11 @@ flowchart TD
         Orch["IngestionOrchestrator<br/>• Session Recycling (Every 10 Slots)<br/>• Randomized User-Agent & Header Profiling<br/>• Slot Concurrency Isolation"]
     end
 
-    subgraph Execution["Multi-Tier Execution Engine"]
+    subgraph Execution["Multi-Tier Execution Engine + Durable Queue"]
         T1["Tier 1: Live Multi-Source Scrapers<br/>• MakeMyTrip (Playwright XHR)<br/>• EaseMyTrip (HTTPX API)<br/>• SpiceJet (Direct Carrier Engine)"]
         T2["Tier 2: Amadeus GDS Client<br/>• OAuth 2.0 Auth Cache<br/>• Authoritative Inventory"]
         T3["Tier 3: DGCA Synthetic Engine<br/>• Calibrated City-Pair Pricing<br/>• Unconditional 100% SLA Guarantee"]
+        Q["Durable Queue: crawler_jobs + worker_heartbeats<br/>• Standalone python -m ingestion.worker<br/>• Compose apix-worker service"]
     end
 
     subgraph Dispatch["Data Sanitization & Dispatch"]
@@ -327,9 +328,9 @@ Where:
 
 ---
 
-### 8. Distributed Task Scheduler (`ingestion/scheduler.py`)
+### 8. Distributed Task Scheduler (`ingestion/scheduler.py`) and Standalone Worker (`ingestion/worker.py`)
 
-The distributed scheduler is built upon `APScheduler` (`AsyncIOScheduler`), operating as an asynchronous daemon capable of running standalone or embedded within the APIx backend process.
+The distributed scheduler is built upon `APScheduler` (`AsyncIOScheduler`), operating as an asynchronous daemon capable of running standalone or embedded within the APIx backend process. For trigger truth, the durable path is authoritative: the standalone worker `python -m ingestion.worker` polls `crawler_jobs` with atomic claims, holds `worker_heartbeats` leases, sweeps stale leases, and dispatches via `IngestionClient`. Current isolated suite covering this path is 226 passed with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`; older counts are historical.
 
 #### 8.1 Key Capabilities & Lifecycle Architecture
 - **Slot Job Registration:** Pre-registers all 40 discrete route-window combinations as individual jobs with unique deterministic identifiers (`slot_DEL_BOM_T+1`, `slot_BOM_DEL_T+7`, etc.).
@@ -446,3 +447,7 @@ flowchart TD
 | **Throughput Optimization** | Dynamic XHR Interception & Resource Filtering | Unnecessary media/CSS aborted; average live slot latency $< 2,500\text{ ms}$. |
 | **Fault Isolation** | AsyncIOScheduler & Asyncio Thread Sandboxing | Individual slot crawler exceptions never block master sweep execution. |
 | **Statutory Compliance** | Continuous Fare Surveillance & Audit Retention | Complete regulatory evidentiary trail supporting DGCA Aircraft Rules 1937 Rule 135. |
+| **Trigger liveness** | Committed `crawler_jobs` row + fresh `worker_heartbeats` lease | 401 without key, 503 without worker or DB, 202 `QUEUED` with deduped task ID (evidence above). |
+| **Stream idle truth** | `no_update` packets, zero fare updates | Raw_fares unchanged; no synthetic fare packets (evidence: `evidence/websocket-idle-8014-after-fix.json`). |
+
+Preserved limitations: sparse-FK coverage; role-separation and false-success residuals; fixed/generated analytical reads; unknown-route 200; nine duplicate WebSocket mounts; frontend blockers pending independent review. No live OTA crawling, visual QA, Lighthouse, PostgreSQL runtime verification, or final campaign pass is claimed.

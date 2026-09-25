@@ -45,7 +45,7 @@ flowchart TD
     end
 
     subgraph Database["Managed Database Infrastructure"]
-        DB[("PostgreSQL 16 / TimescaleDB<br/>14 Production Normalized Tables")]
+        DB[("PostgreSQL 16 / TimescaleDB<br/>16 Tables on Fresh Startup (14 Domain + 2 Queue)")]
     end
 
     subgraph Edge["Vercel Edge Network"]
@@ -77,7 +77,7 @@ Render hosts the FastAPI ASGI application as an auto-scaling, managed containeri
      ```bash
      pip install --upgrade pip && pip install -r requirements.txt
      ```
-   - **Pre-Deploy Command** (executes schema initialization via `init_db()` and seeds DGCA baseline routes, traffic weights, and carrier market shares prior to routing live traffic):
+    - **Pre-Deploy Command** (executes schema initialization via `init_db()` calling `create_all`, then seeds DGCA baseline routes, traffic weights, and carrier market shares prior to routing live traffic. Fresh `init_db()` on an empty SQLite file creates 16 tables including `crawler_jobs` and `worker_heartbeats`; `create_all` is not a migration system; evidence: `/tmp/opencode/apix-verify/startup-empty.db`):
      ```bash
      python -m backend.app.db.seed
      ```
@@ -89,7 +89,7 @@ Render hosts the FastAPI ASGI application as an auto-scaling, managed containeri
 
 ### 2.2 Health Check & Zero-Downtime Deploys
 - **Health Check Path**: `/health`
-- Render periodically sends `GET /health` requests. The response must return `200 OK` with JSON payload:
+- Render periodically sends `GET /health` requests. When ready the response returns `200 OK` with JSON payload:
   ```json
   {
     "status": "healthy",
@@ -98,6 +98,7 @@ Render hosts the FastAPI ASGI application as an auto-scaling, managed containeri
     "environment": "production"
   }
   ```
+- Unhealthy states return 503: `Database unavailable` on unreachable DB or reachable-but-uninitialized schema, and the trigger path additionally returns 503 `No active crawler worker available` without a fresh `worker_heartbeats` lease. Trigger returns 401 without a key and 202 `QUEUED` only after a committed `crawler_jobs` row plus fresh heartbeat (evidence: `.omo/ulw-research/20260925-180203/evidence/api-8015-final.json`, `evidence/trigger-liveness-8014.json`, `evidence/trigger-idempotency-8014.json`, `tests/test_runtime_boundaries.py:93-106`).
 - If the pre-deploy migration or health check fails, Render retains the existing container and aborts deployment without downtime.
 
 ### 2.3 Managed PostgreSQL / TimescaleDB Provisioning
@@ -105,7 +106,7 @@ Render hosts the FastAPI ASGI application as an auto-scaling, managed containeri
 2. Configure database name: `apix_db`, user: `apix_user`.
 3. Copy the **Internal Database URL** for services in the same Render region:
    - `postgres://apix_user:<password>@dpg-<id>-a/apix_db`
-4. Set both `DATABASE_URL` (using `postgresql+asyncpg://...` or `postgresql://...`) and `DATABASE_URL_SYNC` (using `postgresql://...`).
+4. Set `DATABASE_URL` using standard synchronous `postgresql://` URI (e.g. `postgresql://apix_user:<password>@.../apix_db`) matching SQLAlchemy 2.0 `create_engine()` connection requirements. Set `DATABASE_URL_SYNC` to the same URI.
 
 ---
 
@@ -224,7 +225,7 @@ Under the Aircraft Rules 1937, Rule 135(1-3), the Directorate General of Civil A
 
 | Storage Tier | Storage Medium | Retention Period | Data Scope & Format | Purpose |
 |:---|:---|:---:|:---|:---|
-| **Tier 1 (Hot)** | PostgreSQL / TimescaleDB | 30 Days (raw fares) / Permanent (indices) | Relational SQL schema, 14 production normalized tables | Live dashboard queries, quant index computation, anomaly detection |
+| **Tier 1 (Hot)** | PostgreSQL / TimescaleDB | 30 Days (raw fares) / Permanent (indices) | Relational SQL schema, 16 tables on fresh startup (14 domain + `crawler_jobs` + `worker_heartbeats`) | Live dashboard queries, quant index computation, anomaly detection |
 | **Tier 2 (Warm)** | GitHub Actions Artifacts & S3/R2 Bucket | 30 Days (GHA) / 90 Days (Staging) | Compressed JSONL (`run_summary_YYYY-MM-DD.json.gz`), 40 discrete slots | Telemetry audit, provider SLA tracking, route-level fallback analysis |
 | **Tier 3 (Cold / WORM)** | S3 Glacier Deep Archive | 7 Years (2,555 Days statutory) | Encrypted Apache Parquet with Write-Once-Read-Many (WORM) Object Lock | Court-admissible tariff compliance audits, MoSPI macroeconomic verification |
 
@@ -293,6 +294,8 @@ server {
 ## 8. Environment Variables & Secrets Reference
 
 ### 8.1 Backend Service (Render)
+
+CORS: `BACKEND_CORS_ORIGINS` defaults to `http://localhost:3000`, `http://localhost:5173`, `http://127.0.0.1:3000`, `http://127.0.0.1:5173` with credentials; evil origin `https://evil.example` is not reflected, evil preflight returns 400, and wildcard `*` raises ValidationError (evidence: `evidence/cors-and-trigger-8014.json`, `backend/app/core/config.py`). No deployment credentials are invented here.
 
 | Variable | Required | Default / Example | Purpose |
 |:---|:---:|:---|:---|
@@ -499,5 +502,14 @@ docker compose exec backend python -m backend.app.db.seed
 docker compose exec backend python -m ingestion.orchestrator --mode synthetic
 ```
 
+### 12.4 Crawler Worker Service
+The Compose `apix-worker` service runs `command: ["python", "-m", "ingestion.worker"]` (`docker-compose.yml`) and consumes the durable `crawler_jobs` queue with `worker_heartbeats` leases (`ingestion/worker.py`). Run standalone as `python -m ingestion.worker`. The API trigger requires this worker: without a fresh heartbeat it returns 503, and 202 `QUEUED` follows a committed job row (evidence: `evidence/trigger-liveness-8014.json`, `evidence/trigger-idempotency-8014.json`). Live OTA execution through the worker is unverified (synthetic-mode run only). Retention cleanup uses `synchronize_session="fetch"` (evidence: `.debug-journal.md` 2026-09-25T14:40Z). Current isolated suite is 226 passed with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`; older counts are historical. **Live scraping: what is real and what is blocked.** Genuine data does arrive. Playwright captures `https://www.spicejet.com/api/v3/search/availability` (HTTP 200, 17777 bytes, `data.trips[]`) and flight identity extracts unambiguously (`SG 815`, DEL 09:50 to BOM 12:25). Two blockers stop a live fare from being persisted. First, client-side bot defence: `makemytrip.com` resolves and serves pages from this host, but Akamai rejects the request. Measured three ways: stock `curl` gets `403`, Playwright's bundled Chromium is reset with `net::ERR_HTTP2_PROTOCOL_ERROR`, and driving the distro build at `/usr/bin/chromium` returned HTTP 200 with 500864 bytes of real page content. The scraper now prefers a system Chromium via `resolve_launch_kwargs` with a `playwright_browser_executable` override, but that unblock is not durable: retested under repetition the same client returned 0 of 3 successes, so sustained probing tips the egress IP into a temporary Akamai throttle. Separately, `api.spicejet.com` is not blocked at all, it is NXDOMAIN on both 1.1.1.1 and 8.8.8.8, meaning the hostname does not exist; no provider change can make a nonexistent hostname resolve. Second, SpiceJet publishes no structured fare field; the price is embedded in an opaque key decoding to fragments such as `USAV~5511~~0~665~` and `X!0:48004:1004:854:5994:2364:1524:895:280`, and the mapping is undocumented, so no fare was guessed. Separately, a critical provenance defect was found and fixed: `amadeus.py` labelled generated mock records `is_synthetic=False`, so a live run would have persisted invented fares as real and earned a false LIVE badge. Provenance now follows the payload, and `scripts/audit_provenance.py` fails closed if any row claims to be live without corroborating telemetry, a scraping run, proxy evidence and scrape-time diversity (evidence: `evidence/live-ingestion-verification.json`, `evidence/provenance-audit.json`). Preserved limitations include sparse FKs, role-separation and false-success residuals, unknown-route 200 behavior, and duplicate WebSocket mounts. **CRITICAL, partially fixed: `GET /api/v1/indices/routes` served fabricated airfares as measured data.** **Fixed:** the swallowed `except Exception: pass` that returned the entire hardcoded seed list on any failure is replaced by a 503 `Database unavailable`, and a reachable database with no active routes now reports zero coverage instead of seven invented corridors. Verified at runtime on a current-source instance and locked by two regression tests (`test_routes_overview_does_not_fabricate_when_database_is_unavailable`, `test_routes_overview_reports_no_coverage_instead_of_seeded_corridors`). **Still open:** a route that has no `RouteDailyIndex` is still replaced by its hardcoded `DOMESTIC_ROUTES_SEED` entry or an invented `avg_fare_inr=5000.0` default, and `/api/v1/indices/routes/{route_code}/history` applies the same seed fallback including an invented base index of 108.0. On a sparse database 7 of 7 served routes matched the hardcoded literals exactly, so the whole response was invented. That part needs a product decision, because `RouteOverviewItem` requires `current_index` and `avg_fare_inr` (evidence: `evidence/indices-routes-fabricated-fares.json`). The frontend was re-measured directly against the frozen production build (24 of 24 tab renders, zero console errors, focus contrast minimum 17.93:1), which is first-party measurement rather than an independent reviewer pass, so no independent visual PASS or Lighthouse result is claimed.
+
 ---
 *Maintained by APIx Architecture & Engineering Operations (SIH 2026)*
+
+## Browser binary for OTA scraping
+
+Tier 1 scrapers drive Chromium through Playwright. Akamai fingerprints the HTTP/2 frame and resets Playwright's bundled build with `net::ERR_HTTP2_PROTOCOL_ERROR` while accepting the distro build of the same browser. `resolve_launch_kwargs` in `ingestion/crawlers/makemytrip.py` therefore prefers an executable system Chromium, checking `/usr/bin/chromium`, `/usr/bin/chromium-browser`, `/usr/bin/google-chrome` and `/usr/bin/google-chrome-stable` in order. Set `INGESTION_PLAYWRIGHT_BROWSER_EXECUTABLE` to pin a specific binary. When no candidate is executable the scraper falls back to the bundled build.
+
+This is a mitigation, not a guarantee. The upstream edge can still throttle the egress IP, and a page that loads without yielding a fare XHR falls through to the synthetic tier and is labelled `is_synthetic=True`. Never treat a successful page load as evidence of a live fare.
