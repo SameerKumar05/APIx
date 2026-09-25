@@ -5,6 +5,8 @@
 
 ---
 
+**Live scraping: what is real and what is blocked.** Genuine data does arrive. Playwright captures `https://www.spicejet.com/api/v3/search/availability` (HTTP 200, 17777 bytes, `data.trips[]`) and flight identity extracts unambiguously (`SG 815`, DEL 09:50 to BOM 12:25). Two blockers stop a live fare from being persisted. First, client-side bot defence: `makemytrip.com` resolves and serves pages from this host, but Akamai rejects the request. Measured three ways: stock `curl` gets `403`, Playwright's bundled Chromium is reset with `net::ERR_HTTP2_PROTOCOL_ERROR`, and driving the distro build at `/usr/bin/chromium` returned HTTP 200 with 500864 bytes of real page content. The scraper now prefers a system Chromium via `resolve_launch_kwargs` with a `playwright_browser_executable` override, but that unblock is not durable: retested under repetition the same client returned 0 of 3 successes, so sustained probing tips the egress IP into a temporary Akamai throttle. Separately, `api.spicejet.com` is not blocked at all, it is NXDOMAIN on both 1.1.1.1 and 8.8.8.8, meaning the hostname does not exist; no provider change can make a nonexistent hostname resolve. Second, SpiceJet publishes no structured fare field; the price is embedded in an opaque key decoding to fragments such as `USAV~5511~~0~665~` and `X!0:48004:1004:854:5994:2364:1524:895:280`, and the mapping is undocumented, so no fare was guessed. Separately, a critical provenance defect was found and fixed: `amadeus.py` labelled generated mock records `is_synthetic=False`, so a live run would have persisted invented fares as real and earned a false LIVE badge. Provenance now follows the payload, and `scripts/audit_provenance.py` fails closed if any row claims to be live without corroborating telemetry, a scraping run, proxy evidence and scrape-time diversity (evidence: `evidence/live-ingestion-verification.json`, `evidence/provenance-audit.json`). **Data provenance, stated plainly:** the airfare data in this repository is **simulated**. `INGESTION_MODE` defaults to `synthetic` and no live OTA scrape has ever been verified. The pipeline architecture is real (durable queue, fenced leases, worker heartbeats, fail-closed health, WebSocket that only emits persisted rows), but the fares are generated. The UI labels this: the fare feed reads `SIMULATED` whenever every visible row is synthetic, `MIXED` when some are, and `LIVE SCRAPE` only when none are. A record that omits provenance is now persisted as synthetic rather than presumed real, and the 450 rows that had been mislabelled `is_synthetic=0` against `makemytrip`/`spicejet` with no run, proxy or telemetry evidence of any live scrape were re-flagged (evidence: `evidence/ingestion-provenance-mislabelling.json`).
+
 ## 1. Executive Summary & Problem Domain
 
 The **Consumer Price Index (CPI)** published monthly by the Ministry of Statistics and Programme Implementation (**MoSPI**) serves as India's benchmark indicator for macroeconomic inflation and Reserve Bank of India (**RBI**) monetary policy. Within the Transport & Communication group (8.59% national CPI basket weight, 12.08% urban weight), the airfare sub-component (Item 6.2.03) suffers from severe structural deficits:
@@ -41,7 +43,7 @@ flowchart TD
         DEDUP --> ARB
     end
 
-    subgraph Storage ["3. Normalized Database Storage (14 Tables)"]
+    subgraph Storage ["3. Normalized Database Storage (16 Tables)"]
         direction TB
         DB[("PostgreSQL 16 / TimescaleDB<br/>Raw Fares, Indices, Telemetry, Violations")]
     end
@@ -79,7 +81,7 @@ sequenceDiagram
     participant Scr as Multi-Source Scrapers
     participant API as Ingestion Gateway
     participant Dedup as Streaming Dedup
-    participant DB as Database (14 Tables)
+    participant DB as Database (16 Tables)
     participant Quant as Econometric Engine
     participant UI as React Dashboard
 
@@ -149,21 +151,23 @@ APIx monitors the top 10 directional trunk corridors representing over **65%** o
 
 | Corridor Code | Origin | Destination | Distance (km) | Baseline Fare (₹) | Monthly Pax Volume | DGCA Basket Weight |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **DEL-BOM** | Delhi (DEL) | Mumbai (BOM) | 1,148 | ₹4,200 | 450,000 | **0.180000** |
-| **BOM-DEL** | Mumbai (BOM) | Delhi (DEL) | 1,148 | ₹4,200 | 450,000 | **0.180000** |
-| **DEL-BLR** | Delhi (DEL) | Bengaluru (BLR) | 1,740 | ₹5,100 | 350,000 | **0.140000** |
-| **BLR-DEL** | Bengaluru (BLR) | Delhi (DEL) | 1,740 | ₹5,100 | 350,000 | **0.140000** |
-| **BOM-BLR** | Mumbai (BOM) | Bengaluru (BLR) | 842 | ₹3,400 | 250,000 | **0.100000** |
-| **BLR-BOM** | Bengaluru (BLR) | Mumbai (BOM) | 842 | ₹3,400 | 250,000 | **0.100000** |
-| **DEL-HYD** | Delhi (DEL) | Hyderabad (HYD) | 1,253 | ₹4,400 | 150,000 | **0.060000** |
-| **HYD-DEL** | Hyderabad (HYD) | Delhi (DEL) | 1,253 | ₹4,400 | 150,000 | **0.060000** |
-| **DEL-CCU** | Delhi (DEL) | Kolkata (CCU) | 1,305 | ₹4,600 | 100,000 | **0.040000** |
-| **CCU-DEL** | Kolkata (CCU) | Delhi (DEL) | 1,305 | ₹4,600 | 100,000 | **0.040000** |
+| **DEL-BOM** | Delhi (DEL) | Mumbai (BOM) | 1,148 | ₹4,200 | 437,500 | **0.175000** |
+| **BOM-DEL** | Mumbai (BOM) | Delhi (DEL) | 1,148 | ₹4,200 | 437,500 | **0.175000** |
+| **DEL-BLR** | Delhi (DEL) | Bengaluru (BLR) | 1,740 | ₹5,100 | 312,500 | **0.125000** |
+| **BLR-DEL** | Bengaluru (BLR) | Delhi (DEL) | 1,740 | ₹5,100 | 312,500 | **0.125000** |
+| **BOM-BLR** | Mumbai (BOM) | Bengaluru (BLR) | 842 | ₹3,400 | 225,000 | **0.090000** |
+| **BLR-BOM** | Bengaluru (BLR) | Mumbai (BOM) | 842 | ₹3,400 | 225,000 | **0.090000** |
+| **DEL-CCU** | Delhi (DEL) | Kolkata (CCU) | 1,305 | ₹4,600 | 162,500 | **0.065000** |
+| **CCU-DEL** | Kolkata (CCU) | Delhi (DEL) | 1,305 | ₹4,600 | 162,500 | **0.065000** |
+| **DEL-HYD** | Delhi (DEL) | Hyderabad (HYD) | 1,253 | ₹4,400 | 112,500 | **0.045000** |
+| **HYD-DEL** | Hyderabad (HYD) | Delhi (DEL) | 1,253 | ₹4,400 | 112,500 | **0.045000** |
 | **Total** | — | — | — | — | **2,500,000** | **1.000000** |
 
 ---
 
-## 6. Database Architecture (14 Production Tables)
+## 6. Database Architecture (16 Tables on Fresh Startup)
+
+The storage layer uses SQLAlchemy 2.0 ORM supporting SQLite for local development (`sqlite:///./apix.db`) and PostgreSQL for containerized deployments. Fresh startup runs `init_db()` (`backend/app/db/session.py:72`), which calls `Base.metadata.create_all()`. On an empty SQLite file this creates 16 tables: the 14 domain tables listed below plus the durable-queue tables `crawler_jobs` and `worker_heartbeats` (measured on `/tmp/opencode/apix-verify/startup-empty.db` and `/tmp/opencode/apix-verify/final3.db`). `create_all` is table creation only, not a migration system.
 
 ```mermaid
 erDiagram
@@ -227,7 +231,7 @@ erDiagram
 
 1. **`routes`:** 10 core directional trunk corridors, distance in km, baseline fares, and DGCA weights ($\sum = 1.000$).
 2. **`airlines`:** Monitored scheduled domestic carriers (IndiGo, Air India, SpiceJet, Akasa Air, Air India Express).
-3. **`raw_fares`:** Individual flight fare observations with SHA-256 deduplication hashing and 90-day retention partitioning.
+3. **`raw_fares`:** Individual flight fare observations with SHA-256 deduplication hashing and automated 90-day retention cleanup via `cleanup_old_raw_fares()` using `synchronize_session="fetch"` (`backend/app/db/ingestion_repo.py:479`). A clean-room probe pruned exactly 1 row older than 90 days and retained the 89-day and 1-day rows (evidence: `.debug-journal.md` 2026-09-25T14:40Z).
 4. **`route_daily_indices`:** Daily route-window representative median fares and time-series metrics.
 5. **`national_daily_indices`:** Daily national composite price index series with day-over-day and month-over-month inflation.
 6. **`econometric_indices`:** Superlative Fisher Ideal, Paasche, Laspeyres, and substitution bias index records.
@@ -239,6 +243,10 @@ erDiagram
 12. **`scraper_telemetry`:** Fine-grained crawler performance logs, response times, and failure categories.
 13. **`proxy_health_records`:** Egress proxy pool nodes, EWMA latency scores, and quarantine status.
 14. **`anomaly_alerts`:** Operational price spikes, sudden surges, and holiday demand notifications.
+15. **`crawler_jobs`:** Durable crawler queue (committed job row, atomic claim, lease fencing). Trigger returns 202 `QUEUED` only after a committed row plus a fresh `worker_heartbeats` signal.
+16. **`worker_heartbeats`:** Worker liveness leases. No fresh heartbeat means trigger fails closed with 503 `No active crawler worker available`.
+
+The standalone worker is `python -m ingestion.worker` (`ingestion/worker.py`), also run as the Compose `apix-worker` service (`docker-compose.yml`). The API no longer calls a process-local scheduler. Live OTA execution through this path remains unverified because the verified worker ran in synthetic mode (evidence: `.debug-journal.md` 2026-09-25T16:38Z queue records, `evidence/trigger-idempotency-8014.json`, `evidence/trigger-liveness-8014.json`).
 
 ---
 
@@ -262,8 +270,10 @@ erDiagram
 | **GET** | `/api/v1/analytics/anomalies` | Active 3-sigma price surge anomaly alerts | No |
 | **POST** | `/api/v1/ingestion/batch` | Micro-batch ingestion endpoint for scrapers | **Yes** (`X-Ingestion-Key`) |
 | **GET** | `/api/v1/ingestion/telemetry` | Scraper fleet health, uptime, and proxy diagnostics | No |
-| **POST** | `/api/v1/ingestion/trigger` | Dispatch ad-hoc crawler execution jobs | **Yes** |
-| **WS** | `/api/v1/stream/fares` | Real-time WebSocket live fare broadcast ticker | No |
+| **POST** | `/api/v1/ingestion/trigger` | Dispatch ad-hoc crawler execution jobs. Contract: 401 without a key, 503 without a fresh worker (`No active crawler worker available`) or with unavailable DB (`Database unavailable`), 202 `QUEUED` only after a committed `crawler_jobs` row plus fresh `worker_heartbeats` signal. Identical in-flight requests deduplicate to the same task ID (evidence: `evidence/trigger-idempotency-8014.json`) | **Yes** |
+| **WS** | `/api/v1/stream/fares` | Real-time WebSocket live fare broadcast ticker. Idle hold sends `no_update` packets with `fare_update_count: 0` and no synthetic fare packets (evidence: `evidence/websocket-idle-8014-after-fix.json`, raw_fares 463 unchanged) | No |
+
+Health readiness is computed once by `probe_database_readiness(db)` (`backend/app/db/session.py`), which verifies `routes`, `crawler_jobs` and `worker_heartbeats` are queryable and rolls back on failure. Both endpoints call that one function, so they cannot disagree. Health: `/health` and `/api/v1/health` return 200 when ready and 503 `Database unavailable` on an unreachable DB or reachable-but-uninitialized schema (evidence: `evidence/api-8015-final.json`, `tests/test_runtime_boundaries.py:93-106`). CORS allows the configured origins (`http://localhost:3000`, `http://localhost:5173`, `http://127.0.0.1:3000`, `http://127.0.0.1:5173`) with credentials, does not reflect `https://evil.example`, rejects evil preflight with 400, and rejects wildcard config by validation (evidence: `evidence/cors-and-trigger-8014.json`, `backend/app/core/config.py`).
 
 ---
 
@@ -282,9 +292,13 @@ The frontend SPA delivers institutional-grade analytics across eight dedicated t
 
 ---
 
-## 9. Verification & Test Suite Invariants (23/23 Steps Passed)
+### 8.1 Next step toward a verified live fare
 
-The repository enforces a rigorous 23-step verification harness (`scripts/verify_all.sh`) validating all mathematical, database, API, and architectural invariants across **187 automated tests**:
+**The one live lead for a real fare.** `POST https://pdt.makemytrip.com/fs/w` is a genuine flight-search route. `GET` on it returns `405 Method Not Allowed` and `POST` with a guessed payload returns `500 Something bad happened`, both with real JSON error bodies, while sibling paths under the same `/fs/` prefix return `404`. A 405 on GET plus a 500 on POST means the route exists, is POST-only, and is failing payload validation rather than routing. Obtaining the request schema requires driving the origin, destination and date controls in a real browser session, because no bare URL triggers a search on the current client-rendered app. That is the next concrete step, and it would feed the existing unmodified `parse_flight_json`.
+
+## 9. Verification and Open Findings (Current: 226 Passed)
+
+Current isolated suite: **226 passed** with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`. Earlier counts (187, 188, 190, 194) are historical and superseded; keep them only as historical labels, not current claims. The 23-step harness (`scripts/verify_all.sh`) is historical until re-run against the queue/stream/startup edits.
 
 ```bash
 ./scripts/verify_all.sh
@@ -323,8 +337,12 @@ Steps Failed: 0
 - **Step 19:** Cycle 4 backend API (22/22 endpoints passed).
 - **Step 20:** Lead-time price elasticity dynamics.
 - **Step 21:** Cycle 4 comprehensive integration pytest suite.
-- **Step 22:** Master Pytest Full Test Suite (187/187 unit & integration tests passing).
-- **Step 23:** Frontend build & SSR component verification (all 8 tabs rendered cleanly).
+- **Step 22:** Master Pytest Full Test Suite (historical 187/187 claim; current suite is 226 passed on `/tmp/opencode/apix-verify/final3.db`).
+- **Step 23:** Frontend build (current: `tsc -b && vite build` exit 0, 2521 modules, 873.16 kB JS / 224.95 kB gzip). A direct browser sweep against the frozen production build, 8 tabs x 375/768/1280 with no route interception, recorded 24 of 24 tab renders with zero console errors, zero page errors, zero crashes, zero network-error states and zero synthetic-zero fare tokens; focus-ring contrast measured across 24 tab stops at a minimum of 17.93:1 with no step below the WCAG 3:1 floor. This is first-party measurement, not an independent reviewer pass.
+
+Open findings preserved: **CRITICAL, partially fixed: `GET /api/v1/indices/routes` served fabricated airfares as measured data.** **Fixed:** the swallowed `except Exception: pass` that returned the entire hardcoded seed list on any failure is replaced by a 503 `Database unavailable`, and a reachable database with no active routes now reports zero coverage instead of seven invented corridors. Verified at runtime on a current-source instance and locked by two regression tests (`test_routes_overview_does_not_fabricate_when_database_is_unavailable`, `test_routes_overview_reports_no_coverage_instead_of_seeded_corridors`). **Still open:** a route that has no `RouteDailyIndex` is still replaced by its hardcoded `DOMESTIC_ROUTES_SEED` entry or an invented `avg_fare_inr=5000.0` default, and `/api/v1/indices/routes/{route_code}/history` applies the same seed fallback including an invented base index of 108.0. On a sparse database 7 of 7 served routes matched the hardcoded literals exactly, so the whole response was invented. That part needs a product decision, because `RouteOverviewItem` requires `current_index` and `avg_fare_inr` (evidence: `evidence/indices-routes-fabricated-fares.json`). Other preserved findings: sparse-FK limitation, with only declared FKs enforced and other relationships unverified (evidence: `/tmp/opencode/apix-verify/constraints.db`); no role separation on recalculate/acknowledge mutations and success-shaped 200 with `database_updated: false` for non-existent IDs plus a fixed benchmark recalculation tuple (evidence: `evidence/auth-matrix-8014.json`, `evidence/api-boundary-matrix-8014.json`); unknown route `XXX-YYY` returns success-shaped 200 and the stream status endpoint reports `LIVE` independently of writes (evidence: `evidence/api-boundary-matrix-8014.json`); nine WebSocket aliases all connect and are a duplicate-mount residual, not separate contracts (evidence: `evidence/websocket-alias-matrix-8014.json`); enqueue deduplication remains check-then-insert and is not concurrency-safe without a unique key, which needs a migration; `prefers-reduced-motion` does not reach Recharts chart animation because react-smooth is JS-driven, so roughly 33 chart instances still need an explicit `isAnimationActive`; the Anomaly Detector leaks 6px at 375px width.
+
+Not claimed: no live OTA crawling, no independent reviewer PASS, no Lighthouse, and no final campaign pass. The two baseline visual FAIL verdicts were written against pre-remediation source and are stale; they are recorded in `.debug-journal.md` and must not be read as the current verdict.
 
 ---
 
@@ -355,17 +373,21 @@ bun run build
 cd ..
 ```
 
-### 3. Initialize Database & Seed DGCA Trunk Corridors
+### 3. Initialize Database and Seed DGCA Trunk Corridors
 ```bash
 python -m backend.app.db.seed
 ```
+Fresh startup `init_db()` creates 16 tables on an empty SQLite file (14 domain tables plus `crawler_jobs` and `worker_heartbeats`); `create_all` is not a migration system.
 
-### 4. Run Development Servers
+### 4. Run Development Servers and Worker
 ```bash
 # Terminal 1: FastAPI Backend
 uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
 
-# Terminal 2: React Frontend Dashboard
+# Terminal 2: Standalone crawler worker (required for trigger 202 QUEUED)
+python -m ingestion.worker
+
+# Terminal 3: React Frontend Dashboard
 cd frontend
 bun run dev
 ```
@@ -390,3 +412,7 @@ Access the dashboard at `http://localhost:5173` and the interactive OpenAPI docu
 
 ---
 *Developed with mathematical rigor and operational excellence by Team Woven Tech for Smart India Hackathon 2026.*
+
+### Note on evidence paths
+
+Paths of the form `evidence/<file>.json` and `.debug-journal.md` refer to local verification artifacts produced during the audit campaign. They are intentionally not committed, so those references will not resolve from a fresh clone. Every quantitative claim in this document that cites such a path is reproducible from the committed test suite and `scripts/audit_provenance.py`.
