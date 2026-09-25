@@ -83,6 +83,18 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
     return true;
   });
 
+  const labelled = filteredFares.filter((fare) => typeof fare.is_synthetic === 'boolean');
+  const allSimulated = labelled.length > 0 && labelled.every((fare) => fare.is_synthetic === true);
+  const anySimulated = labelled.some((fare) => fare.is_synthetic === true);
+  const provenance: 'simulated' | 'mixed' | 'live' | 'unverified' =
+    labelled.length !== filteredFares.length
+      ? 'unverified'
+      : allSimulated
+      ? 'simulated'
+      : anySimulated
+      ? 'mixed'
+      : 'live';
+
   const minFare = minFareRef.current !== Infinity ? minFareRef.current : 0;
   const maxFare = maxFareRef.current > 0 ? maxFareRef.current : 0;
 
@@ -114,8 +126,29 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
               }`}
             />
             <span className="font-mono text-[11px] font-semibold tracking-wider text-neutral-300">
-              LIVE FARE FEED
+              FARE FEED
             </span>
+            {filteredFares.length > 0 && (
+              <span
+                className={`px-1.5 py-0.5 rounded font-mono text-[10px] border ${
+                  provenance === 'simulated'
+                    ? 'bg-amber-950/60 border-amber-800 text-amber-300'
+                    : provenance === 'mixed'
+                    ? 'bg-neutral-900 border-amber-800 text-amber-400'
+                    : provenance === 'live'
+                    ? 'bg-neutral-900 border-emerald-800 text-emerald-400'
+                    : 'bg-neutral-900 border-neutral-700 text-neutral-400'
+                }`}
+              >
+                {provenance === 'simulated'
+                  ? 'SIMULATED'
+                  : provenance === 'mixed'
+                  ? 'MIXED'
+                  : provenance === 'live'
+                  ? 'LIVE SCRAPE'
+                  : 'PROVENANCE UNKNOWN'}
+              </span>
+            )}
           </div>
 
           <span className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-neutral-900 border border-neutral-800 text-neutral-400">
@@ -159,7 +192,7 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
             <select
               value={selectedCarrierFilter}
               onChange={(e) => setSelectedCarrierFilter(e.target.value)}
-              className="bg-neutral-900 text-neutral-300 border border-neutral-800 rounded px-2 py-1 text-[11px] font-mono focus:border-neutral-700 focus:outline-none"
+              className="bg-neutral-900 text-neutral-300 border border-neutral-800 rounded px-2 py-1 text-[11px] font-mono focus:border-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950"
             >
               <option value="ALL">All Airlines</option>
               <option value="6E">6E (IndiGo)</option>
@@ -172,7 +205,7 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
           {/* Pause / Resume Button */}
           <button
             onClick={() => setIsPaused(!isPaused)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 text-[11px] font-mono transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 text-[11px] font-mono transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950"
             title={isPaused ? 'Resume streaming feed' : 'Pause streaming feed'}
           >
             {isPaused ? <Play className="w-3 h-3 text-neutral-300" /> : <Pause className="w-3 h-3 text-neutral-400" />}
@@ -182,7 +215,7 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
           {/* Expand / Collapse Ledger Button */}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 text-[11px] font-mono transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 text-[11px] font-mono transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950"
           >
             <span>{isExpanded ? 'Hide Ledger' : 'View Ledger'}</span>
             {isExpanded ? <ChevronUp className="w-3 h-3 text-neutral-400" /> : <ChevronDown className="w-3 h-3 text-neutral-400" />}
@@ -191,7 +224,11 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
       </div>
 
       {/* Horizontal Carousel / Ticker Stream */}
-      <div className="p-3 overflow-x-auto scrollbar-thin flex gap-2.5 items-center">
+      <div
+        className="p-3 overflow-x-auto scrollbar-thin flex gap-2.5 items-center live-ticker-stream motion-reduce:scroll-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950"
+        data-ticker-stream="true"
+        aria-label="Live fare ticker"
+      >
         {filteredFares.length === 0 ? (
           <div className="py-3 px-4 text-xs text-neutral-500 font-mono flex items-center gap-2">
             <Clock className="w-3.5 h-3.5 text-neutral-500" />
@@ -207,7 +244,7 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
               <div
                 key={`${fare.flight_number}-${fare.timestamp}-${idx}`}
                 onClick={() => onSelectRoute?.(`${fare.origin}-${fare.destination}`)}
-                className="flex-shrink-0 cursor-pointer rounded-md p-3 border border-neutral-800 bg-neutral-950 hover:border-neutral-700 hover:bg-neutral-900/40 transition-colors min-w-[210px]"
+                className="flex-shrink-0 cursor-pointer rounded-md p-3 border border-neutral-800 bg-neutral-950 hover:border-neutral-700 hover:bg-neutral-900/40 transition-colors motion-reduce:transition-none min-w-[210px]"
               >
                 {/* Header: Carrier Tag + Route */}
                 <div className="flex items-center justify-between gap-2">
@@ -302,7 +339,7 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
                 const fareValue = fare.fare_inr ?? rawFare ?? 0;
                 const sourceLabel = SOURCE_LABELS[fare.source?.toLowerCase()] || fare.source;
                 return (
-                  <tr key={`tbl-${fare.flight_number}-${idx}`} className="hover:bg-neutral-900/40 transition-colors">
+                  <tr key={`tbl-${fare.flight_number}-${idx}`} className="hover:bg-neutral-900/40 transition-colors motion-reduce:transition-none">
                     <td className="py-1.5 px-3 text-neutral-500 text-[11px] tabular-nums">
                       {fare.timestamp
                         ? new Date(fare.timestamp).toLocaleTimeString([], {
