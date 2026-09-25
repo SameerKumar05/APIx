@@ -17,12 +17,15 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from fastapi.testclient import TestClient
+from backend.app.core.config import settings
 from backend.app.main import app
 from backend.app.db.session import engine, Base, SessionLocal
 from backend.app.models.telemetry import ScraperTelemetry, ProxyHealthRecord
+from backend.app.db.crawler_job_repo import register_worker_heartbeat
 
-# Ensure tables exist in database
 Base.metadata.create_all(bind=engine)
+with SessionLocal() as db:
+    register_worker_heartbeat(db, "worker-test-cycle3", "localhost", os.getpid())
 
 client = TestClient(app)
 
@@ -72,10 +75,14 @@ def test_crawler_trigger_post_json():
         "route_code": "DEL-BOM",
         "booking_window": "T+7",
     }
-    response = client.post("/api/v1/ingestion/trigger", json=payload)
+    response = client.post(
+        "/api/v1/ingestion/trigger",
+        headers={"X-Ingestion-Key": settings.INGESTION_API_KEY},
+        json=payload,
+    )
     assert response.status_code == 202, f"Expected 202, got {response.status_code}: {response.text}"
     data = response.json()
-    assert data["status"] == "TRIGGERED"
+    assert data["status"] in ("TRIGGERED", "QUEUED")
     assert data["crawler_name"] == "makemytrip"
     assert data["route_code"] == "DEL-BOM"
     assert "task_id" in data and data["task_id"].startswith("trig-")
@@ -84,10 +91,13 @@ def test_crawler_trigger_post_json():
 
 def test_crawler_trigger_query_params():
     print("[TEST 5/16] POST /api/v1/ingestion/trigger with query parameters")
-    response = client.post("/api/v1/ingestion/trigger?crawler_name=spicejet&route_code=BOM-DEL")
+    response = client.post(
+        "/api/v1/ingestion/trigger?crawler_name=spicejet&route_code=BOM-DEL",
+        headers={"X-Ingestion-Key": settings.INGESTION_API_KEY},
+    )
     assert response.status_code == 202, f"Expected 202, got {response.status_code}"
     data = response.json()
-    assert data["status"] == "TRIGGERED"
+    assert data["status"] in ("TRIGGERED", "QUEUED")
     assert data["crawler_name"] == "spicejet"
     assert data["route_code"] == "BOM-DEL"
     print(f"  ✓ Trigger via query params accepted: task_id={data['task_id']}")
