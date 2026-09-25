@@ -173,6 +173,35 @@ STEALTH_INIT_SCRIPT = """
 """
 
 
+SYSTEM_CHROMIUM_CANDIDATES: List[str] = [
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+]
+
+
+def resolve_launch_kwargs(config: Any) -> Dict[str, Any]:
+    """Pick the Chromium build to drive.
+
+    Akamai fingerprints the HTTP/2 frame and rejects Playwright's bundled Chromium
+    with ERR_HTTP2_PROTOCOL_ERROR, while accepting the distro build of the same
+    browser. Measured on this host: bundled build fails, /usr/bin/chromium serves
+    the page. So prefer a system Chromium and fall back to the bundled build.
+    """
+    kwargs: Dict[str, Any] = {
+        "headless": config.playwright_headless,
+        "args": PLAYWRIGHT_STEALTH_ARGS,
+    }
+    explicit = getattr(config, "playwright_browser_executable", None)
+    candidates = [explicit] if explicit else list(SYSTEM_CHROMIUM_CANDIDATES)
+    for path in candidates:
+        if path and os.path.isfile(path) and os.access(path, os.X_OK):
+            kwargs["executable_path"] = path
+            return kwargs
+    return kwargs
+
+
 def should_abort_resource(url: str, resource_type: str) -> bool:
     """Checks whether a network request should be aborted to optimize scraping performance."""
     if resource_type in BLOCKED_RESOURCE_TYPES:
@@ -474,10 +503,7 @@ class MakeMyTripScraper(BaseScraper):
         capture_time = datetime.now(timezone.utc)
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=self.config.playwright_headless,
-                args=PLAYWRIGHT_STEALTH_ARGS,
-            )
+            browser = p.chromium.launch(**resolve_launch_kwargs(self.config))
             try:
                 context_options = self.get_playwright_context_options()
                 context = browser.new_context(**context_options)

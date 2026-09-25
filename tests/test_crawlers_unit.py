@@ -420,3 +420,43 @@ class TestIngestionOrchestratorMultiSource(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_resolve_launch_kwargs_prefers_executable_system_chromium():
+    """Akamai resets the bundled Playwright Chromium over HTTP/2 but accepts the distro build."""
+    import os
+
+    from ingestion.config import IngestionConfig
+    from ingestion.crawlers.makemytrip import resolve_launch_kwargs
+
+    cfg = IngestionConfig(ingestion_mode="live", playwright_headless=True)
+    kwargs = resolve_launch_kwargs(cfg)
+    assert "headless" in kwargs and "args" in kwargs
+
+    picked = kwargs.get("executable_path")
+    if picked is not None:
+        assert os.path.isfile(picked) and os.access(picked, os.X_OK), picked
+    else:
+        for candidate in SYSTEM_CHROMIUM_CANDIDATES:
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                raise AssertionError(f"executable {candidate} exists but was not selected")
+
+
+def test_resolve_launch_kwargs_honours_explicit_override():
+    import os
+    import tempfile
+
+    from ingestion.config import IngestionConfig
+    from ingestion.crawlers.makemytrip import resolve_launch_kwargs
+
+    with tempfile.NamedTemporaryFile(suffix=".chromium") as fake:
+        os.chmod(fake.name, 0o755)
+        cfg = IngestionConfig(
+            ingestion_mode="live", playwright_browser_executable=fake.name
+        )
+        assert resolve_launch_kwargs(cfg)["executable_path"] == fake.name
+
+    cfg = IngestionConfig(
+        ingestion_mode="live", playwright_browser_executable="/nonexistent/chromium"
+    )
+    assert "executable_path" not in resolve_launch_kwargs(cfg)
