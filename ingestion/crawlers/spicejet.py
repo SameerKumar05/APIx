@@ -178,6 +178,7 @@ class SpiceJetScraper(BaseScraper):
         """Determines if an intercepted network request is a SpiceJet availability or booking endpoint."""
         target_patterns = [
             r"/api/.*flight",
+            r"/v1/.*flight",
             r"/v1/.*search",
             r"/v2/.*availability",
             r"/booking/.*search",
@@ -186,6 +187,18 @@ class SpiceJetScraper(BaseScraper):
             r"/availability",
             r"/getAvailability",
         ]
+        # Station, city and metadata endpoints also live under /v1/.../search but
+        # carry no inventory, so they must never be parsed as flights.
+        reject_patterns = [
+            r"getStationDetails",
+            r"getAllCities",
+            r"getPopular",
+            r"stationsFullName",
+            r"metaInfo",
+            r"featureconfig",
+        ]
+        if any(re.search(pat, url, re.IGNORECASE) for pat in reject_patterns):
+            return False
         return any(re.search(pat, url, re.IGNORECASE) for pat in target_patterns)
 
     def parse_flight_json(
