@@ -34,10 +34,13 @@ interface OverviewTabProps {
   onSelectTab: (tab: 'overview' | 'routes' | 'elasticity' | 'anomalies') => void;
 }
 
-function getMedianFare(route: RouteOverviewItem): number {
-  const rec = route as unknown as Record<string, unknown>;
-  const val = route.median_fare_inr ?? rec.median_fare ?? rec.avg_fare_inr ?? 0;
-  return typeof val === 'number' ? val : 0;
+function getMedianFare(route: RouteOverviewItem): number | undefined {
+  const val = (typeof route.median_fare_inr === 'number' && route.median_fare_inr > 0)
+    ? route.median_fare_inr
+    : (typeof route.avg_fare_inr === 'number' && route.avg_fare_inr > 0)
+    ? route.avg_fare_inr
+    : undefined;
+  return val;
 }
 
 function getObservedFare(anomaly: AnomalyAlertItem): number {
@@ -101,11 +104,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         date: `${d.getDate()} ${d.toLocaleString('en-US', { month: 'short' })}`,
         fullDate: d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
         composite: p.index_value,
-        mospi: p.mospi_cpi ?? Number((105.8 + 0.05 * 15).toFixed(2)),
-        t1: p.t1_index ?? Number((p.index_value * 1.30).toFixed(2)),
-        t7: p.t7_index ?? Number((p.index_value * 1.08).toFixed(2)),
-        t15: p.t15_index ?? Number((p.index_value * 0.96).toFixed(2)),
-        t30: p.t30_index ?? Number((p.index_value * 0.84).toFixed(2)),
+        mospi: p.mospi_cpi,
+        t1: p.t1_index,
+        t7: p.t7_index,
+        t15: p.t15_index,
+        t30: p.t30_index,
         samples: p.sample_size,
       };
     });
@@ -114,8 +117,19 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   const criticalCount = anomalies.filter((a) => a.severity === 'CRITICAL').length;
   const topSurgeRoute = [...routes].sort((a, b) => b.change_24h - a.change_24h)[0];
 
-  const mospiLatest = latest.mospi_cpi ?? 107.40;
-  const mospiDivergence = latest.mospi_cpi_divergence ?? (latest.index_value - mospiLatest);
+  const hasMospi = typeof latest.mospi_cpi === 'number';
+  const mospiLatest = latest.mospi_cpi;
+  const mospiDivergence = hasMospi ? (latest.mospi_cpi_divergence ?? (latest.index_value - mospiLatest!)) : undefined;
+
+  const hasWeightedMedian = typeof latest.weighted_median_fare_inr === 'number' && latest.weighted_median_fare_inr > 0;
+  const hasSurgeRatio = typeof latest.t1_index === 'number' && typeof latest.t30_index === 'number' && latest.t30_index > 0;
+  const surgeRatio = hasSurgeRatio ? (latest.t1_index! / latest.t30_index!).toFixed(2) : undefined;
+
+  const hasHistoryMospi = history.some((p) => typeof p.mospi_cpi === 'number');
+  const hasHistoryT1 = history.some((p) => typeof p.t1_index === 'number');
+  const hasHistoryT7 = history.some((p) => typeof p.t7_index === 'number');
+  const hasHistoryT15 = history.some((p) => typeof p.t15_index === 'number');
+  const hasHistoryT30 = history.some((p) => typeof p.t30_index === 'number');
 
   return (
     <div className="space-y-6">
@@ -159,17 +173,31 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </span>
           </div>
           <div className="flex items-baseline gap-3">
-            <span className="text-3xl font-semibold tracking-tight text-white font-mono tabular-nums">
-              {mospiLatest.toFixed(2)}
-            </span>
-            <div className="flex items-center text-xs font-mono tabular-nums text-neutral-400">
-              <TrendingUp className="w-3.5 h-3.5 mr-1 text-neutral-400 inline" />
-              +{mospiDivergence.toFixed(1)} pts gap
-            </div>
+            {hasMospi ? (
+              <>
+                <span className="text-3xl font-semibold tracking-tight text-white font-mono tabular-nums">
+                  {mospiLatest!.toFixed(2)}
+                </span>
+                <div className="flex items-center text-xs font-mono tabular-nums text-neutral-400">
+                  <TrendingUp className="w-3.5 h-3.5 mr-1 text-neutral-400 inline" />
+                  {mospiDivergence! >= 0 ? '+' : ''}
+                  {mospiDivergence!.toFixed(1)} pts gap
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="text-3xl font-semibold tracking-tight text-neutral-600 font-mono tabular-nums">
+                  —
+                </span>
+                <div className="flex items-center text-xs font-mono tabular-nums text-neutral-500">
+                  Unavailable (No live MoSPI feed)
+                </div>
+              </>
+            )}
           </div>
           <div className="mt-3 text-xs text-neutral-500 flex items-center justify-between border-t border-neutral-800/80 pt-2.5 font-mono tabular-nums">
             <span>Monthly survey lag</span>
-            <span className="text-neutral-300 font-medium">+0.35% (MoSPI)</span>
+            <span className="text-neutral-300 font-medium">{hasMospi ? '+0.35% (MoSPI)' : '—'}</span>
           </div>
         </div>
 
@@ -180,16 +208,31 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <Scale className="w-3.5 h-3.5 text-neutral-400" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-semibold tracking-tight text-white font-mono tabular-nums">
-              ₹{(latest.weighted_median_fare_inr || 5480).toLocaleString('en-IN')}
-            </span>
-            <span className="text-xs text-neutral-400 font-mono tabular-nums">
-              +1.85% (24h)
-            </span>
+            {hasWeightedMedian ? (
+              <>
+                <span className="text-3xl font-semibold tracking-tight text-white font-mono tabular-nums">
+                  ₹{latest.weighted_median_fare_inr!.toLocaleString('en-IN')}
+                </span>
+                <span className="text-xs text-neutral-400 font-mono tabular-nums">
+                  +1.85% (24h)
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-3xl font-semibold tracking-tight text-neutral-600 font-mono tabular-nums">
+                  —
+                </span>
+                <span className="text-xs text-neutral-500 font-mono">
+                  Unavailable
+                </span>
+              </>
+            )}
           </div>
           <div className="mt-3 text-xs text-neutral-500 flex items-center justify-between border-t border-neutral-800/80 pt-2.5 font-mono tabular-nums">
             <span>Weekly fare change</span>
-            <span className="text-neutral-300 font-medium">+4.12% (7d)</span>
+            <span className="text-neutral-300 font-medium">
+              {hasWeightedMedian ? '+4.12% (7d)' : '—'}
+            </span>
           </div>
         </div>
 
@@ -200,17 +243,32 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <Flame className="w-3.5 h-3.5 text-neutral-400" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-semibold tracking-tight text-white font-mono tabular-nums">
-              2.42x
-            </span>
-            <span className="text-xs text-neutral-400 font-mono tabular-nums">
-              +5.2% (24h)
-            </span>
+            {hasSurgeRatio ? (
+              <>
+                <span className="text-3xl font-semibold tracking-tight text-white font-mono tabular-nums">
+                  {surgeRatio}x
+                </span>
+                <span className="text-xs text-neutral-400 font-mono tabular-nums">
+                  +5.2% (24h)
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-3xl font-semibold tracking-tight text-neutral-600 font-mono tabular-nums">
+                  —
+                </span>
+                <span className="text-xs text-neutral-500 font-mono">
+                  Unavailable
+                </span>
+              </>
+            )}
           </div>
           <div className="mt-3 text-xs text-neutral-500 flex items-center justify-between border-t border-neutral-800/80 pt-2.5 font-mono tabular-nums">
-            <span>Top surge: {topSurgeRoute ? topSurgeRoute.route_code : 'DEL-BOM'}</span>
+            <span>Top surge: {topSurgeRoute ? topSurgeRoute.route_code : '—'}</span>
             <span className="text-neutral-300 font-medium">
-              +{topSurgeRoute ? topSurgeRoute.change_24h : 3.8}%
+              {topSurgeRoute && typeof topSurgeRoute.change_24h === 'number'
+                ? `${topSurgeRoute.change_24h >= 0 ? '+' : ''}${topSurgeRoute.change_24h}%`
+                : '—'}
             </span>
           </div>
         </div>
@@ -279,7 +337,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             }`}
           >
             <span className={`w-2 h-2 rounded-full ${showMospi ? 'bg-neutral-400' : 'bg-neutral-600'}`}></span>
-            <span>MoSPI CPI (Transport)</span>
+            <span>MoSPI CPI (Transport){hasHistoryMospi ? '' : ' [No Live Data]'}</span>
           </button>
 
           <span className="text-neutral-700 hidden sm:inline">|</span>
@@ -296,7 +354,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             title="T+1: Emergency Next-Day Booking Window"
           >
             <span className={`w-2 h-2 rounded-full ${showT1 ? 'bg-neutral-300' : 'bg-neutral-600'}`}></span>
-            <span>T+1 (Urgent Surge)</span>
+            <span>T+1 (Urgent Surge){hasHistoryT1 ? '' : ' [No Data]'}</span>
           </button>
 
           {/* T+7 Toggle */}
@@ -310,7 +368,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             title="T+7: 1-Week Out Booking Window"
           >
             <span className={`w-2 h-2 rounded-full ${showT7 ? 'bg-neutral-400' : 'bg-neutral-600'}`}></span>
-            <span>T+7 (1-Week)</span>
+            <span>T+7 (1-Week){hasHistoryT7 ? '' : ' [No Data]'}</span>
           </button>
 
           {/* T+15 Toggle */}
@@ -324,7 +382,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             title="T+15: Mid-Term Booking Window"
           >
             <span className={`w-2 h-2 rounded-full ${showT15 ? 'bg-neutral-500' : 'bg-neutral-600'}`}></span>
-            <span>T+15 (Mid-Term)</span>
+            <span>T+15 (Mid-Term){hasHistoryT15 ? '' : ' [No Data]'}</span>
           </button>
 
           {/* T+30 Toggle */}
@@ -338,7 +396,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             title="T+30: Advance Baseline Planning Window"
           >
             <span className={`w-2 h-2 rounded-full ${showT30 ? 'bg-neutral-500' : 'bg-neutral-600'}`}></span>
-            <span>T+30 (Baseline Advance)</span>
+            <span>T+30 (Baseline Advance){hasHistoryT30 ? '' : ' [No Data]'}</span>
           </button>
         </div>
 
@@ -477,33 +535,65 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-neutral-800/80 font-mono text-xs">
           <div className="bg-neutral-900/40 border border-neutral-800 rounded-lg p-3">
             <div className="text-[11px] text-neutral-400 font-sans font-medium">T+1 Urgent Surge</div>
-            <div className="text-lg font-semibold text-white mt-1 tabular-nums">{(latest.t1_index || 154.20).toFixed(2)}</div>
-            <div className="text-[11px] text-neutral-400 flex items-center gap-1 mt-0.5 tabular-nums">
-              <TrendingUp className="w-3 h-3 text-neutral-400" /> +2.8% 24h • +6.5% 7d
+            <div className="text-lg font-semibold text-white mt-1 tabular-nums">
+              {typeof latest.t1_index === 'number' ? latest.t1_index.toFixed(2) : '—'}
+            </div>
+            <div className="text-[11px] text-neutral-500 flex items-center gap-1 mt-0.5 tabular-nums">
+              {typeof latest.t1_index === 'number' ? (
+                <>
+                  <TrendingUp className="w-3 h-3 text-neutral-400" /> +2.8% 24h • +6.5% 7d
+                </>
+              ) : (
+                'Unavailable'
+              )}
             </div>
           </div>
 
           <div className="bg-neutral-900/40 border border-neutral-800 rounded-lg p-3">
             <div className="text-[11px] text-neutral-400 font-sans font-medium">T+7 Near-Term</div>
-            <div className="text-lg font-semibold text-white mt-1 tabular-nums">{(latest.t7_index || 128.60).toFixed(2)}</div>
-            <div className="text-[11px] text-neutral-400 flex items-center gap-1 mt-0.5 tabular-nums">
-              <TrendingUp className="w-3 h-3 text-neutral-400" /> +1.9% 24h • +4.8% 7d
+            <div className="text-lg font-semibold text-white mt-1 tabular-nums">
+              {typeof latest.t7_index === 'number' ? latest.t7_index.toFixed(2) : '—'}
+            </div>
+            <div className="text-[11px] text-neutral-500 flex items-center gap-1 mt-0.5 tabular-nums">
+              {typeof latest.t7_index === 'number' ? (
+                <>
+                  <TrendingUp className="w-3 h-3 text-neutral-400" /> +1.9% 24h • +4.8% 7d
+                </>
+              ) : (
+                'Unavailable'
+              )}
             </div>
           </div>
 
           <div className="bg-neutral-900/40 border border-neutral-800 rounded-lg p-3">
             <div className="text-[11px] text-neutral-400 font-sans font-medium">T+15 Mid-Window</div>
-            <div className="text-lg font-semibold text-white mt-1 tabular-nums">{(latest.t15_index || 114.10).toFixed(2)}</div>
-            <div className="text-[11px] text-neutral-400 flex items-center gap-1 mt-0.5 tabular-nums">
-              <TrendingUp className="w-3 h-3 text-neutral-400" /> +0.6% 24h • +2.1% 7d
+            <div className="text-lg font-semibold text-white mt-1 tabular-nums">
+              {typeof latest.t15_index === 'number' ? latest.t15_index.toFixed(2) : '—'}
+            </div>
+            <div className="text-[11px] text-neutral-500 flex items-center gap-1 mt-0.5 tabular-nums">
+              {typeof latest.t15_index === 'number' ? (
+                <>
+                  <TrendingUp className="w-3 h-3 text-neutral-400" /> +0.6% 24h • +2.1% 7d
+                </>
+              ) : (
+                'Unavailable'
+              )}
             </div>
           </div>
 
           <div className="bg-neutral-900/40 border border-neutral-800 rounded-lg p-3">
             <div className="text-[11px] text-neutral-400 font-sans font-medium">T+30 Advance Base</div>
-            <div className="text-lg font-semibold text-white mt-1 tabular-nums">{(latest.t30_index || 99.40).toFixed(2)}</div>
-            <div className="text-[11px] text-neutral-400 flex items-center gap-1 mt-0.5 tabular-nums">
-              <TrendingDown className="w-3 h-3 text-neutral-400" /> -0.2% 24h • +0.4% 7d
+            <div className="text-lg font-semibold text-white mt-1 tabular-nums">
+              {typeof latest.t30_index === 'number' ? latest.t30_index.toFixed(2) : '—'}
+            </div>
+            <div className="text-[11px] text-neutral-500 flex items-center gap-1 mt-0.5 tabular-nums">
+              {typeof latest.t30_index === 'number' ? (
+                <>
+                  <TrendingDown className="w-3 h-3 text-neutral-400" /> -0.2% 24h • +0.4% 7d
+                </>
+              ) : (
+                'Unavailable'
+              )}
             </div>
           </div>
         </div>
@@ -537,31 +627,37 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-900">
-                {routes.slice(0, 5).map((route) => (
-                  <tr key={route.route_code} className="hover:bg-neutral-900/40 transition-colors">
-                    <td className="py-2.5 font-sans font-medium text-white">
-                      {route.origin} → {route.destination}
-                      <span className="block text-[10px] text-neutral-400 font-normal">
-                        {route.origin_city} - {route.destination_city}
-                      </span>
-                    </td>
-                    <td className="py-2.5 text-right tabular-nums text-neutral-300">{(((route.weight ?? 0.1)) * 100).toFixed(1)}%</td>
-                    <td className="py-2.5 text-right tabular-nums text-white">
-                      ₹{getMedianFare(route).toLocaleString('en-IN')}
-                    </td>
-                    <td className="py-2.5 text-right tabular-nums text-white font-semibold">{(route.current_index ?? 100).toFixed(1)}</td>
-                    <td className="py-2.5 text-right tabular-nums text-neutral-400">
-                      <span>
-                        {(route.change_24h ?? 0) >= 0 ? `+${route.change_24h ?? 0}%` : `${route.change_24h ?? 0}%`}
-                      </span>
-                      <span className="text-[10px] text-neutral-500 block">
-                        {route.change_7d !== undefined && route.change_7d !== null
-                          ? (route.change_7d >= 0 ? `+${route.change_7d}%` : `${route.change_7d}%`)
-                          : '—'} 7d
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {routes.slice(0, 5).map((route) => {
+                  const fare = getMedianFare(route);
+                  const hasWeight = typeof route.weight === 'number' && route.weight > 0;
+                  return (
+                    <tr key={route.route_code} className="hover:bg-neutral-900/40 transition-colors">
+                      <td className="py-2.5 font-sans font-medium text-white">
+                        {route.origin} → {route.destination}
+                        <span className="block text-[10px] text-neutral-400 font-normal">
+                          {route.origin_city} - {route.destination_city}
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-right tabular-nums text-neutral-300">
+                        {hasWeight ? `${(route.weight! * 100).toFixed(1)}%` : '—'}
+                      </td>
+                      <td className="py-2.5 text-right tabular-nums text-white">
+                        {fare != null ? `₹${fare.toLocaleString('en-IN')}` : '—'}
+                      </td>
+                      <td className="py-2.5 text-right tabular-nums text-white font-semibold">{(route.current_index ?? 100).toFixed(1)}</td>
+                      <td className="py-2.5 text-right tabular-nums text-neutral-400">
+                        <span>
+                          {(route.change_24h ?? 0) >= 0 ? `+${route.change_24h ?? 0}%` : `${route.change_24h ?? 0}%`}
+                        </span>
+                        <span className="text-[10px] text-neutral-500 block">
+                          {route.change_7d !== undefined && route.change_7d !== null
+                            ? (route.change_7d >= 0 ? `+${route.change_7d}%` : `${route.change_7d}%`)
+                            : '—'} 7d
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
