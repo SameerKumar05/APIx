@@ -1,7 +1,7 @@
 """APIx Cycle 2 End-to-End Pipeline Integration Test Suite.
 
 Validates the full vertical data pipeline:
-1. Generates 40 synthetic route-window fare records via SyntheticCrawler.
+1. Generates one synthetic fare record per route-window slot via SyntheticCrawler.
 2. Posts batch to POST /api/v1/ingestion/batch with X-Ingestion-Key authentication.
 3. Asserts records are inserted into database raw_fares table with deduplication.
 4. Runs statistical index pipeline to compute daily indices and anomaly alerts.
@@ -103,7 +103,7 @@ class TestEndToEndPipeline:
         target_time = datetime.now(timezone.utc).replace(hour=6, minute=0, second=0, microsecond=0)
 
         # ------------------------------------------------------------------
-        # Step 1: Generate 40 synthetic route-window fare records via SyntheticCrawler
+        # Step 1: Generate one synthetic fare record per route-window slot
         # ------------------------------------------------------------------
         crawler = SyntheticCrawler(seed=42)
         raw_records = crawler.generate_40_route_window_records(
@@ -112,13 +112,16 @@ class TestEndToEndPipeline:
             capture_time=target_time.replace(tzinfo=None),
         )
 
-        assert len(raw_records) == 40, f"Expected 40 records, generated {len(raw_records)}"
+        expected_records = len(DEFAULT_ROUTES) * len(BOOKING_WINDOWS)
+        assert len(raw_records) == expected_records, (
+            f"Expected {expected_records} records, generated {len(raw_records)}"
+        )
 
-        # Validate that exactly 10 distinct routes and 4 windows are covered
+        # Validate that every configured route and window is covered
         pairs_covered = {(r.origin, r.destination) for r in raw_records}
         windows_covered = {r.booking_window for r in raw_records}
-        assert len(pairs_covered) == 10
-        assert len(windows_covered) == 4
+        assert len(pairs_covered) == len(DEFAULT_ROUTES)
+        assert windows_covered == {w.code for w in BOOKING_WINDOWS}
 
         # Seed a 3-sigma outlier for Step 6:
         # Increase fare on DEL->BOM (T+1 window) to an extreme surge (INR 25,000)
@@ -151,14 +154,16 @@ class TestEndToEndPipeline:
         assert post_response.status_code == 200, f"Batch post failed: {post_response.text}"
         batch_resp_data = post_response.json()
         assert batch_resp_data["status"] == "success"
-        assert batch_resp_data["records_received"] == 40
-        assert batch_resp_data["records_valid"] == 40
+        assert batch_resp_data["records_received"] == expected_records
+        assert batch_resp_data["records_valid"] == expected_records
 
         # ------------------------------------------------------------------
         # Step 3: Assert records are inserted into database raw_fares table
         # ------------------------------------------------------------------
         raw_fare_count = pipeline_db_session.scalar(select(func.count(RawFare.id)))
-        assert raw_fare_count == 40, f"Expected 40 raw_fares in DB, found {raw_fare_count}"
+        assert raw_fare_count == expected_records, (
+            f"Expected {expected_records} raw_fares in DB, found {raw_fare_count}"
+        )
 
         # Verify seeded outlier is in raw_fares table
         outlier_db_record = pipeline_db_session.execute(
@@ -177,7 +182,7 @@ class TestEndToEndPipeline:
             json={"batch_id": f"{batch_id}-replay", "source": "synthetic", "records": api_records_payload},
         )
         assert replay_response.status_code == 200
-        assert pipeline_db_session.scalar(select(func.count(RawFare.id))) == 40
+        assert pipeline_db_session.scalar(select(func.count(RawFare.id))) == expected_records
 
         # ------------------------------------------------------------------
         # Pre-seed 30-day baseline for DEL->BOM to calculate Z-score outlier

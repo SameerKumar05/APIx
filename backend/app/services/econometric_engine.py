@@ -30,9 +30,10 @@ from typing import Any
 
 DEFAULT_LEAD_TIME_PAX_SHARES: dict[str, float] = {
     "T+1": 0.20,   # 1-day advance (urgent / business / emergency)
-    "T+7": 0.35,   # 7-day advance (short-lead standard)
-    "T+15": 0.30,  # 15-day advance (planned leisure)
-    "T+30": 0.15,  # 30-day advance (early bird / holiday)
+    "T+7": 0.32,   # 7-day advance (short-lead standard)
+    "T+15": 0.26,  # 15-day advance (planned leisure)
+    "T+30": 0.14,  # 30-day advance (early bird / holiday)
+    "T+45": 0.08,  # 45-day advance (far-planned / corporate travel policy)
 }
 
 # Empirical civil aviation advance purchase days corresponding to canonical windows
@@ -45,6 +46,8 @@ CANONICAL_WINDOW_DAYS: dict[str, int] = {
     "T15": 15,
     "T+30": 30,
     "T30": 30,
+    "T+45": 45,
+    "T45": 45,
 }
 
 # MoSPI Transport Sub-Index benchmark calibration (Base 2012=100, rebased to 2026=100)

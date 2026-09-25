@@ -86,6 +86,8 @@ def _normalize_fare_record(
                 booking_window = "T+15"
             elif bw_clean in ("T30", "T+30"):
                 booking_window = "T+30"
+            elif bw_clean in ("T45", "T+45"):
+                booking_window = "T+45"
             else:
                 booking_window = bw_clean
     else:

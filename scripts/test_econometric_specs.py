@@ -397,7 +397,7 @@ def test_section_2_substitution_bias_and_bortkiewicz_bounds() -> None:
 
 def test_section_3_advance_purchase_price_elasticity_curves() -> None:
     """Test 3: Validate advance booking price elasticity curves E_d across T+1 -> T+30."""
-    horizons = ["T+1", "T+7", "T+15", "T+30"]
+    horizons = ["T+1", "T+7", "T+15", "T+30", "T+45"]
     lead_days = [1, 7, 15, 30]
 
     # Evaluate continuous logistic elasticity across advance horizons

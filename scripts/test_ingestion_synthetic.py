@@ -142,7 +142,7 @@ def run_verification() -> None:
     avg_fares = {}
     print(f"      {'Window':<8} | {'Flights':<8} | {'Min Fare (₹)':<14} | {'Avg Fare (₹)':<14} | {'Max Fare (₹)':<14}")
     print("      " + "-" * 66)
-    for win in ["T+1", "T+7", "T+15", "T+30"]:
+    for win in ["T+1", "T+7", "T+15", "T+30", "T+45"]:
         fares = window_fares[win]
         avg = sum(fares) / len(fares)
         avg_fares[win] = avg

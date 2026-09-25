@@ -70,7 +70,7 @@ def generate_mock_records(
         ("BOM", "BLR"),
     ]
     airlines = ["6E", "AI", "IX", "QP", "SG"]
-    windows = ["T+1", "T+7", "T+15", "T+30"]
+    windows = ["T+1", "T+7", "T+15", "T+30", "T+45"]
 
     effective_date = base_date or (date(2026, 10, 1) + timedelta(days=days_offset))
     now_utc = datetime.now(timezone.utc) - timedelta(days=abs(days_offset))

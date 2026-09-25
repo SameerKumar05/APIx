@@ -408,13 +408,14 @@ class TestIngestionOrchestratorMultiSource(unittest.TestCase):
             self.assertEqual(rec.source, "makemytrip")
 
     def test_orchestrator_dry_run_multi_source_all_slots(self) -> None:
-        """Tests full 40-slot dry run in multi-source mode."""
+        """Tests a full routes x windows dry run in multi-source mode."""
         summary = self.orchestrator.run_all_slots(dry_run=True)
-        self.assertEqual(summary.total_slots, 40)
-        self.assertEqual(summary.successful_slots, 40)
+        expected_slots = len(DEFAULT_ROUTES) * len(BOOKING_WINDOWS)
+        self.assertEqual(summary.total_slots, expected_slots)
+        self.assertEqual(summary.successful_slots, expected_slots)
         self.assertEqual(summary.failed_slots, 0)
         self.assertEqual(summary.backend_status, "skipped_dry_run")
-        self.assertEqual(len(summary.slots), 40)
+        self.assertEqual(len(summary.slots), len(DEFAULT_ROUTES) * len(BOOKING_WINDOWS))
         self.assertGreater(summary.total_records_collected, 400)
 
 

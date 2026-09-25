@@ -35,11 +35,10 @@ class TestIngestionConfig(unittest.TestCase):
             self.assertGreater(route.typical_duration_min, 60)
 
     def test_booking_windows(self):
-        self.assertEqual(len(BOOKING_WINDOWS), 4)
         codes = [w.code for w in BOOKING_WINDOWS]
-        self.assertEqual(codes, ["T+1", "T+7", "T+15", "T+30"])
+        self.assertEqual(codes, ["T+1", "T+7", "T+15", "T+30", "T+45"])
         advances = [w.days_advance for w in BOOKING_WINDOWS]
-        self.assertEqual(advances, [1, 7, 15, 30])
+        self.assertEqual(advances, [1, 7, 15, 30, 45])
 
 
 class TestBaseScraperNormalizers(unittest.TestCase):
@@ -259,12 +258,13 @@ class TestIngestionOrchestrator(unittest.TestCase):
 
     def test_orchestrator_dry_run_all_slots(self):
         summary = self.orchestrator.run_all_slots(dry_run=True)
-        self.assertEqual(summary.total_slots, 40)
-        self.assertEqual(summary.successful_slots, 40)
+        expected_slots = len(DEFAULT_ROUTES) * len(BOOKING_WINDOWS)
+        self.assertEqual(summary.total_slots, expected_slots)
+        self.assertEqual(summary.successful_slots, expected_slots)
         self.assertEqual(summary.failed_slots, 0)
         self.assertGreater(summary.total_records_collected, 150)
         self.assertEqual(summary.backend_status, "skipped_dry_run")
-        self.assertEqual(len(summary.slots), 40)
+        self.assertEqual(len(summary.slots), len(DEFAULT_ROUTES) * len(BOOKING_WINDOWS))
 
 if __name__ == "__main__":
     unittest.main()

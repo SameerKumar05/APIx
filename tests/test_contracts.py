@@ -377,12 +377,12 @@ class TestMasterDataAlignment:
         )  # 99% covered domestic carriers
 
     def test_booking_windows_standardization(self) -> None:
-        """The 4 standard booking windows (T+1, T+7, T+15, T+30) match across subsystems."""
+        """The 5 standard booking windows (T+1, T+7, T+15, T+30, T+45) match across subsystems."""
         codes = [w.code for w in BOOKING_WINDOWS]
-        assert codes == ["T+1", "T+7", "T+15", "T+30"]
+        assert codes == ["T+1", "T+7", "T+15", "T+30", "T+45"]
 
         days = [w.days_advance for w in BOOKING_WINDOWS]
-        assert days == [1, 7, 15, 30]
+        assert days == [1, 7, 15, 30, 45]
 
         # Quant engine weights sum to 1.0
         window_weights_sum = sum(DEFAULT_BOOKING_WINDOW_WEIGHTS.values())

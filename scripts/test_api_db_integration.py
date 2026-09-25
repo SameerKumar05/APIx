@@ -99,7 +99,7 @@ def test_batch_ingestion_and_db_persistence():
     
     # 4 monitored corridors x 4 canonical booking windows x 2 airlines = 32 fare quotes
     for orig, dest in [("DEL", "BOM"), ("BOM", "DEL"), ("BLR", "DEL"), ("DEL", "BLR")]:
-        for win in ["T+1", "T+7", "T+15", "T+30"]:
+        for win in ["T+1", "T+7", "T+15", "T+30", "T+45"]:
             for carrier, fno, fare in [("6E", f"6E-{win}01", 5000.0), ("AI", f"AI-{win}02", 5200.0)]:
                 records.append({
                     "airline_code": carrier,

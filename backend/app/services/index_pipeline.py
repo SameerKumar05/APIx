@@ -83,7 +83,7 @@ DEFAULT_WINDOW_WEIGHTS: dict[str, float] = {
 }
 
 # Canonical 4 advance booking purchase windows
-CANONICAL_WINDOWS: list[str] = ["T+1", "T+7", "T+15", "T+30"]
+CANONICAL_WINDOWS: list[str] = ["T+1", "T+7", "T+15", "T+30", "T+45"]
 
 # Mapping to canonical window tags
 WINDOW_NORM_MAP: dict[str, str] = {
