@@ -155,7 +155,7 @@ def _normalize_fare_record(
     source_platform = str(
         data.get("source_platform") or data.get("source") or "synthetic"
     ).strip()
-    is_synthetic = bool(data.get("is_synthetic", False) or source_platform.lower() == "synthetic")
+    is_synthetic = source_platform.lower() == "synthetic" or bool(data.get("is_synthetic", True))
 
     # Hash dedup
     hash_id = str(data.get("hash_id") or data.get("dedup_hash") or "").strip()
@@ -476,7 +476,7 @@ def cleanup_old_raw_fares(
             RawFare.flight_date < cutoff_date,
         )
     )
-    res = db.execute(stmt)
+    res = db.execute(stmt.execution_options(synchronize_session="fetch"))
     pruned_count = res.rowcount if res.rowcount is not None and res.rowcount >= 0 else 0
 
     if commit:

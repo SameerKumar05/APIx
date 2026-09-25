@@ -2,6 +2,7 @@
 
 from backend.app.models.airline import Airline
 from backend.app.models.anomaly import AnomalyAlert
+from backend.app.models.crawler_job import CrawlerJob, WorkerHeartbeat
 from backend.app.models.econometrics import (
     DgcaTrafficWeight,
     DgcaViolation,
@@ -14,13 +15,6 @@ from backend.app.models.raw_fare import RawFare
 from backend.app.models.route import Route
 from backend.app.models.scraping import ScrapingRun
 from backend.app.models.telemetry import ProxyHealthRecord, ScraperTelemetry
-from backend.app.models.econometrics import (
-    DgcaTrafficWeight,
-    DgcaViolation,
-    EconometricIndex,
-    MospiCpiSeries,
-    RouteElasticity,
-)
 
 __all__ = [
     "Route",
@@ -37,4 +31,6 @@ __all__ = [
     "RouteElasticity",
     "DgcaViolation",
     "DgcaTrafficWeight",
+    "CrawlerJob",
+    "WorkerHeartbeat",
 ]
