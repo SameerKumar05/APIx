@@ -151,23 +151,30 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
 
   const barChartData = useMemo(() => {
     return [...routes]
-      .sort((a, b) => (b.weight ?? 0.1) - (a.weight ?? 0.1))
+      .sort((a, b) => ((b.weight && b.weight > 0 ? b.weight : 0)) - ((a.weight && a.weight > 0 ? a.weight : 0)))
       .map((r) => {
-        const rAny = r as unknown as Record<string, number | undefined>;
         const currentIdx = r.current_index ?? 100.0;
         const natl = nationalIndex ?? 100.0;
-        const w = r.weight ?? 0.1;
+        const w = (typeof r.weight === 'number' && r.weight > 0) ? r.weight : undefined;
+        const fare = (typeof r.median_fare_inr === 'number' && r.median_fare_inr > 0)
+          ? r.median_fare_inr
+          : (typeof r.avg_fare_inr === 'number' && r.avg_fare_inr > 0)
+          ? r.avg_fare_inr
+          : 0;
         return {
           route: r.route_code,
           index: currentIdx,
           diff: Number((currentIdx - natl).toFixed(1)),
-          weight: (w * 100).toFixed(1),
-          fare: r.median_fare_inr ?? rAny.median_fare ?? 0,
+          weight: w !== undefined ? (w * 100).toFixed(1) : undefined,
+          fare,
         };
       });
   }, [routes, nationalIndex]);
 
-  const totalMonitoredWeight = routes.reduce((acc, r) => acc + (r.weight ?? 0.1), 0);
+  const hasWeights = routes.some((r) => typeof r.weight === 'number' && r.weight > 0);
+  const totalMonitoredWeight = hasWeights
+    ? routes.reduce((acc, r) => acc + (typeof r.weight === 'number' && r.weight > 0 ? r.weight : 0), 0)
+    : undefined;
 
   return (
     <div className="space-y-6">
@@ -180,7 +187,9 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                 DGCA High-Density Domestic Trunk Corridors
               </h2>
               <span className="text-xs px-2.5 py-0.5 rounded border border-neutral-800 bg-neutral-900 text-neutral-300 font-mono tabular-nums">
-                10 Corridors • {(totalMonitoredWeight * 100).toFixed(1)}% Traffic Share
+                {totalMonitoredWeight !== undefined
+                  ? `${routes.length} Corridors • ${(totalMonitoredWeight * 100).toFixed(1)}% Traffic Share`
+                  : `${routes.length} Corridors`}
               </span>
             </div>
             <p className="text-xs text-neutral-400 mt-1 max-w-2xl leading-relaxed">
@@ -281,6 +290,7 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                   fontFamily: 'monospace',
                   color: '#e5e5e5',
                 }}
+                labelStyle={{ color: '#ffffff' }}
                 formatter={(val: unknown) => [
                   typeof val === 'number' ? val.toFixed(1) : String(val),
                   'Index Value',
@@ -421,10 +431,14 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                 const hasAnomalies = routeAlerts.length > 0 || ((route.anomaly_count ?? 0) > 0);
                 const isSurge = route.change_24h > 1.0;
 
-                const rAny = route as unknown as Record<string, number | undefined>;
-                const medianFare = route.median_fare_inr ?? rAny.median_fare ?? rAny.avg_fare_inr ?? 0;
-                const minFare = route.min_fare_inr ?? rAny.min_fare ?? 0;
-                const maxFare = route.max_fare_inr ?? rAny.max_fare ?? 0;
+                const fareValue = (typeof route.median_fare_inr === 'number' && route.median_fare_inr > 0)
+                  ? route.median_fare_inr
+                  : (typeof route.avg_fare_inr === 'number' && route.avg_fare_inr > 0)
+                  ? route.avg_fare_inr
+                  : undefined;
+                const hasMin = typeof route.min_fare_inr === 'number' && route.min_fare_inr > 0;
+                const hasMax = typeof route.max_fare_inr === 'number' && route.max_fare_inr > 0;
+                const hasWeight = typeof route.weight === 'number' && route.weight > 0;
 
                 return (
                   <tr
@@ -447,32 +461,40 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                         </span>
                       </div>
                       <div className="text-[11px] text-neutral-500 font-mono mt-0.5">
-                        {route.origin}–{route.destination} • {route.distance_km ?? 1150} km • {route.active_airlines_count || 4} airlines
+                        {route.origin}–{route.destination} • {route.distance_km ? `${route.distance_km} km` : '—'} • {route.active_flights_tracked !== undefined ? `${route.active_flights_tracked} flights` : route.active_airlines_count ? `${route.active_airlines_count} airlines` : '—'}
                       </div>
                     </td>
 
                     {/* DGCA Weight (Right) */}
                     <td className="py-3 px-4 text-right font-mono tabular-nums">
-                      <div className="flex items-center justify-end gap-2">
-                        <div className="w-14 bg-neutral-900 border border-neutral-800 rounded-sm h-1 overflow-hidden hidden sm:block">
-                          <div
-                            className="bg-neutral-400 h-full rounded-sm"
-                            style={{ width: `${Math.min(100, (((route.weight ?? 0.1)) / 0.16) * 100)}%` }}
-                          />
+                      {hasWeight ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-14 bg-neutral-900 border border-neutral-800 rounded-sm h-1 overflow-hidden hidden sm:block">
+                            <div
+                              className="bg-neutral-400 h-full rounded-sm"
+                              style={{ width: `${Math.min(100, (route.weight! / 0.16) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="font-medium text-neutral-200">
+                            {(route.weight! * 100).toFixed(1)}%
+                          </span>
                         </div>
-                        <span className="font-medium text-neutral-200">
-                          {((route.weight ?? 0.1) * 100).toFixed(1)}%
-                        </span>
-                      </div>
+                      ) : (
+                        <span className="text-neutral-500 font-mono text-[11px]">—</span>
+                      )}
                     </td>
 
                     {/* Median Fare (Right) */}
                     <td className="py-3 px-4 text-right font-mono tabular-nums">
                       <div className="font-semibold text-white">
-                        ₹{medianFare.toLocaleString('en-IN')}
+                        {fareValue !== undefined ? `₹${fareValue.toLocaleString('en-IN')}` : '—'}
                       </div>
                       <div className="text-[10px] text-neutral-500 mt-0.5">
-                        ₹{minFare.toLocaleString('en-IN')} – ₹{maxFare.toLocaleString('en-IN')}
+                        {hasMin && hasMax
+                          ? `₹${route.min_fare_inr!.toLocaleString('en-IN')} – ₹${route.max_fare_inr!.toLocaleString('en-IN')}`
+                          : hasMin
+                          ? `From ₹${route.min_fare_inr!.toLocaleString('en-IN')}`
+                          : '—'}
                       </div>
                     </td>
 
@@ -501,7 +523,7 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                     {/* 7-Day Sparkline (Right) */}
                     <td className="py-3 px-4 text-right">
                       <Sparkline
-                        data={route.sparkline_7d || [medianFare * 0.96, medianFare]}
+                        data={route.sparkline_7d && route.sparkline_7d.length >= 2 ? route.sparkline_7d : undefined}
                         isSurge={isSurge}
                       />
                     </td>
@@ -550,12 +572,10 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                 </span>
               </div>
               {(() => {
-                const selAny = selectedRoute as unknown as Record<string, number | undefined>;
-                const selSampleSize = selectedRoute.sample_size ?? selAny.active_flights_tracked ?? 0;
+                const selSampleSize = selectedRoute.sample_size ?? selectedRoute.active_flights_tracked;
                 return (
                   <p className="text-xs text-neutral-500 font-mono mt-0.5">
-                    Detailed corridor telemetry • Sample size:{' '}
-                    {selSampleSize.toLocaleString()} observations
+                    Detailed corridor telemetry • {selSampleSize !== undefined ? `${selSampleSize.toLocaleString()} observations tracked` : 'Observations unavailable'}
                   </p>
                 );
               })()}
@@ -570,17 +590,21 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
           </div>
 
           {(() => {
-            const selAny = selectedRoute as unknown as Record<string, number | undefined>;
-            const selMedianFare = selectedRoute.median_fare_inr ?? selAny.median_fare ?? 0;
-            const selMinFare = selectedRoute.min_fare_inr ?? selAny.min_fare ?? 0;
-            const selMaxFare = selectedRoute.max_fare_inr ?? selAny.max_fare ?? 0;
+            const selFare = (typeof selectedRoute.median_fare_inr === 'number' && selectedRoute.median_fare_inr > 0)
+              ? selectedRoute.median_fare_inr
+              : (typeof selectedRoute.avg_fare_inr === 'number' && selectedRoute.avg_fare_inr > 0)
+              ? selectedRoute.avg_fare_inr
+              : undefined;
+            const hasSelMin = typeof selectedRoute.min_fare_inr === 'number' && selectedRoute.min_fare_inr > 0;
+            const hasSelMax = typeof selectedRoute.max_fare_inr === 'number' && selectedRoute.max_fare_inr > 0;
+            const hasSelWeight = typeof selectedRoute.weight === 'number' && selectedRoute.weight > 0;
 
             return (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="bg-neutral-900/40 p-3.5 rounded border border-neutral-800">
                   <span className="text-[11px] text-neutral-400 uppercase font-mono">DGCA Passenger Share</span>
                   <div className="text-base font-semibold text-white font-mono tabular-nums mt-1">
-                    {((selectedRoute.weight ?? 0.1) * 100).toFixed(2)}%
+                    {hasSelWeight ? `${(selectedRoute.weight! * 100).toFixed(2)}%` : '—'}
                   </div>
                   <span className="text-[10px] text-neutral-500">Trunk Corridor Priority</span>
                 </div>
@@ -588,10 +612,14 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                 <div className="bg-neutral-900/40 p-3.5 rounded border border-neutral-800">
                   <span className="text-[11px] text-neutral-400 uppercase font-mono">Representative Fare Band</span>
                   <div className="text-base font-semibold text-white font-mono tabular-nums mt-1">
-                    ₹{selMedianFare.toLocaleString('en-IN')}
+                    {selFare !== undefined ? `₹${selFare.toLocaleString('en-IN')}` : '—'}
                   </div>
                   <span className="text-[10px] text-neutral-500">
-                    Floor ₹{selMinFare.toLocaleString('en-IN')} • Ceiling ₹{selMaxFare.toLocaleString('en-IN')}
+                    {hasSelMin && hasSelMax
+                      ? `Floor ₹${selectedRoute.min_fare_inr!.toLocaleString('en-IN')} • Ceiling ₹${selectedRoute.max_fare_inr!.toLocaleString('en-IN')}`
+                      : hasSelMin
+                      ? `Floor ₹${selectedRoute.min_fare_inr!.toLocaleString('en-IN')} • Ceiling Unavailable`
+                      : 'Range unavailable'}
                   </span>
                 </div>
 
