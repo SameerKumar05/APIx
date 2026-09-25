@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import random
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
@@ -17,27 +16,6 @@ logger = logging.getLogger("apix.api.stream")
 
 router = APIRouter()
 
-# Benchmark domestic corridors and airlines for live stream synthesis
-BENCHMARK_ROUTES = [
-    ("DEL", "BOM", "DEL-BOM", 5000.0),
-    ("BOM", "DEL", "BOM-DEL", 4950.0),
-    ("DEL", "BLR", "DEL-BLR", 6200.0),
-    ("BLR", "DEL", "BLR-DEL", 6150.0),
-    ("BOM", "BLR", "BOM-BLR", 4200.0),
-    ("BLR", "BOM", "BLR-BOM", 4150.0),
-    ("DEL", "HYD", "DEL-HYD", 5100.0),
-    ("HYD", "DEL", "HYD-DEL", 5050.0),
-    ("DEL", "CCU", "DEL-CCU", 5400.0),
-    ("CCU", "DEL", "CCU-DEL", 5350.0),
-]
-
-CARRIERS = [
-    ("6E", "IndiGo", ["6E-205", "6E-501", "6E-182", "6E-344"]),
-    ("AI", "Air India", ["AI-806", "AI-665", "AI-102", "AI-504"]),
-    ("SG", "SpiceJet", ["SG-8169", "SG-123", "SG-456"]),
-    ("UK", "Vistara", ["UK-995", "UK-823", "UK-772"]),
-    ("QP", "Akasa Air", ["QP-1102", "QP-1354", "QP-1401"]),
-]
 CARRIER_MAP: dict[str, str] = {
     "6E": "IndiGo",
     "AI": "Air India",
@@ -46,9 +24,6 @@ CARRIER_MAP: dict[str, str] = {
     "SG": "SpiceJet",
     "UK": "Vistara",
 }
-
-SOURCES = ["makemytrip", "easemytrip", "spicejet", "airline_direct", "cleartrip"]
-
 
 def load_real_fares_from_db(limit: int = 50) -> list[dict[str, Any]]:
     """Query authentic flight quotes persisted in raw_fares database."""
@@ -98,6 +73,7 @@ def load_real_fares_from_db(limit: int = 50) -> list[dict[str, Any]]:
                         "departure_datetime": dep_dt,
                         "booking_datetime": scraped_dt,
                         "timestamp": scraped_dt,
+                        "is_synthetic": bool(r.is_synthetic),
                     }
                 )
             return list(reversed(items))
@@ -110,8 +86,6 @@ def load_real_fares_from_db(limit: int = 50) -> list[dict[str, Any]]:
 
 def fetch_new_raw_fares_since(last_id: int, limit: int = 10) -> list[dict[str, Any]]:
     """Poll for newly inserted authentic flight quotes with id > last_id."""
-    if last_id <= 0:
-        return []
     try:
         from sqlalchemy import asc
 
@@ -159,6 +133,7 @@ def fetch_new_raw_fares_since(last_id: int, limit: int = 10) -> list[dict[str, A
                         "departure_datetime": dep_dt,
                         "booking_datetime": scraped_dt,
                         "timestamp": scraped_dt,
+                        "is_synthetic": bool(r.is_synthetic),
                     }
                 )
             return items
@@ -184,6 +159,7 @@ class LiveFareTickerItem(BaseModel):
     departure_datetime: str
     booking_datetime: str
     timestamp: str
+    is_synthetic: bool = False
 
 
 class StreamStatusResponse(BaseModel):
@@ -208,47 +184,17 @@ class ConnectionManager:
         self.start_time = time.time()
         self._lock = asyncio.Lock()
 
-        # Seed initial buffer with realistic live fares
         self._seed_initial_buffer()
 
     def _seed_initial_buffer(self) -> None:
-        """Pre-populate recent buffer with real quotes from raw_fares DB, supplemented with benchmark quotes."""
+        """Pre-populate the recent buffer from persisted raw_fares rows only."""
         real_quotes = load_real_fares_from_db(limit=self.max_buffer_size)
         if real_quotes:
             self.recent_fares.extend(real_quotes)
-            logger.info("Seeded streaming buffer with %d authentic quotes from raw_fares database", len(real_quotes))
-
-        # Ensure buffer always has at least 25 quotes for initial ticker clients
-        needed = 25 - len(self.recent_fares)
-        if needed > 0:
-            now = datetime.now(UTC)
-            for i in range(needed):
-                orig, dest, route, base_fare = random.choice(BENCHMARK_ROUTES)
-                carrier_code, carrier_name, flights = random.choice(CARRIERS)
-                flight_num = random.choice(flights)
-                src = random.choice(SOURCES)
-                delta_pct = random.uniform(-0.15, 0.25)
-                fare = round(base_fare * (1.0 + delta_pct), 2)
-                dept_time = (now + timedelta(days=random.choice([1, 2, 7, 14, 30]))).replace(
-                    hour=random.randint(5, 22), minute=random.choice([0, 15, 30, 45]), second=0
-                )
-                fare_item = {
-                    "type": "fare_update",
-                    "fare_id": f"fare-{i + 1:04d}",
-                    "airline_code": carrier_code,
-                    "airline_name": carrier_name,
-                    "flight_number": flight_num,
-                    "origin": orig,
-                    "destination": dest,
-                    "route_code": route,
-                    "fare_inr": fare,
-                    "source": src,
-                    "cabin_class": "economy",
-                    "departure_datetime": dept_time.isoformat(),
-                    "booking_datetime": (now - timedelta(seconds=random.randint(10, 3600))).isoformat(),
-                    "timestamp": now.isoformat(),
-                }
-                self.recent_fares.insert(0, fare_item)
+            logger.info(
+                "Seeded streaming buffer with %d authentic quotes from raw_fares database",
+                len(real_quotes),
+            )
 
     async def connect(self, websocket: WebSocket) -> None:
         """Accept new WebSocket connection and register."""
@@ -313,37 +259,6 @@ class ConnectionManager:
 
 # Global singleton connection manager
 manager = ConnectionManager(max_buffer_size=100)
-
-
-def generate_live_fare_packet() -> dict[str, Any]:
-    """Generate a realistic live domestic fare update packet."""
-    now = datetime.now(UTC)
-    orig, dest, route, base_fare = random.choice(BENCHMARK_ROUTES)
-    carrier_code, carrier_name, flights = random.choice(CARRIERS)
-    flight_num = random.choice(flights)
-    src = random.choice(SOURCES)
-    delta_pct = random.uniform(-0.15, 0.25)
-    fare = round(base_fare * (1.0 + delta_pct), 2)
-    dept_time = (now + timedelta(days=random.choice([1, 2, 7, 14]))).replace(
-        hour=random.randint(5, 22), minute=random.choice([0, 15, 30, 45]), second=0
-    )
-
-    return {
-        "type": "fare_update",
-        "fare_id": f"fare-{int(time.time() * 1000) % 100000:05d}",
-        "airline_code": carrier_code,
-        "airline_name": carrier_name,
-        "flight_number": flight_num,
-        "origin": orig,
-        "destination": dest,
-        "route_code": route,
-        "fare_inr": fare,
-        "source": src,
-        "cabin_class": "economy",
-        "departure_datetime": dept_time.isoformat(),
-        "booking_datetime": now.isoformat(),
-        "timestamp": now.isoformat(),
-    }
 
 
 @router.websocket("")
@@ -437,9 +352,14 @@ async def websocket_fares_stream(websocket: WebSocket):
                         except Exception:
                             pass
                 else:
-                    # Continuous live tick
-                    live_tick = generate_live_fare_packet()
-                    await manager.broadcast(live_tick)
+                    await manager.send_personal_message(
+                        {
+                            "type": "no_update",
+                            "message": "No new persisted raw fare quotes",
+                            "timestamp": datetime.now(UTC).isoformat(),
+                        },
+                        websocket,
+                    )
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
     except Exception as e:
