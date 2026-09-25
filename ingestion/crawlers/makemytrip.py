@@ -499,6 +499,11 @@ class MakeMyTripScraper(BaseScraper):
             raise RuntimeError("playwright.sync_api is not installed")
 
         search_url = self.build_search_url(origin, destination, target_date)
+
+        denial = self.robots_gate(search_url)
+        if denial is not None:
+            logger.warning("robots.txt blocked %s scrape: %s", self.BASE_URL, denial)
+            return []
         collected_records: List[RawFareRecord] = []
         capture_time = datetime.now(timezone.utc)
 

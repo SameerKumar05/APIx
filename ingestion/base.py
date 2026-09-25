@@ -111,6 +111,32 @@ class BaseScraper(abc.ABC):
     def __init__(self, config: Optional[IngestionConfig] = None) -> None:
         self.config = config or IngestionConfig()
 
+    def robots_policy(self) -> "RobotsPolicy":
+        """Policy for this scraper's origin, resolved once per agent per config."""
+        from ingestion.robots import cached_policy
+
+        base_url = getattr(self, "BASE_URL", "") or ""
+        return cached_policy(base_url, self.config, self.config.robots_user_agent)
+
+    def robots_gate(self, url: str) -> Optional[str]:
+        """Authorise one request against the origin's robots.txt.
+
+        Returns a denial reason when the request must not be made, otherwise None
+        after honouring the effective crawl delay. Living on the base class means a
+        new crawler cannot accidentally skip the check.
+        """
+        if not self.config.respect_robots_txt:
+            return None
+        policy = self.robots_policy()
+        if policy.is_deny_all:
+            return f"robots.txt unavailable ({policy.denial_reason})"
+        if not policy.can_fetch(url, self.config.robots_user_agent):
+            return f"robots.txt disallows {url}"
+        delay = policy.effective_delay(self.config, self.config.robots_user_agent)
+        if delay > 0:
+            time.sleep(delay)
+        return None
+
     def rate_limit_delay(self) -> None:
         """Applies configured sleep with randomized jitter to prevent anti-bot blocks."""
         delay = self.config.rate_limit_delay_seconds

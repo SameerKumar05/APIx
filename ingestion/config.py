@@ -69,7 +69,7 @@ DEFAULT_ROUTES: List[Route] = [
 # Set of valid IATA airport codes used in our routes
 VALID_IATA_CODES = frozenset({"DEL", "BOM", "BLR", "HYD", "CCU"})
 
-# 4 Standard purchase windows as required by SIH PS 26056
+# 5 Standard purchase windows as required by SIH PS 26056
 BOOKING_WINDOWS: List[BookingWindow] = [
     BookingWindow(
         code="T+1",
@@ -98,6 +98,13 @@ BOOKING_WINDOWS: List[BookingWindow] = [
         description="1-month advance booking (baseline index fare)",
         price_multiplier=1.00,
         multiplier_range=(0.95, 1.05),
+    ),
+    BookingWindow(
+        code="T+45",
+        days_advance=45,
+        description="6-week advance booking (planned early purchase)",
+        price_multiplier=0.96,
+        multiplier_range=(0.92, 1.02),
     ),
 ]
 
@@ -155,6 +162,19 @@ class IngestionConfig:
     rate_limit_jitter_seconds: float = field(
         default_factory=lambda: float(os.getenv("RATE_LIMIT_JITTER_SECONDS", "1.0"))
     )
+    respect_robots_txt: bool = field(
+        default=True,
+        metadata={"help": "Gate tier 1 crawling on the origin's robots.txt. Disable only for a documented reason."},
+    )
+    robots_user_agent: str = field(
+        default="APIxBot",
+        metadata={"help": "Token matched against robots.txt user-agent groups."},
+    )
+    robots_min_delay_seconds: float = field(
+        default=5.0,
+        metadata={"help": "Floor applied to any published crawl delay, so a permissive file cannot drive an aggressive crawl."},
+    )
+    robots_fetch_timeout_seconds: float = field(default=10.0, metadata={"help": "Timeout for the robots.txt fetch."})
     playwright_browser_executable: Optional[str] = field(
         default=None,
         metadata={
