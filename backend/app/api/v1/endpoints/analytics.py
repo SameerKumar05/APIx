@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
 import math
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import status as http_status
 from sqlalchemy import func, or_
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db
@@ -29,61 +31,6 @@ from backend.app.services.arbitrage_detector import (
 
 router = APIRouter()
 
-# Seeded realistic anomalies across Indian domestic network
-SAMPLE_ANOMALIES = [
-    AnomalyAlertItem(
-        id="anom-del-bom-001",
-        route_code="DEL-BOM",
-        airline_code="6E",
-        flight_number="6E-5312",
-        detected_at=datetime.now(timezone.utc) - timedelta(minutes=45),
-        anomaly_type="SURGE",
-        severity="HIGH",
-        observed_fare_inr=18450.0,
-        expected_fare_inr=7200.0,
-        deviation_percent=156.25,
-        status="ACTIVE",
-    ),
-    AnomalyAlertItem(
-        id="anom-bom-goi-002",
-        route_code="BOM-GOI",
-        airline_code="SG",
-        flight_number="SG-342",
-        detected_at=datetime.now(timezone.utc) - timedelta(hours=2),
-        anomaly_type="DGCA_CAP_EXCEEDED",
-        severity="CRITICAL",
-        observed_fare_inr=24500.0,
-        expected_fare_inr=8500.0,
-        deviation_percent=188.24,
-        status="ACTIVE",
-    ),
-    AnomalyAlertItem(
-        id="anom-del-blr-003",
-        route_code="DEL-BLR",
-        airline_code="AI",
-        flight_number="AI-504",
-        detected_at=datetime.now(timezone.utc) - timedelta(hours=5),
-        anomaly_type="PRICE_CRASH",
-        severity="MEDIUM",
-        observed_fare_inr=2499.0,
-        expected_fare_inr=6800.0,
-        deviation_percent=-63.25,
-        status="ACTIVE",
-    ),
-    AnomalyAlertItem(
-        id="anom-blr-hyd-004",
-        route_code="BLR-HYD",
-        airline_code="QP",
-        flight_number="QP-1311",
-        detected_at=datetime.now(timezone.utc) - timedelta(hours=8),
-        anomaly_type="FLASH_SALE",
-        severity="LOW",
-        observed_fare_inr=1850.0,
-        expected_fare_inr=3900.0,
-        deviation_percent=-52.56,
-        status="INVESTIGATING",
-    ),
-]
 
 
 @router.get(
@@ -273,30 +220,14 @@ async def get_anomalies(
                 alerts=items,
                 total_alerts=len(items),
             )
-    except Exception:
-        pass
-    # Graceful fallback to seeded realistic sample anomalies if database is unseeded
-    alerts = SAMPLE_ANOMALIES
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        ) from exc
 
-    if route_code:
-        clean_route = route_code.strip().upper()
-        alerts = [a for a in alerts if a.route_code == clean_route]
-
-    if severity:
-        clean_sev = severity.strip().upper()
-        alerts = [a for a in alerts if a.severity.upper() == clean_sev]
-
-    if status:
-        clean_status = status.strip().upper()
-        if clean_status in ("ACTIVE", "OPEN"):
-            alerts = [a for a in alerts if a.status.upper() in ("ACTIVE", "OPEN")]
-        else:
-            alerts = [a for a in alerts if a.status.upper() == clean_status]
-
-    return AnomalyAlertsResponse(
-        alerts=alerts,
-        total_alerts=len(alerts),
-    )
+    return AnomalyAlertsResponse(alerts=[], total_alerts=0)
 
 @router.get(
     "/dgca-validation",
