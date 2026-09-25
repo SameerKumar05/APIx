@@ -54,7 +54,7 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: 8000
       LOG_LEVEL: INFO
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-apix_user}:${POSTGRES_PASSWORD:-apix_password}@db:5432/${POSTGRES_DB:-apix_db}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-apix_user}:${POSTGRES_PASSWORD:-apix_password}@db:5432/${POSTGRES_DB:-apix_db}
       DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-apix_user}:${POSTGRES_PASSWORD:-apix_password}@db:5432/${POSTGRES_DB:-apix_db}
       SECRET_KEY: ${SECRET_KEY:-dev_jwt_secret_key_change_in_production_minimum_32_bytes_long}
       INGESTION_API_KEY: ${INGESTION_API_KEY:-apix-ingestion-secret-key-2026}
@@ -97,6 +97,38 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    networks:
+      - apix-network
+
+  worker:
+    container_name: apix-worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-apix_user}:${POSTGRES_PASSWORD:-apix_password}@db:5432/${POSTGRES_DB:-apix_db}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-apix_user}:${POSTGRES_PASSWORD:-apix_password}@db:5432/${POSTGRES_DB:-apix_db}
+      INGESTION_ENDPOINT_URL: http://backend:8000
+      API_BASE_URL: http://backend:8000
+      INGESTION_API_KEY: ${INGESTION_API_KEY:-apix-ingestion-secret-key-2026}
+      AMADEUS_CLIENT_ID: ${AMADEUS_CLIENT_ID:-}
+      AMADEUS_CLIENT_SECRET: ${AMADEUS_CLIENT_SECRET:-}
+      INGESTION_MODE: synthetic
+      SCRAPER_SOURCES: synthetic
+      PLAYWRIGHT_HEADLESS: "true"
+      PYTHONPATH: /app
+    command: ["python", "-m", "ingestion.worker"]
+    # The backend image HEALTHCHECK curls :8000/health. This process is the worker.
+    healthcheck:
+      disable: true
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
     networks:
       - apix-network
 
