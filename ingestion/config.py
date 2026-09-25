@@ -155,6 +155,14 @@ class IngestionConfig:
     rate_limit_jitter_seconds: float = field(
         default_factory=lambda: float(os.getenv("RATE_LIMIT_JITTER_SECONDS", "1.0"))
     )
+    playwright_browser_executable: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Path to a Chromium binary to drive instead of Playwright's bundled build. "
+            "Akamai rejects the bundled build with ERR_HTTP2_PROTOCOL_ERROR but accepts the "
+            "system build. Auto-detected when left unset."
+        },
+    )
     playwright_headless: bool = field(
         default_factory=lambda: os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() == "true"
     )

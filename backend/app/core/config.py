@@ -22,8 +22,15 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
-        "*",
     ]
+
+    @field_validator("BACKEND_CORS_ORIGINS")
+    @classmethod
+    def reject_wildcard_cors_origins(cls, origins: list[str]) -> list[str]:
+        """Reject wildcard origins when credentialed CORS is enabled."""
+        if "*" in origins:
+            raise ValueError("Wildcard CORS origins are not allowed")
+        return origins
 
     # Database
     DATABASE_URL: str = "sqlite:///./apix.db"
