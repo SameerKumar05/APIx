@@ -185,8 +185,18 @@ class AmadeusFlightClient(BaseScraper):
         window_code: str,
         capture_dt: Optional[datetime] = None,
     ) -> List[RawFareRecord]:
-        """Normalizes Amadeus v2 Flight Offers Search response into canonical RawFareRecords."""
+        """Normalizes Amadeus v2 Flight Offers Search response into canonical RawFareRecords.
+
+        Provenance follows the same condition that selects the payload: when the
+        client is unauthenticated or in mock mode the payload comes from
+        _generate_mock_amadeus_payload, so the records are generated and are
+        labelled synthetic. Only a response actually returned by the Amadeus API
+        is labelled real.
+        """
         records: List[RawFareRecord] = []
+        payload_is_generated = bool(
+            self.mock_mode or not (self.client_id and self.client_secret)
+        )
         capture_time = capture_dt or datetime.now(timezone.utc)
         booking_dt_str = capture_time.strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -273,7 +283,7 @@ class AmadeusFlightClient(BaseScraper):
                     duration_minutes=duration_minutes,
                     base_fare=base_fare_inr,
                     total_fare=fare_inr,
-                    is_synthetic=False,
+                    is_synthetic=payload_is_generated,
                     source_platform="amadeus",
                 )
 
