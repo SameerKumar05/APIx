@@ -22,6 +22,12 @@ class NationalIndexLatestResponse(BaseModel):
     confidence_interval_lower: Optional[float] = Field(None, description="95% confidence interval lower bound")
     confidence_interval_upper: Optional[float] = Field(None, description="95% confidence interval upper bound")
     status: str = Field("published", description="Index publication status ('published', 'provisional')")
+    mospi_cpi: Optional[float] = Field(None, description="Latest MoSPI transport CPI benchmark, when a series exists")
+    mospi_cpi_divergence: Optional[float] = Field(None, description="Airfare index minus the MoSPI transport benchmark")
+    mospi_source: Optional[str] = Field(None, description="Provenance of the MoSPI benchmark values")
+    weighted_median_fare_inr: Optional[float] = Field(None, description="DGCA-weighted median fare across corridors")
+    t1_index: Optional[float] = Field(None, description="Advance-horizon index at T+1, on the national index scale")
+    t30_index: Optional[float] = Field(None, description="Advance-horizon index at T+30, on the national index scale")
 
 
 class NationalIndexHistoryResponse(BaseModel):

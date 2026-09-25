@@ -39,14 +39,16 @@ DEFAULT_BOOKING_WINDOW_WEIGHTS: Dict[str, float] = {
 
 # Benchmark DGCA city-pair passenger traffic shares for top Indian routes
 DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES: Dict[str, float] = {
-    "DEL-BOM": 0.22,
-    "BOM-DEL": 0.22,
-    "BLR-DEL": 0.14,
-    "DEL-BLR": 0.14,
-    "BOM-BLR": 0.10,
-    "BLR-BOM": 0.10,
-    "DEL-CCU": 0.04,
-    "DEL-HYD": 0.04,
+    "DEL-BOM": 0.175,
+    "BOM-DEL": 0.175,
+    "BLR-DEL": 0.125,
+    "DEL-BLR": 0.125,
+    "BOM-BLR": 0.090,
+    "BLR-BOM": 0.090,
+    "DEL-CCU": 0.065,
+    "CCU-DEL": 0.065,
+    "DEL-HYD": 0.045,
+    "HYD-DEL": 0.045,
 }
 
 

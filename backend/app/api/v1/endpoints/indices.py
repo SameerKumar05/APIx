@@ -1,10 +1,14 @@
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db
+from backend.app.models.econometrics import MospiCpiSeries
 from backend.app.models.index import NationalDailyIndex, RouteDailyIndex
+from backend.app.models.raw_fare import RawFare
 from backend.app.models.route import Route
 from backend.app.schemas.index import (
     NationalIndexHistoryResponse,
@@ -16,6 +20,8 @@ from backend.app.schemas.index import (
 )
 
 router = APIRouter()
+
+_WINDOW_DAYS = {"T+1": 1, "T+7": 7, "T+15": 15, "T+30": 30}
 
 # Benchmark domestic corridors across Indian aviation network
 DOMESTIC_ROUTES_SEED = [
@@ -99,6 +105,58 @@ DOMESTIC_ROUTES_SEED = [
 ]
 
 
+
+def _horizon_context(db: Session, index_value: float) -> dict:
+    """Derive the Overview benchmark fields from tables that actually hold data.
+
+    Returns mospi_cpi / divergence / weighted median fare / T+1 and T+30 horizon
+    indices. Every field is None when its source table is empty, so the UI can
+    report no coverage rather than substitute a constant.
+    """
+    out: dict = {}
+
+    mospi = db.query(MospiCpiSeries).order_by(MospiCpiSeries.year_month.desc()).first()
+    if mospi is not None and mospi.cpi_transport_index:
+        out["mospi_cpi"] = round(float(mospi.cpi_transport_index), 2)
+        out["mospi_cpi_divergence"] = round(index_value - float(mospi.cpi_transport_index), 2)
+        out["mospi_source"] = mospi.source
+
+    weights = {
+        f"{origin}-{destination}": float(weight)
+        for origin, destination, weight in db.query(Route.origin, Route.destination, Route.weight)
+        .filter(Route.is_active.is_(True))
+        .all()
+        if weight
+    }
+    rows = (
+        db.query(RouteDailyIndex.origin, RouteDailyIndex.destination, RouteDailyIndex.mean_fare)
+        .all()
+    )
+    num = den = 0.0
+    for origin, destination, mean_fare in rows:
+        if not mean_fare:
+            continue
+        w = weights.get(f"{origin}-{destination}")
+        if w is None:
+            continue
+        num += float(mean_fare) * w
+        den += w
+    if den > 0 and num > 0:
+        out["weighted_median_fare_inr"] = round(num / den, 2)
+
+    horizon: dict[int, list[float]] = {}
+    overall = db.query(func.avg(RawFare.total_fare)).scalar()
+    for window, fare in db.query(RawFare.booking_window, RawFare.total_fare).all():
+        days = _WINDOW_DAYS.get((window or "").strip().upper())
+        if days and fare:
+            horizon.setdefault(days, []).append(float(fare))
+    if overall and overall > 0:
+        for days, field in ((1, "t1_index"), (30, "t30_index")):
+            values = horizon.get(days)
+            if values:
+                out[field] = round((sum(values) / len(values)) / float(overall) * index_value, 2)
+    return out
+
 @router.get(
     "/national/latest",
     response_model=NationalIndexLatestResponse,
@@ -138,6 +196,7 @@ async def get_national_index_latest(
                 confidence_interval_lower=round(val * 0.99, 2),
                 confidence_interval_upper=round(val * 1.01, 2),
                 status="published",
+                **_horizon_context(db, val),
             )
     except Exception:
         pass
@@ -313,13 +372,14 @@ async def get_routes_overview(
                 routes=routes_list,
                 total_routes=len(routes_list),
             )
-    except Exception:
-        pass
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        ) from exc
 
-    return RouteListResponse(
-        routes=DOMESTIC_ROUTES_SEED,
-        total_routes=len(DOMESTIC_ROUTES_SEED),
-    )
+    return RouteListResponse(routes=[], total_routes=0)
 
 
 @router.get(
