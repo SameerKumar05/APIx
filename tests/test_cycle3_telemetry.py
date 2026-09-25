@@ -33,6 +33,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import settings
 from backend.app.db.telemetry_repo import (
     TelemetryRepo,
     bulk_log_scraper_telemetry,
@@ -334,6 +335,20 @@ class TestTelemetryRepository:
 class TestTelemetryEndpoints:
     """Tests for FastAPI HTTP endpoints: /telemetry, /trigger, /proxies, and streaming."""
 
+    @pytest.fixture(autouse=True)
+    def ensure_active_worker(self):
+        from backend.app.db.session import SessionLocal, init_db
+        from backend.app.db.crawler_job_repo import register_worker_heartbeat
+        init_db()
+        with SessionLocal() as db:
+            register_worker_heartbeat(
+                db=db,
+                worker_id="worker-fixture-telemetry",
+                hostname="localhost",
+                pid=99999,
+            )
+        yield
+
     def test_get_ingestion_telemetry_schema(self):
         """Verifies GET /api/v1/ingestion/telemetry conforms to IngestionTelemetryResponse."""
         client = TestClient(app)
@@ -379,7 +394,11 @@ class TestTelemetryEndpoints:
             "route_code": "DEL-BOM",
             "booking_window": "T+1",
         }
-        response = client.post("/api/v1/ingestion/trigger", json=payload)
+        response = client.post(
+            "/api/v1/ingestion/trigger",
+            headers={"X-Ingestion-Key": settings.INGESTION_API_KEY},
+            json=payload,
+        )
         assert response.status_code == 202
 
         data = response.json()
@@ -388,12 +407,15 @@ class TestTelemetryEndpoints:
         assert validated.status in ("TRIGGERED", "QUEUED", "SUCCESS")
         assert validated.crawler_name == "makemytrip"
         assert validated.route_code == "DEL-BOM"
-        assert "dispatched" in validated.message.lower() or "triggered" in validated.message.lower()
+        assert "queued" in validated.message.lower()
 
     def test_post_trigger_crawler_with_query_params(self):
         """Verifies POST /api/v1/ingestion/trigger using query parameters."""
         client = TestClient(app)
-        response = client.post("/api/v1/ingestion/trigger?crawler_name=spicejet&route_code=DEL-BLR")
+        response = client.post(
+            "/api/v1/ingestion/trigger?crawler_name=spicejet&route_code=DEL-BLR",
+            headers={"X-Ingestion-Key": settings.INGESTION_API_KEY},
+        )
         assert response.status_code == 202
 
         data = response.json()

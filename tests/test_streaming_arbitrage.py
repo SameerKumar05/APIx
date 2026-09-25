@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import time
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, List
+from typing import Any, List, Optional
 
 import pytest
 from fastapi.testclient import TestClient
@@ -44,6 +44,13 @@ from backend.app.services.streaming_dedup import (
     DedupResult,
     FlightBufferState,
     StreamingDedupEngine,
+)
+
+# The eight flight numbers the endpoint used to fabricate when no real arbitrage
+# candidate existed. Kept here as a literal so the guard survives deletion of the
+# production constant.
+BENCHMARK_FLIGHT_NUMBERS = frozenset(
+    {"6E-205", "AI-806", "SG-8169", "6E-501", "UK-995", "QP-1102", "6E-182", "AI-665"}
 )
 
 
@@ -397,15 +404,18 @@ class TestArbitrageApiIntegration:
 
     def test_arbitrage_api_endpoint_response_schema(self):
         """Verifies GET /api/v1/analytics/arbitrage conforms to ArbitrageResponse schema."""
-        client = TestClient(app)
-        response = client.get("/api/v1/analytics/arbitrage")
+        with TestClient(app) as client:
+            response = client.get("/api/v1/analytics/arbitrage")
         assert response.status_code == 200
 
         data = response.json()
         validated = ArbitrageResponse(**data)
-        assert validated.routes_evaluated >= 1
         assert validated.opportunities_count == len(validated.items)
+        assert validated.routes_evaluated == len({i.route_code for i in validated.items})
         assert isinstance(validated.items, list)
+        assert not BENCHMARK_FLIGHT_NUMBERS.intersection(
+            {item.flight_number for item in validated.items}
+        )
 
         if validated.items:
             first = validated.items[0]
@@ -414,10 +424,22 @@ class TestArbitrageApiIntegration:
             assert first.sell_fare > 0
             assert first.spread_inr == round(first.sell_fare - first.buy_fare, 2) or abs(first.spread_inr) > 0
 
+    def test_arbitrage_api_reports_no_coverage_instead_of_benchmark_rows(self):
+        """Given a database with no arbitrage candidates, coverage must read as zero rather than eight invented spreads."""
+        with TestClient(app) as client:
+            response = client.get("/api/v1/analytics/arbitrage")
+
+        assert response.status_code == 200
+        validated = ArbitrageResponse(**response.json())
+        assert validated.items == []
+        assert validated.opportunities_count == 0
+        assert validated.routes_evaluated == 0
+        assert validated.total_potential_savings_inr == 0.0
+
     def test_arbitrage_api_route_filter(self):
         """Verifies GET /api/v1/analytics/arbitrage filters by route_code."""
-        client = TestClient(app)
-        response = client.get("/api/v1/analytics/arbitrage?route_code=DEL-BOM")
+        with TestClient(app) as client:
+            response = client.get("/api/v1/analytics/arbitrage?route_code=DEL-BOM")
         assert response.status_code == 200
 
         data = response.json()
@@ -427,8 +449,8 @@ class TestArbitrageApiIntegration:
 
     def test_arbitrage_api_min_spread_pct_filter(self):
         """Verifies GET /api/v1/analytics/arbitrage respects min_spread_pct parameter."""
-        client = TestClient(app)
-        response = client.get("/api/v1/analytics/arbitrage?min_spread_pct=10.0")
+        with TestClient(app) as client:
+            response = client.get("/api/v1/analytics/arbitrage?min_spread_pct=10.0")
         assert response.status_code == 200
 
         data = response.json()
