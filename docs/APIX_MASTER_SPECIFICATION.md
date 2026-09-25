@@ -27,7 +27,7 @@
    - 3.5 [Intertemporal Yield Elasticity Curves ($T+1 \to T+30$)](#35-intertemporal-yield-elasticity-curves-t1-to-t30)
    - 3.6 [MoSPI CPI 38-Day Lead-Lag Analytics & Granger Causality](#36-mospi-cpi-38-day-lead-lag-analytics--granger-causality)
 4. [Ingestion Topology & Multi-Source Scraper Engine](#4-ingestion-topology--multi-source-scraper-engine)
-   - 4.1 [40-Slot Trunk Ingestion Matrix](#41-40-slot-trunk-ingestion-matrix)
+   - 4.1 [50-Slot Trunk Ingestion Matrix](#41-50-slot-trunk-ingestion-matrix)
    - 4.2 [Three-Tier Fallback Execution Engine](#42-three-tier-fallback-execution-engine)
    - 4.3 [Anti-Bot Engineering, EWMA Proxy Pool & Jitter](#43-anti-bot-engineering-ewma-proxy-pool--jitter)
    - 4.4 [Streaming Deduplication & Cross-Platform Arbitrage Engine](#44-streaming-deduplication--cross-platform-arbitrage-engine)
@@ -57,7 +57,7 @@ Within the national CPI basket, **Transport & Communication (Group 4)** commands
 **APIx (Airfare Price Index)** resolves these structural deficits by building a production-grade, automated, high-frequency econometric intelligence and regulatory surveillance pipeline:
 1. **Real-Time Data Ingestion:** Scrapes live quotes across Online Travel Aggregators (OTAs: MakeMyTrip, EaseMyTrip), Direct Low-Cost Carriers (SpiceJet, IndiGo, Air India), and Global Distribution Systems (Amadeus GDS v2).
 2. **Axiomatic Superlative Price Indexing:** Calculates daily Laspeyres ($I_L$), Paasche ($I_P$), and Fisher Ideal ($I_F$) indices weighted by empirical DGCA quarterly passenger traffic volume.
-3. **Advance Booking Horizon Decomposition:** Aggregates fares across four discrete purchase horizons ($T+1, T+7, T+15, T+30$) reflecting microeconomic demand elasticity.
+3. **Advance Booking Horizon Decomposition:** Aggregates fares across four discrete purchase horizons ($T+1, T+7, T+15, T+30, T+45$) reflecting microeconomic demand elasticity.
 4. **Predictive CPI Gap Analytics:** Measures the divergence between real-time aviation inflation and MoSPI CPI, proving that APIx leads official transport inflation by 38 days ($r = 0.89$, Granger causality $p < 0.001$).
 5. **Automated Rule 135 Tariff Surveillance:** Flags predatory surges via rolling 30-day Z-scores ($Z \ge 3.0$), route median multiples ($M > 2.5\times$), and Day-over-Day spikes ($\text{DoD} \ge 40\%$), generating automated statutory hearing dockets.
 
@@ -77,7 +77,7 @@ flowchart TD
     end
 
     subgraph ScrapingEngine ["Scraping & Anti-Bot Infrastructure"]
-        SCHED["40-Slot Daily Ingestion Scheduler<br/>(10 Corridors x 4 Horizons)"]
+        SCHED["50-Slot Daily Ingestion Scheduler<br/>(10 Corridors x 5 Horizons)"]
         PROXY["ProxyPoolManager<br/>(EWMA Latency, Auto-Quarantine)"]
         RATELIM["Token Bucket Rate Limiter<br/>& Jitter U(5s, 15s)"]
         SCHED --> PROXY --> RATELIM
@@ -139,7 +139,7 @@ flowchart TD
 ```
 
 ### Data Lifecycle Transitions:
-1. **Ingest:** Scraper workers collect 40 discrete slots (10 trunk corridors $\times$ 4 advance horizons: $T+1, T+7, T+15, T+30$).
+1. **Ingest:** Scraper workers collect 40 discrete slots (10 trunk corridors $\times$ 4 advance horizons: $T+1, T+7, T+15, T+30, T+45$).
 2. **Deduplicate:** Payloads are transmitted to `POST /api/v1/ingestion/batch` with header `X-Ingestion-Key`. The `StreamingDedupEngine` filters duplicates using deterministic SHA-256 keys in $33.11\ \mu\text{s}$ ($28,000\ \text{quotes/sec}$).
 3. **Persist:** Raw quotes persist into `raw_fares`. Metadata maps to `routes` and `airlines`.
 4. **Aggregate:** The econometric engine calculates route medians, filters outliers via Tukey's IQR ($[Q_1 - 1.5\cdot\text{IQR}, Q_3 + 1.5\cdot\text{IQR}]$), and computes Fisher, Laspeyres, and Paasche indices weighted by DGCA quarterly traffic.
@@ -152,7 +152,7 @@ flowchart TD
 
 ### 3.1 Route Representative Fare Formulation
 Let $N = 10$ represent the monitored domestic trunk routes ($r \in \{1, \dots, N\}$). For each route $r$ at period $t$, airfare quotes are observed across four discrete booking horizons:
-$$h \in \{T+1, T+7, T+15, T+30\}$$
+$$h \in \{T+1, T+7, T+15, T+30, T+45\}$$
 
 For each horizon $h$, quotes across $m$ commercial airlines ($k \in \{1, \dots, m\}$) undergo Tukey Interquartile Range (IQR) outlier rejection:
 $$\text{IQR}_{t,r,h} = Q_3(p_{t,r,h}) - Q_1(p_{t,r,h})$$
@@ -162,7 +162,7 @@ The representative horizon price $P_{t,r,h}$ is computed as the airline-market-s
 $$P_{t,r,h} = \text{WeightedMedian}\left(\left\{p_{t,r,h,k}\right\}_{k=1}^m, \left\{w_{\text{airline}, k}\right\}_{k=1}^m\right)$$
 
 The composite representative route fare $P_{t,r}$ integrates empirically calibrated DGCA booking window expenditure weights:
-$$P_{t,r} = \sum_{h \in \{T+1, T+7, T+15, T+30\}} w_h \cdot P_{t,r,h}$$
+$$P_{t,r} = \sum_{h \in \{T+1, T+7, T+15, T+30, T+45\}} w_h \cdot P_{t,r,h}$$
 where:
 - $w_{T+1} = 0.20$ (Emergency / Immediate purchase)
 - $w_{T+7} = 0.35$ (Short-lead business / flexible leisure)
@@ -194,7 +194,7 @@ $$I_{F,t} = \sqrt{I_{L,t} \cdot I_{P,t}} = 100 \times \sqrt{\left(\frac{\sum_{r=
 | **Identity Test** | $P_t = P_0 \implies I = 100.0$ | **Pass** | **Pass** | **Pass** |
 | **Proportionality Test** | $P_t = \lambda P_0 \implies I = 100 \lambda$ | **Pass** | **Pass** | **Pass** |
 | **Time Reversal Test** | $I(0 \to t) \cdot I(t \to 0) = 1.0$ | **Fail** | **Fail** | **Pass** |
-| **Factor Reversal Test** | $P(0 \to t) \cdot Q(0 \to t) = V_t / V_0$ | **Fail** | **Fail** | **Pass** |
+| **Factor Reversal Test** | $P(0 \to t) \cdot Q(0 \to t) = V_t / V_0$ | **Fail** | **Fail** | **Not asserted** |
 | **Commensurability Test** | Invariant to currency & unit scaling | **Pass** | **Pass** | **Pass** |
 
 ---
@@ -324,7 +324,7 @@ $$Y_t = c_1 + \sum_{i=1}^4 \alpha_i Y_{t-7i} + \sum_{j=1}^4 \beta_j X_{t-7j} + \
 
 ## 4. Ingestion Topology & Multi-Source Scraper Engine
 
-### 4.1 40-Slot Trunk Ingestion Matrix
+### 4.1 50-Slot Trunk Ingestion Matrix
 APIx ingests domestic airfares across an exact **40-slot matrix** composed of India's top 10 domestic passenger corridors monitored bidirectionally across 4 advance booking horizons:
 
 | Corridor Code | Origin | Destination | Direction | Monthly Pax (DGCA) | Corridor Weight |
@@ -341,7 +341,7 @@ APIx ingests domestic airfares across an exact **40-slot matrix** composed of In
 | `HYD-DEL` | HYD | DEL | South $\to$ North | 112,500 | **0.045** |
 | **Total Baseline** | | | | **2,500,000** | **1.000000** |
 
-Each corridor is evaluated daily across the four booking horizons ($T+1, T+7, T+15, T+30$):
+Each corridor is evaluated daily across the four booking horizons ($T+1, T+7, T+15, T+30, T+45$):
 $$\text{Total Daily Ingestion Slots} = 10 \text{ Corridors} \times 4 \text{ Horizons} = \mathbf{40\ \text{Slots}}$$
 
 ---
@@ -351,7 +351,7 @@ To ensure a **100% Slot Completion SLA** even during airline website updates or 
 
 ```mermaid
 flowchart TD
-    SLOT["40-Slot Task Dispatcher"] --> TIER1{"Tier 1: Multi-Source Live Scrapers<br/>MakeMyTrip, EaseMyTrip, SpiceJet Direct"}
+    SLOT["50-Slot Task Dispatcher"] --> TIER1{"Tier 1: Multi-Source Live Scrapers<br/>MakeMyTrip, EaseMyTrip, SpiceJet Direct"}
     
     TIER1 -->|"Success: Valid Quotes Received"| NORM["Normalizer & Ingestion Batch Pipeline"]
     TIER1 -->|"Failure / Anti-Bot Block / Timeout"| TIER2{"Tier 2: Amadeus GDS API v2<br/>OAuth 2.0 Authenticated REST Client"}

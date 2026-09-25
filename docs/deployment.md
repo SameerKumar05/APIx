@@ -30,7 +30,7 @@ flowchart TD
         Scraper["Playwright Chromium Scrapers<br/>(EaseMyTrip, MakeMyTrip, SpiceJet)"]
         GDS["Amadeus GDS Flight Offers Client<br/>(Tier 2 Fallback)"]
         Synthetic["DGCA Deterministic Synthetic Generator<br/>(Tier 3 Fallback)"]
-        Orch["Ingestion Orchestrator<br/>(40 Discrete Slots: 10 Routes x 4 Horizons)"]
+        Orch["Ingestion Orchestrator<br/>(50 Discrete Slots: 10 Routes x 5 Horizons)"]
         Scraper --> Orch
         GDS --> Orch
         Synthetic --> Orch
@@ -513,3 +513,7 @@ The Compose `apix-worker` service runs `command: ["python", "-m", "ingestion.wor
 Tier 1 scrapers drive Chromium through Playwright. Akamai fingerprints the HTTP/2 frame and resets Playwright's bundled build with `net::ERR_HTTP2_PROTOCOL_ERROR` while accepting the distro build of the same browser. `resolve_launch_kwargs` in `ingestion/crawlers/makemytrip.py` therefore prefers an executable system Chromium, checking `/usr/bin/chromium`, `/usr/bin/chromium-browser`, `/usr/bin/google-chrome` and `/usr/bin/google-chrome-stable` in order. Set `INGESTION_PLAYWRIGHT_BROWSER_EXECUTABLE` to pin a specific binary. When no candidate is executable the scraper falls back to the bundled build.
 
 This is a mitigation, not a guarantee. The upstream edge can still throttle the egress IP, and a page that loads without yielding a fare XHR falls through to the synthetic tier and is labelled `is_synthetic=True`. Never treat a successful page load as evidence of a live fare.
+
+### Fare decomposition is an estimate, not a measurement
+
+`raw_fares` has separate `base_fare`, `taxes_and_fees` and `total_fare` columns, but when a source does not supply the split it is synthesised by a hardcoded ratio, and the two implementations disagree: `ingestion/base.py:68` uses 0.78 and `backend/app/db/ingestion_repo.py:150` uses 0.85. Every row in the current database is exactly 0.85 x total. Only `ingestion/crawlers/makemytrip.py` parses a real split, and no live scrape has yet supplied one. Do not present base-versus-tax figures as measured.

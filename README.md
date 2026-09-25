@@ -13,7 +13,7 @@ The **Consumer Price Index (CPI)** published monthly by the Ministry of Statisti
 
 1. **High Latency & Low Sampling:** Calculated via manual monthly surveys from ~20 urban centers, covering merely ~10% of market fare variance, published with a 15–45 day reporting lag (average ~38 days).
 2. **Dynamic Pricing Blind Spot:** Modern Indian Low-Cost Carriers (IndiGo, Air India, SpiceJet, Akasa) alter dynamic pricing up to 100,000 times daily. Monthly surveys miss intra-month surges, festival price spikes, and route-level yield shifts.
-3. **Absence of Advance Booking Horizons:** Airfares diverge by 200–400% based on lead time. Traditional indices evaluate airfare as a static single-price commodity, ignoring critical booking horizon urgency premiums ($T+1, T+7, T+15, T+30$).
+3. **Absence of Advance Booking Horizons:** Airfares diverge by 200–400% based on lead time. Traditional indices evaluate airfare as a static single-price commodity, ignoring critical booking horizon urgency premiums ($T+1, T+7, T+15, T+30, T+45$).
 
 **APIx** resolves this structural deficit by automating continuous, high-frequency airfare intelligence across major Indian carriers and Online Travel Aggregators (OTAs). It weights route-level fares by Directorate General of Civil Aviation (**DGCA**) passenger traffic and computes superlative **Fisher Ideal**, **Laspeyres**, and **Paasche** indices to provide a real-time, +38-day inflation leading indicator ($r = 0.89$) and automated **DGCA Rule 135** predatory surge surveillance.
 
@@ -25,7 +25,7 @@ The **Consumer Price Index (CPI)** published monthly by the Ministry of Statisti
 flowchart TD
     subgraph Ingestion ["1. Distributed Multi-Source Ingestion Layer"]
         direction TB
-        SCH["AsyncIOScheduler (40 Discrete Route-Window Slots)"]
+        SCH["AsyncIOScheduler (50 Discrete Route-Window Slots)"]
         T1["Tier 1: Multi-Source Live Scrapers<br/>(MakeMyTrip, EaseMyTrip, SpiceJet Direct)"]
         T2["Tier 2: Amadeus GDS API v2<br/>(Authoritative Fallback)"]
         T3["Tier 3: Calibrated DGCA Synthetic Engine<br/>(Deterministic Fallback SLA)"]
@@ -52,7 +52,7 @@ flowchart TD
         direction TB
         QUANT["Axiomatic Index Engine<br/>(Fisher Ideal, Laspeyres, Paasche, Sub-Bias)"]
         ML["ML Anomaly & DGCA Surveillance<br/>(Dynamic Z-Score, Tukey IQR, Rule 135)"]
-        ELAST["Lead-Time Price Elasticity<br/>(T+1, T+7, T+15, T+30 Curves)"]
+        ELAST["Lead-Time Price Elasticity<br/>(T+1, T+7, T+15, T+30, T+45 Curves)"]
     end
 
     subgraph Presentation ["5. Interactive Dashboard & Gateway (React 19 + FastAPI)"]
@@ -85,7 +85,7 @@ sequenceDiagram
     participant Quant as Econometric Engine
     participant UI as React Dashboard
 
-    Sch->>Scr: Trigger 40 Discrete Slots (10 Routes x 4 Windows)
+    Sch->>Scr: Trigger 50 Discrete Slots (10 Routes x 5 Windows)
     Scr->>Scr: Execute Playwright CDP Stealth / XHR Interception
     Scr->>API: HTTP POST /api/v1/ingestion/batch (HMAC Signed)
     API->>Dedup: Process raw fare quotes
@@ -104,7 +104,7 @@ sequenceDiagram
 
 ### 4.1 Advance Booking Horizon Decomposition
 Airfares are sampled continuously across four discrete purchase windows:
-$$\text{Horizon} \in \{T+1, T+7, T+15, T+30\}$$
+$$\text{Horizon} \in \{T+1, T+7, T+15, T+30, T+45\}$$
 
 The composite route representative fare $P_{r,t}$ is calculated as an asymmetric advance-horizon weighted average:
 $$P_{r,t} = \sum_{h \in H} w_h \cdot \text{Median}\left(\{p_{r,t,h,i}\}\right)$$
@@ -238,7 +238,7 @@ erDiagram
 7. **`mospi_cpi_series`:** Official historical MoSPI CPI transport and headline inflation data for divergence tracking.
 8. **`route_elasticity`:** Advance booking price elasticity coefficients ($\Delta Q / \Delta P$) and exponential decay rates.
 9. **`dgca_violations`:** Algorithmic regulatory surveillance audit ledger under DGCA Rule 135.
-10. **`dgca_traffic_weights`:** Historical monthly city-pair passenger volume weights from DGCA statistical releases.
+10. **`dgca_traffic_weights`:** Historical monthly city-pair passenger volume weights. NOTE: currently MODELLED, not sourced from a DGCA release. See the DGCA weights note in docs/econometrics_and_cpi_gap.md.
 11. **`scraping_runs`:** Scraper execution lifecycle tracking, duration, record yields, and status.
 12. **`scraper_telemetry`:** Fine-grained crawler performance logs, response times, and failure categories.
 13. **`proxy_health_records`:** Egress proxy pool nodes, EWMA latency scores, and quarantine status.
@@ -281,7 +281,7 @@ Health readiness is computed once by `probe_database_readiness(db)` (`backend/ap
 
 The frontend SPA delivers institutional-grade analytics across eight dedicated tabs:
 
-1. **Overview Tab:** National Airfare Price Index ticker, dual-axis CPI comparison, advance horizon toggle chips ($T+1, T+7, T+15, T+30$), and 24-hour inflation metrics.
+1. **Overview Tab:** National Airfare Price Index ticker, dual-axis CPI comparison, advance horizon toggle chips ($T+1, T+7, T+15, T+30, T+45$), and 24-hour inflation metrics.
 2. **Routes Tab:** Searchable, sortable matrix of all 10 trunk routes with DGCA weights, current median fares, 7-day sparklines, and status badges.
 3. **Econometrics Tab:** Superlative Fisher vs Laspeyres vs Paasche index trajectories, Bortkiewicz substitution bias envelope band, and MoSPI CPI divergence analysis.
 4. **Elasticity Tab:** Advance booking lead-time hockey-stick curves and interactive 168-cell departure pricing heatmaps.
@@ -327,7 +327,7 @@ Steps Failed: 0
 - **Step 9:** Telemetry & proxy health persistence.
 - **Step 10:** Streaming deduplication (32.5µs latency, 28,543 quotes/s).
 - **Step 11:** Distributed scheduler & EWMA proxy scoring.
-- **Step 12:** Multi-source ingestion (40/40 slots across MMT, SpiceJet, EMT).
+- **Step 12:** Multi-source ingestion (50/50 slots across MMT, SpiceJet, EMT).
 - **Step 13:** Cycle 3 API endpoints (WebSocket stream, arbitrage).
 - **Step 14:** Cycle 3 integration pytest suite.
 - **Step 15:** Econometric engine (Fisher properties, Paasche axioms, substitution bias bounds).
@@ -416,3 +416,7 @@ Access the dashboard at `http://localhost:5173` and the interactive OpenAPI docu
 ### Note on evidence paths
 
 Paths of the form `evidence/<file>.json` and `.debug-journal.md` refer to local verification artifacts produced during the audit campaign. They are intentionally not committed, so those references will not resolve from a fresh clone. Every quantitative claim in this document that cites such a path is reproducible from the committed test suite and `scripts/audit_provenance.py`.
+
+### Fare decomposition is an estimate, not a measurement
+
+`raw_fares` has separate `base_fare`, `taxes_and_fees` and `total_fare` columns, but when a source does not supply the split it is synthesised by a hardcoded ratio, and the two implementations disagree: `ingestion/base.py:68` uses 0.78 and `backend/app/db/ingestion_repo.py:150` uses 0.85. Every row in the current database is exactly 0.85 x total. Only `ingestion/crawlers/makemytrip.py` parses a real split, and no live scrape has yet supplied one. Do not present base-versus-tax figures as measured.

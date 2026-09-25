@@ -9,9 +9,9 @@ The **APIx (Airfare Price Index)** system automates high-frequency, multi-source
 
 Traditional survey methods collect airfare data manually on a monthly cadence across limited booking windows, missing high-velocity dynamic pricing swings and predatory surges. APIx resolves this fundamental gap by ingesting real-time airfares across:
 1. **10 DGCA-Calibrated Domestic Trunk Routes** representing >65% of India's scheduled domestic passenger traffic.
-2. **4 Advance Booking Horizons** ($T+1, T+7, T+15, T+30$ days advance purchase).
+2. **4 Advance Booking Horizons** ($T+1, T+7, T+15, T+30, T+45$ days advance purchase).
 3. **Multi-Source Scraping Topologies** combining Online Travel Aggregators (OTAs), direct low-cost carrier (LCC) web portals, and Global Distribution System (GDS) APIs.
-4. **40 Discrete Ingestion Slots** executing on scheduled periodic cadences with distributed anti-bot jitter and proxy rotation.
+4. **50 Discrete Ingestion Slots** executing on scheduled periodic cadences with distributed anti-bot jitter and proxy rotation.
 
 To guarantee continuous availability without compromising econometric rigor, APIx maintains a dual-tier classification framework:
 - A **Conceptual 4-Tier Provider Taxonomy** categorizing external aviation data sources by provider architecture and commercial distribution channels.
@@ -75,21 +75,21 @@ In the concrete runtime execution engine (`ingestion/orchestrator.py`), Conceptu
 | **GDS API Tier** | Tier 3 (GDS API: Amadeus) | **Tier 2: Amadeus GDS Client** | `ingestion/crawlers/amadeus.py` | REST API, OAuth 2.0 Client Credentials, JSON |
 | **Synthetic Tier** | Tier 4 (DGCA Fallback) | **Tier 3: DGCA Synthetic Fallback** | `ingestion/crawlers/synthetic.py` | In-Memory Deterministic Mathematical Generator |
 
-#### 2.2 Coverage Matrix: 40 Discrete Ingestion Slots
+#### 2.2 Coverage Matrix: 50 Discrete Ingestion Slots
 Every ingestion sweep evaluates exactly **40 discrete slots** ($10 \text{ routes} \times 4 \text{ booking horizons}$), mapping the high-density passenger corridors identified by DGCA domestic city-pair traffic surveys:
 
 | Slot Range | Origin - Destination | Distance (km) | Typical Flight Time | DGCA Route Weight ($w_r$) | Evaluated Booking Horizons |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| Slots 01–04 | **DEL - BOM** | 1,148 km | 130 min | 0.175 | $T+1, T+7, T+15, T+30$ |
-| Slots 05–08 | **BOM - DEL** | 1,148 km | 130 min | 0.175 | $T+1, T+7, T+15, T+30$ |
-| Slots 09–12 | **DEL - BLR** | 1,740 km | 165 min | 0.125 | $T+1, T+7, T+15, T+30$ |
-| Slots 13–16 | **BLR - DEL** | 1,740 km | 165 min | 0.125 | $T+1, T+7, T+15, T+30$ |
-| Slots 17–20 | **BOM - BLR** | 842 km | 105 min | 0.090 | $T+1, T+7, T+15, T+30$ |
-| Slots 21–24 | **BLR - BOM** | 842 km | 105 min | 0.090 | $T+1, T+7, T+15, T+30$ |
-| Slots 25–28 | **DEL - CCU** | 1,305 km | 135 min | 0.065 | $T+1, T+7, T+15, T+30$ |
-| Slots 29–32 | **CCU - DEL** | 1,305 km | 135 min | 0.065 | $T+1, T+7, T+15, T+30$ |
-| Slots 33–36 | **DEL - HYD** | 1,253 km | 135 min | 0.045 | $T+1, T+7, T+15, T+30$ |
-| Slots 37–40 | **HYD - DEL** | 1,253 km | 135 min | 0.045 | $T+1, T+7, T+15, T+30$ |
+| Slots 01–04 | **DEL - BOM** | 1,148 km | 130 min | 0.175 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 05–08 | **BOM - DEL** | 1,148 km | 130 min | 0.175 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 09–12 | **DEL - BLR** | 1,740 km | 165 min | 0.125 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 13–16 | **BLR - DEL** | 1,740 km | 165 min | 0.125 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 17–20 | **BOM - BLR** | 842 km | 105 min | 0.090 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 21–24 | **BLR - BOM** | 842 km | 105 min | 0.090 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 25–28 | **DEL - CCU** | 1,305 km | 135 min | 0.065 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 29–32 | **CCU - DEL** | 1,305 km | 135 min | 0.065 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 33–36 | **DEL - HYD** | 1,253 km | 135 min | 0.045 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 37–40 | **HYD - DEL** | 1,253 km | 135 min | 0.045 | $T+1, T+7, T+15, T+30, T+45$ |
 
 #### 2.3 Advance Booking Horizons & Economic Calibration
 Advance purchase windows capture the steep non-linear price trajectory characteristic of airline yield management:
@@ -439,7 +439,7 @@ flowchart TD
 
 | System Invariant | Underlying Mechanism | Operational Target & SLA |
 |:---|:---|:---|
-| **Zero Data Gaps** | 3-Tier Runtime Fallback Escalation | Exactly 40/40 slots resolved on every ingestion run (100.0% SLA). |
+| **Zero Data Gaps** | 3-Tier Runtime Fallback Escalation | Exactly 50/50 slots resolved on every ingestion run (100.0% SLA). |
 | **High Live Fidelity** | Multi-Source Concurrent Scraping (MMT + EMT + SG) | $>85\%$ of slots resolved via live scrapers in production. |
 | **IP Protection** | Residential Proxy Rotation with EWMA Scoring | Max 10 requests/minute per target domain per egress IP. |
 | **Timing Obfuscation** | Production Anti-Bot Jitter | Stochastic delay drawn from uniform distribution $\mathcal{U}(5\text{s}, 15\text{s})$. |

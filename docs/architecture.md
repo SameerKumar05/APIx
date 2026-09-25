@@ -506,7 +506,7 @@ flowchart TD
 
 ### 7. Security, Resilience & Compliance
 
-1. **Scraper Ethics & Rate-Limiting:** Adheres strictly to automated collection delays (minimum 2.5s jitter between portal requests), respecting `robots.txt` guidelines, and prioritizing authorized GDS API feeds (Amadeus).
+1. **Scraper Ethics & Rate-Limiting:** Adheres strictly to automated collection delays (minimum 2.5s jitter between portal requests), enforcing `robots.txt` at runtime via `ingestion/robots.py` (RFC 9309 most-specific-match, wildcard and named groups merged so a named group can only add restrictions, fail-closed when the file is unreachable, crawl delay floored by `robots_min_delay_seconds`); every tier 1 crawler consults `BaseScraper.robots_gate()` before navigating, and prioritizing authorized GDS API feeds (Amadeus).
 2. **Secrets & Credentials Management:** Zero hardcoded credentials. All API keys (`AMADEUS_CLIENT_ID`, `AMADEUS_CLIENT_SECRET`, `INGESTION_API_KEY`, `BACKEND_CORS_ORIGINS`) managed via environment variables and Docker secrets.
 3. **Data Integrity & Immutability:** Raw scrape records are immutable and stored with SHA-256 deduplication hashes to ensure auditability for DGCA regulators.
 4. **Graceful Degradation:** If external OTA scraping encounters anti-bot challenges or downtime, the pipeline gracefully falls back to Amadeus GDS API feeds, logging telemetry without interrupting index calculations.
