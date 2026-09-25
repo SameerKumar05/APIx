@@ -99,8 +99,8 @@ class TestEndToEndPipeline:
     def test_e2e_ingestion_index_anomaly_pipeline(
         self, client: TestClient, pipeline_db_session: Session
     ) -> None:
-        calc_date = date(2026, 9, 24)
-        target_time = datetime(2026, 9, 24, 6, 0, 0, tzinfo=timezone.utc)
+        calc_date = datetime.now(timezone.utc).date()
+        target_time = datetime.now(timezone.utc).replace(hour=6, minute=0, second=0, microsecond=0)
 
         # ------------------------------------------------------------------
         # Step 1: Generate 40 synthetic route-window fare records via SyntheticCrawler
