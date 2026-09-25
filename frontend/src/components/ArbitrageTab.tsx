@@ -45,48 +45,61 @@ export const ArbitrageTab: React.FC<ArbitrageTabProps> = ({ arbitrage, onRefresh
         if (selectedRoute !== 'ALL' && item.route_code !== selectedRoute) return false;
         if (selectedAirline !== 'ALL' && item.airline_code !== selectedAirline) return false;
         if (selectedDirection !== 'ALL' && item.direction !== selectedDirection) return false;
-        if (item.spread_percentage < minSpreadPct) return false;
+        const spreadPct = item.spread_percentage ?? 0;
+        if (spreadPct < minSpreadPct) return false;
         if (actionableOnly && !item.actionable) return false;
         if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          const matchesRoute = item.route_code.toLowerCase().includes(q);
-          const matchesOta = item.ota_name.toLowerCase().includes(q);
-          const matchesAirline = (item.airline_name || item.airline_code).toLowerCase().includes(q);
+          const q = searchQuery.toLowerCase().trim();
+          const matchesRoute = (item.route_code || '').toLowerCase().includes(q);
+          const otaName = item.ota_platform || item.ota_name || '';
+          const matchesOta = otaName.toLowerCase().includes(q);
+          const matchesAirline = (item.airline_name || item.airline_code || '').toLowerCase().includes(q);
           const matchesFlight = (item.flight_number || '').toLowerCase().includes(q);
           if (!matchesRoute && !matchesOta && !matchesAirline && !matchesFlight) return false;
         }
         return true;
       })
       .sort((a, b) => {
+        const spreadA = a.spread_percentage ?? 0;
+        const spreadB = b.spread_percentage ?? 0;
+        const inrA = a.spread_inr ?? a.spread_amount ?? 0;
+        const inrB = b.spread_inr ?? b.spread_amount ?? 0;
         if (sortBy === 'spread_pct') {
-          return b.spread_percentage - a.spread_percentage;
+          return spreadB - spreadA;
         }
-        return b.spread_inr - a.spread_inr;
+        return inrB - inrA;
       });
   }, [items, selectedRoute, selectedAirline, selectedDirection, minSpreadPct, actionableOnly, searchQuery, sortBy]);
 
   // Unique lists for dropdowns
   const uniqueRoutes = useMemo(() => {
-    return Array.from(new Set(items.map((i) => i.route_code))).sort();
+    return Array.from(new Set(items.map((i) => i.route_code).filter(Boolean))).sort();
   }, [items]);
 
   const uniqueAirlines = useMemo(() => {
-    return Array.from(new Set(items.map((i) => i.airline_code))).sort();
+    return Array.from(new Set(items.map((i) => i.airline_code).filter(Boolean))).sort();
   }, [items]);
 
   // Chart data
   const chartData = useMemo(() => {
-    return items.slice(0, 8).map((item) => ({
-      name: `${item.route_code} (${item.airline_code})`,
-      route: item.route_code,
-      carrier: item.airline_code,
-      airlineFare: item.airline_direct_fare ?? 0,
-      otaFare: item.ota_fare ?? 0,
-      spreadInr: item.spread_inr ?? 0,
-      spreadPct: item.spread_percentage ?? 0,
-      direction: item.direction,
-      otaName: item.ota_name,
-    }));
+    return items.slice(0, 8).map((item) => {
+      const otaName = item.ota_platform || item.ota_name || 'OTA';
+      const airlineFare = item.direct_fare ?? item.airline_direct_fare ?? 0;
+      const otaFare = item.ota_fare ?? 0;
+      const spreadInr = item.spread_inr ?? item.spread_amount ?? (airlineFare > otaFare ? airlineFare - otaFare : otaFare - airlineFare);
+      const spreadPct = item.spread_percentage ?? (airlineFare > 0 ? (spreadInr / airlineFare) * 100 : 0);
+      return {
+        name: `${item.route_code || ''} (${item.airline_code || ''})`,
+        route: item.route_code || '',
+        carrier: item.airline_code || '',
+        airlineFare,
+        otaFare,
+        spreadInr,
+        spreadPct: Number(spreadPct.toFixed(2)),
+        direction: item.direction || (otaFare < airlineFare ? 'OTA_CHEAPER' : 'AIRLINE_CHEAPER'),
+        otaName,
+      };
+    });
   }, [items]);
 
   const maxSpreadObserved = items.reduce((max, i) => Math.max(max, i.spread_percentage ?? 0), 0);
@@ -415,9 +428,10 @@ export const ArbitrageTab: React.FC<ArbitrageTabProps> = ({ arbitrage, onRefresh
           const isOtaCheaper = item.direction === 'OTA_CHEAPER';
           const isHighSpread = (item.spread_percentage ?? 0) >= 8.0;
 
-          const airlineFare = item.airline_direct_fare ?? 0;
+          const airlineFare = item.direct_fare ?? item.airline_direct_fare ?? 0;
           const otaFare = item.ota_fare ?? 0;
-          const spreadInr = item.spread_inr ?? 0;
+          const spreadInr = item.spread_inr ?? item.spread_amount ?? (airlineFare > otaFare ? airlineFare - otaFare : otaFare - airlineFare);
+          const otaName = item.ota_platform || item.ota_name || 'OTA';
 
           return (
             <div
@@ -471,7 +485,7 @@ export const ArbitrageTab: React.FC<ArbitrageTabProps> = ({ arbitrage, onRefresh
                         Airline Direct
                       </span>
                       <span className="text-sm font-semibold font-mono tabular-nums text-white mt-0.5 block">
-                        ₹{airlineFare.toLocaleString('en-IN')}
+                        {airlineFare > 0 ? `₹${airlineFare.toLocaleString('en-IN')}` : '—'}
                       </span>
                       <span className="text-[10px] text-neutral-500 font-mono">Official Site</span>
                     </div>
@@ -479,10 +493,10 @@ export const ArbitrageTab: React.FC<ArbitrageTabProps> = ({ arbitrage, onRefresh
                     {/* OTA */}
                     <div className="p-2 rounded border border-neutral-800 bg-neutral-900/60">
                       <span className="text-[10px] text-neutral-400 uppercase font-mono block truncate">
-                        OTA ({item.ota_name})
+                        OTA ({otaName})
                       </span>
                       <span className="text-sm font-semibold font-mono tabular-nums text-white mt-0.5 block">
-                        ₹{otaFare.toLocaleString('en-IN')}
+                        {otaFare > 0 ? `₹${otaFare.toLocaleString('en-IN')}` : '—'}
                       </span>
                       <span className="text-[10px] text-neutral-500 font-mono capitalize">
                         Aggregator
@@ -494,7 +508,7 @@ export const ArbitrageTab: React.FC<ArbitrageTabProps> = ({ arbitrage, onRefresh
                   <div className="mt-2.5 pt-2 border-t border-neutral-800 flex items-center justify-between text-xs font-mono">
                     <span className="text-neutral-400">Price Disparity:</span>
                     <span className="font-medium text-white tabular-nums">
-                      Save ₹{spreadInr.toLocaleString('en-IN')}
+                      {spreadInr > 0 ? `Save ₹${spreadInr.toLocaleString('en-IN')}` : '—'}
                     </span>
                   </div>
                 </div>
@@ -504,7 +518,7 @@ export const ArbitrageTab: React.FC<ArbitrageTabProps> = ({ arbitrage, onRefresh
                   <span className="text-neutral-400">Recommendation:</span>
                   <span className="text-neutral-200 font-mono">
                     {isOtaCheaper ? (
-                      <>Book via <span className="text-white capitalize">{item.ota_name}</span></>
+                      <>Book via <span className="text-white capitalize">{otaName}</span></>
                     ) : (
                       <>Book <span className="text-white">Direct Airline</span></>
                     )}
@@ -581,9 +595,10 @@ export const ArbitrageTab: React.FC<ArbitrageTabProps> = ({ arbitrage, onRefresh
             <tbody className="divide-y divide-neutral-800 text-neutral-300">
               {filteredItems.map((item: ArbitrageOpportunity, idx: number) => {
                 const isOtaCheaper = item.direction === 'OTA_CHEAPER';
-                const airlineFare = item.airline_direct_fare ?? 0;
+                const airlineFare = item.direct_fare ?? item.airline_direct_fare ?? 0;
                 const otaFare = item.ota_fare ?? 0;
-                const spreadInr = item.spread_inr ?? 0;
+                const spreadInr = item.spread_inr ?? item.spread_amount ?? (airlineFare > otaFare ? airlineFare - otaFare : otaFare - airlineFare);
+                const otaName = item.ota_platform || item.ota_name || 'OTA';
 
                 return (
                   <tr key={`ledger-${item.route_code}-${idx}`} className="hover:bg-neutral-900/40 transition-colors">
@@ -606,22 +621,22 @@ export const ArbitrageTab: React.FC<ArbitrageTabProps> = ({ arbitrage, onRefresh
 
                     {/* Airline Direct (Right) */}
                     <td className="py-3 px-3 text-right text-white font-medium font-mono tabular-nums">
-                      ₹{airlineFare.toLocaleString('en-IN')}
+                      {airlineFare > 0 ? `₹${airlineFare.toLocaleString('en-IN')}` : '—'}
                     </td>
 
                     {/* OTA Channel (Left) */}
                     <td className="py-3 px-3 capitalize text-neutral-300">
-                      {item.ota_name}
+                      {otaName}
                     </td>
 
                     {/* OTA Fare (Right) */}
                     <td className="py-3 px-3 text-right text-white font-medium font-mono tabular-nums">
-                      ₹{otaFare.toLocaleString('en-IN')}
+                      {otaFare > 0 ? `₹${otaFare.toLocaleString('en-IN')}` : '—'}
                     </td>
 
                     {/* Net Spread (Right) */}
                     <td className="py-3 px-3 text-right text-white font-medium font-mono tabular-nums">
-                      ₹{spreadInr.toLocaleString('en-IN')}
+                      {spreadInr > 0 ? `₹${spreadInr.toLocaleString('en-IN')}` : '—'}
                     </td>
 
                     {/* Spread (%) (Right) */}
@@ -640,7 +655,7 @@ export const ArbitrageTab: React.FC<ArbitrageTabProps> = ({ arbitrage, onRefresh
                     {/* Optimal Channel (Right) */}
                     <td className="py-3 px-3 text-right">
                       <span className="text-[11px] text-neutral-400 capitalize">
-                        {isOtaCheaper ? item.ota_name : 'Direct'}
+                        {isOtaCheaper ? otaName : 'Direct'}
                       </span>
                     </td>
                   </tr>
