@@ -3,7 +3,7 @@
  * Core API Schema definitions mirroring BackendApiDev specifications.
  */
 
-export type SeverityLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+export type SeverityLevel = 'CRITICAL' | 'HIGH' | 'WARNING' | 'MEDIUM' | 'LOW' | 'INFO';
 
 export type ComplianceStatus = 'COMPLIANT' | 'WARNING' | 'BREACH' | 'PENDING';
 
@@ -60,17 +60,20 @@ export interface RouteOverviewItem {
   route_code: string; // e.g. "DEL-BOM"
   origin: string; // "DEL"
   destination: string; // "BOM"
-  origin_city: string; // "Delhi"
-  destination_city: string; // "Mumbai"
+  origin_city?: string; // "Delhi"
+  destination_city?: string; // "Mumbai"
   current_index: number; // e.g. 124.5
   change_24h: number; // e.g. -0.8
-  change_7d: number; // e.g. +3.2
-  median_fare_inr: number; // representative fare in INR
+  change_7d?: number; // e.g. +3.2
+  avg_fare_inr?: number; // representative average economy fare in INR
+  median_fare_inr?: number; // representative median fare in INR
   min_fare_inr?: number;
   max_fare_inr?: number;
-  weight: number; // DGCA traffic passenger share (0-1), e.g. 0.142
-  sample_size: number;
-  status: string; // "ACTIVE" | "MONITORED"
+  weight?: number; // DGCA traffic passenger share (0-1), e.g. 0.142
+  sample_size?: number;
+  active_flights_tracked?: number;
+  volatility_score?: number;
+  status?: string; // "ACTIVE" | "MONITORED"
   active_airlines_count?: number;
   distance_km?: number;
   sparkline_7d?: number[]; // 7-day median fare trend
@@ -112,7 +115,7 @@ export interface LeadTimeCurveResponse {
 }
 
 export interface HeatmapCell {
-  day_of_week: number; // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  day_of_week: number; // 0 = Monday, 1 = Tuesday, ... 6 = Sunday (Backend schema)
   hour_of_day: number; // 0 to 23
   fare_index: number;
   avg_fare_inr: number;
@@ -136,14 +139,14 @@ export interface AnomalyAlertItem {
   airline_code: string; // e.g. "6E", "AI", "SG", "QP"
   flight_number?: string;
   detected_at: string;
-  anomaly_type: 'SURGE_SPIKE' | 'PRICE_GOUGING' | 'FLASH_DROP' | 'DISPERSION_SPIKE' | string;
+  anomaly_type: 'SURGE_PRICING' | 'SURGE' | 'DGCA_CAP_EXCEEDED' | 'PRICE_CRASH' | 'FLASH_SALE' | 'SPIKE' | 'DROP' | 'VOLATILITY' | 'PRICE_GOUGING' | 'DISPERSION_SPIKE' | 'FLASH_DROP' | string;
   severity: SeverityLevel;
   observed_fare_inr: number;
   expected_fare_inr: number;
   baseline_fare_inr?: number; // baseline comparison fare
   deviation_percent: number; // e.g. +78.4%
   z_score?: number; // statistical surge Z-score (e.g. 3.42, 2.15)
-  status: 'ACTIVE' | 'ACKNOWLEDGED' | 'INVESTIGATING' | 'RESOLVED';
+  status: 'ACTIVE' | 'OPEN' | 'ACKNOWLEDGED' | 'INVESTIGATING' | 'RESOLVED' | 'FALSE_POSITIVE' | string;
   description?: string;
   recommended_action?: string;
   booking_window?: string; // "T+1", "T+7", etc.
@@ -184,7 +187,7 @@ export interface SystemHealthResponse {
 }
 
 export type CrawlerName = 'easemytrip' | 'makemytrip' | 'spicejet' | 'amadeus' | string;
-export type CrawlerStatusType = 'ONLINE' | 'RUNNING' | 'IDLE' | 'DEGRADED' | 'OFFLINE';
+export type CrawlerStatusType = 'ACTIVE' | 'HEALTHY' | 'ONLINE' | 'RUNNING' | 'IDLE' | 'DEGRADED' | 'OFFLINE' | 'ERROR' | string;
 
 export interface CrawlerStatus {
   crawler_name: CrawlerName;
@@ -268,6 +271,7 @@ export interface CrawlerTriggerResponse {
 
 export interface LiveFareUpdate {
   type: 'fare_update';
+  is_synthetic?: boolean;
   airline_code: string;
   airline_name: string;
   flight_number: string;
@@ -299,16 +303,27 @@ export interface ArbitrageOpportunity {
   route_code: string;
   airline_code: string;
   airline_name?: string;
-  airline_direct_fare: number;
-  ota_name: string;
+  airline_direct_fare?: number;
+  direct_fare?: number;
+  direct_platform?: string;
+  ota_name?: string;
+  ota_platform?: string;
   ota_fare: number;
-  spread_inr: number;
+  spread_inr?: number;
+  spread_amount?: number;
   spread_percentage: number;
   direction: ArbitrageDirection;
   actionable: boolean;
   flight_number?: string;
   departure_datetime?: string;
   sample_timestamp?: string;
+  origin?: string;
+  destination?: string;
+  buy_venue?: string;
+  buy_fare?: number;
+  sell_venue?: string;
+  sell_fare?: number;
+  net_profit_inr?: number;
 }
 
 export interface ArbitrageResponse {
@@ -317,7 +332,9 @@ export interface ArbitrageResponse {
   opportunities_count: number;
   items: ArbitrageOpportunity[];
   max_spread_percentage?: number;
+  avg_spread_percentage?: number;
   total_savings_potential_inr?: number;
+  total_potential_savings_inr?: number;
 }
 
 // ---------------------------------------------------------------------------
