@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import case, func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from backend.app.core.auth import verify_ingestion_key
 from backend.app.db.session import get_db
-from backend.app.models.scraping import ScrapingRun
 from backend.app.schemas.telemetry import (
     CrawlerHealthItem,
     CrawlerTriggerRequest,
@@ -273,10 +273,11 @@ async def get_ingestion_telemetry(
 )
 async def trigger_crawler(
     payload: Optional[CrawlerTriggerRequest] = None,
+    _: str = Depends(verify_ingestion_key),
     crawler_name: Optional[str] = Query(None, description="Target crawler identifier"),
     source: Optional[str] = Query(None, description="Alias for crawler_name"),
     route_code: Optional[str] = Query(None, description="Target route code (e.g. DEL-BOM)"),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
+    booking_window: Optional[str] = Query(None, description="Target booking window (e.g. T+1, T+7)"),
     db: Session = Depends(get_db),
 ) -> CrawlerTriggerResponse:
     """Manually dispatch a crawler execution run."""
@@ -286,53 +287,69 @@ async def trigger_crawler(
     target_route = (payload.route_code if payload else None) or route_code
     if target_route:
         target_route = target_route.strip().upper()
+    target_window = (payload.booking_window if payload else None) or booking_window
+    if target_window:
+        target_window = target_window.strip().upper()
 
-    task_id = f"trig-{uuid.uuid4().hex[:10]}"
-    now = datetime.now(timezone.utc)
-
-    # Attempt to trigger via scheduler or proxy pool manager if available
     try:
-        from ingestion.scheduler import get_scheduler
-        scheduler = get_scheduler()
-        if scheduler:
-            # Trigger via scheduler
-            if hasattr(scheduler, "trigger_slot"):
-                scheduler.trigger_slot(target_crawler, target_route)
-    except Exception as e:
-        logger.debug("Scheduler trigger attempt: %s", e)
-
-    # Attempt to log to ScraperTelemetry if available
-    try:
-        from backend.app.models.telemetry import ScraperTelemetry
-        telemetry_entry = ScraperTelemetry(
-            crawler_name=target_crawler,
-            route=target_route or "ALL",
-            booking_window="T+1",
-            status="TRIGGERED",
-            response_time_ms=0.0,
-            proxy_ip="127.0.0.1",
-            records_extracted=0,
-            error_details=None,
-            created_at=now,
-        )
-        db.add(telemetry_entry)
-        db.commit()
-    except Exception as e:
-        logger.debug("Failed logging trigger to DB: %s", e)
+        from backend.app.db.crawler_job_repo import enqueue_job, get_active_worker
+        active_worker = get_active_worker(db, threshold_seconds=60)
+    except SQLAlchemyError as exc:
         db.rollback()
+        logger.warning("Database unavailable on crawler trigger: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        ) from exc
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Unexpected error checking database/worker on trigger: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        ) from exc
+
+    if not active_worker:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No active crawler worker available",
+        )
+
+    try:
+        job = enqueue_job(
+            db=db,
+            crawler_name=target_crawler,
+            route_code=target_route,
+            booking_window=target_window,
+            priority=10 if target_route else 0,
+        )
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.error("Failed to persist crawler job to database: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to enqueue crawler job",
+        ) from exc
+    except Exception as exc:
+        db.rollback()
+        logger.error("Unexpected failure enqueuing crawler job: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to enqueue crawler job",
+        ) from exc
 
     message = (
-        f"Crawler execution successfully dispatched for '{target_crawler}' "
-        f"on route '{target_route or 'ALL_ROUTES'}'. Task ID: {task_id}"
+        f"Crawler execution queued for '{job.crawler_name}' "
+        f"on route '{job.route_code or 'ALL_ROUTES'}'. Task ID: {job.job_id}"
     )
 
     return CrawlerTriggerResponse(
-        task_id=task_id,
-        status="TRIGGERED",
-        crawler_name=target_crawler,
-        route_code=target_route,
+        task_id=job.job_id,
+        status="QUEUED",
+        crawler_name=job.crawler_name,
+        route_code=job.route_code,
         message=message,
-        triggered_at=now,
+        triggered_at=job.created_at,
     )
 
 
