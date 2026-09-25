@@ -32,11 +32,32 @@ export interface ApiClientConfig {
   timeoutMs: number;
 }
 
+const resolveBaseUrl = (): string => {
+  const metaEnv = (import.meta as unknown as { env?: Record<string, string> }).env;
+  const envUrl = metaEnv?.VITE_API_BASE_URL;
+  if (typeof envUrl === 'string' && envUrl.trim()) {
+    const trimmed = envUrl.trim().replace(/\/+$/, '');
+    if (!trimmed.endsWith('/api/v1')) {
+      return `${trimmed}/api/v1`;
+    }
+    return trimmed;
+  }
+  return '/api/v1';
+};
+
 const DEFAULT_CONFIG: ApiClientConfig = {
-  baseUrl: typeof process !== 'undefined' && process.env?.VITE_API_BASE_URL 
-    ? process.env.VITE_API_BASE_URL 
-    : '/api/v1',
+  baseUrl: resolveBaseUrl(),
   timeoutMs: 5000,
+};
+
+const IATA_CITY_MAP: Record<string, string> = {
+  DEL: 'Delhi',
+  BOM: 'Mumbai',
+  BLR: 'Bengaluru',
+  CCU: 'Kolkata',
+  HYD: 'Hyderabad',
+  GOI: 'Goa',
+  MAA: 'Chennai',
 };
 
 export class ApiClient {
@@ -120,26 +141,17 @@ export class ApiClient {
     const res = await this.request<RoutesOverviewResponse>(
       '/indices/routes'
     );
-    const enrichedRoutes = res.routes.map((r) => {
+    const rawRoutes = res.routes || [];
+    const enrichedRoutes = rawRoutes.map((r) => {
       return {
         ...r,
-        origin_city: r.origin_city || r.origin || '',
-        destination_city: r.destination_city || r.destination || '',
-        weight: r.weight ?? 0,
-        median_fare_inr: r.median_fare_inr ?? 0,
-        min_fare_inr: r.min_fare_inr ?? 0,
-        max_fare_inr: r.max_fare_inr ?? 0,
-        current_index: r.current_index ?? 0,
-        change_24h: r.change_24h ?? 0,
-        change_7d: r.change_7d ?? 0,
-        distance_km: r.distance_km ?? 0,
-        active_airlines_count: r.active_airlines_count ?? 0,
-        sparkline_7d: r.sparkline_7d && r.sparkline_7d.length > 0 ? r.sparkline_7d : [],
+        origin_city: r.origin_city || IATA_CITY_MAP[r.origin] || r.origin || '',
+        destination_city: r.destination_city || IATA_CITY_MAP[r.destination] || r.destination || '',
       };
     });
     return {
       routes: enrichedRoutes,
-      total_routes: enrichedRoutes.length,
+      total_routes: res.total_routes ?? enrichedRoutes.length,
     };
   }
 
@@ -222,9 +234,48 @@ export class ApiClient {
    * 8. Direct Airline vs OTA Arbitrage Analysis
    */
   public async getArbitrage(): Promise<ArbitrageResponse> {
-    return this.request<ArbitrageResponse>(
+    const res = await this.request<any>(
       '/analytics/arbitrage'
     );
+    const rawItems = res.items || res.opportunities || [];
+    const normalizedItems = rawItems.map((item: any) => {
+      const directFare = item.direct_fare ?? item.airline_direct_fare;
+      const otaFare = item.ota_fare;
+      const otaName = item.ota_platform || item.ota_name || 'OTA';
+      const spreadInr = item.spread_inr ?? item.spread_amount ?? (
+        directFare !== undefined && otaFare !== undefined ? Math.abs(directFare - otaFare) : undefined
+      );
+      const spreadPct = item.spread_percentage ?? (
+        directFare && spreadInr !== undefined ? (spreadInr / directFare) * 100 : undefined
+      );
+      const direction = item.direction || (
+        directFare !== undefined && otaFare !== undefined
+          ? (otaFare < directFare ? 'OTA_CHEAPER' : 'AIRLINE_CHEAPER')
+          : 'OTA_CHEAPER'
+      );
+      return {
+        ...item,
+        direct_fare: directFare,
+        airline_direct_fare: directFare,
+        ota_platform: otaName,
+        ota_name: otaName,
+        spread_inr: spreadInr,
+        spread_amount: spreadInr,
+        spread_percentage: spreadPct !== undefined ? Number(Number(spreadPct).toFixed(2)) : undefined,
+        direction,
+        actionable: item.actionable ?? true,
+      };
+    });
+    return {
+      generated_at: res.generated_at || new Date().toISOString(),
+      routes_evaluated: res.routes_evaluated ?? 0,
+      opportunities_count: res.opportunities_count ?? normalizedItems.length,
+      items: normalizedItems,
+      total_potential_savings_inr: res.total_potential_savings_inr ?? res.total_savings_potential_inr,
+      total_savings_potential_inr: res.total_potential_savings_inr ?? res.total_savings_potential_inr,
+      avg_spread_percentage: res.avg_spread_percentage ?? res.max_spread_percentage,
+      max_spread_percentage: res.max_spread_percentage ?? res.avg_spread_percentage,
+    };
   }
   /**
    * 8a. Econometric Indices (Laspeyres, Paasche, Fisher, Substitution Bias)
@@ -356,9 +407,16 @@ export class ApiClient {
       onStatusChange?.('connecting');
 
       try {
-        const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = typeof window !== 'undefined' ? window.location.host : '127.0.0.1:8000';
-        const wsUrl = `${protocol}//${host}/api/v1/stream/fares`;
+        let wsUrl: string;
+        if (this.config.baseUrl.startsWith('http://') || this.config.baseUrl.startsWith('https://')) {
+          const parsed = new URL(this.config.baseUrl);
+          const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+          wsUrl = `${wsProtocol}//${parsed.host}/api/v1/stream/fares`;
+        } else {
+          const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const host = typeof window !== 'undefined' ? window.location.host : '127.0.0.1:8000';
+          wsUrl = `${protocol}//${host}/api/v1/stream/fares`;
+        }
         ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {

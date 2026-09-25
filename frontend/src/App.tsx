@@ -79,6 +79,11 @@ export const App: React.FC = () => {
   }, [loadData]);
 
   const liveData = state.kind === "live" ? state.data : null;
+  const healthStatus = liveData?.systemHealth.status ?? null;
+  const statusLabel = state.kind === "loading" ? "LOADING" : state.kind === "error" ? "UNREACHABLE" : healthStatus;
+  const statusDot =
+    state.kind === "error" ? "bg-red-400" : healthStatus === "DEGRADED" ? "bg-amber-400" : liveData ? "bg-emerald-400" : "bg-neutral-500";
+  const sourceLabel = state.kind === "error" ? "No live data" : state.kind === "loading" ? "Connecting" : "Live API";
   const criticalAlertsCount = liveData?.anomalies.filter((a) => a.severity === 'CRITICAL').length || 0;
   const dgcaViolationsCount = liveData?.dgcaSurveillance?.total_violations || 0;
   const arbitrageSpreadsCount = liveData?.arbitrage?.opportunities_count || 0;
@@ -114,17 +119,9 @@ export const App: React.FC = () => {
                 title="Ingestion Pipeline Run Status • Continuous Scraper Feeds"
               >
                 <div className="flex items-center gap-1.5 text-neutral-300">
-                  <span
-                    className={`inline-block h-1.5 w-1.5 rounded-full ${
-                      liveData?.systemHealth.status === 'HEALTHY'
-                        ? 'bg-emerald-400'
-                        : liveData?.systemHealth.status === 'DEGRADED'
-                        ? 'bg-amber-400'
-                        : 'bg-neutral-500'
-                    }`}
-                  />
-                    <span className="text-[11px] font-medium tracking-wide">
-                    {liveData?.systemHealth.status || 'HEALTHY'}
+                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${statusDot}`} />
+                  <span className="text-[11px] font-medium tracking-wide">
+                    {statusLabel}
                   </span>
                 </div>
 
@@ -133,7 +130,7 @@ export const App: React.FC = () => {
                 <div className="flex items-center gap-1 text-[11px] text-neutral-400">
                   <span className="text-neutral-500">Scrapers:</span>
                   <span className="font-mono text-neutral-200 tabular-nums">
-                      {liveData?.systemHealth.active_scrapers ?? 8}
+                      {liveData ? liveData.systemHealth.active_scrapers : "—"}
                   </span>
                 </div>
 
@@ -148,7 +145,7 @@ export const App: React.FC = () => {
                           minute: '2-digit',
                           second: '2-digit',
                         })
-                      : 'Just now'}
+                      : "—"}
                   </span>
                 </div>
               </div>
@@ -156,21 +153,21 @@ export const App: React.FC = () => {
               {/* Live Source Indicator */}
               <div
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono border border-neutral-800 bg-neutral-900/60 text-neutral-300"
-                title="Live Backend API"
+                title={state.kind === "error" ? "Backend API unreachable" : "Live Backend API"}
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className={`h-1.5 w-1.5 rounded-full ${statusDot}`} />
                 <span className="text-neutral-500 hidden sm:inline">Source:</span>
-                <span className="font-medium">Live API</span>
+                <span className="font-medium">{sourceLabel}</span>
               </div>
 
               {/* Refresh Button */}
               <button
                 onClick={() => loadData(true)}
                 disabled={refreshing}
-                className="p-1.5 rounded-md bg-neutral-900/60 border border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors disabled:opacity-50"
+                className="p-1.5 rounded-md bg-neutral-900/60 border border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-950 disabled:opacity-50"
                 title={`Last updated: ${lastRefreshed.toLocaleTimeString()}`}
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-neutral-200' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'motion-safe:animate-spin text-neutral-200' : ''}`} />
               </button>
             </div>
           </div>
@@ -179,7 +176,7 @@ export const App: React.FC = () => {
           <div className="flex items-center space-x-1 border-t border-neutral-800 py-1.5 overflow-x-auto scrollbar-none">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'overview'
                   ? 'bg-neutral-800 text-white'
                   : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
@@ -191,7 +188,7 @@ export const App: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('econometrics')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'econometrics'
                   ? 'bg-neutral-800 text-white'
                   : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
@@ -203,7 +200,7 @@ export const App: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('dgca')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'dgca'
                   ? 'bg-neutral-800 text-white'
                   : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
@@ -220,7 +217,7 @@ export const App: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('routes')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'routes'
                   ? 'bg-neutral-800 text-white'
                   : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
@@ -232,7 +229,7 @@ export const App: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('elasticity')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'elasticity'
                   ? 'bg-neutral-800 text-white'
                   : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
@@ -244,7 +241,7 @@ export const App: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('anomalies')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'anomalies'
                   ? 'bg-neutral-800 text-white'
                   : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
@@ -261,7 +258,7 @@ export const App: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('telemetry')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'telemetry'
                   ? 'bg-neutral-800 text-white'
                   : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
@@ -276,7 +273,7 @@ export const App: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('arbitrage')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'arbitrage'
                   ? 'bg-neutral-800 text-white'
                   : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
@@ -299,7 +296,7 @@ export const App: React.FC = () => {
         <ApiErrorBoundary onRetry={() => loadData(true)}>
         {state.kind === "loading" ? (
           <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
-            <RefreshCw className="w-6 h-6 text-neutral-400 animate-spin" />
+            <RefreshCw className="w-6 h-6 text-neutral-400 motion-safe:animate-spin" />
             <p className="text-xs text-neutral-500 font-mono">
               Aggregating live flight fares & calculating weighted median indices...
             </p>
@@ -309,7 +306,7 @@ export const App: React.FC = () => {
             <p className="text-sm text-neutral-300">{describeApiError(state.error)}</p>
             <button
               onClick={state.retry}
-              className="mt-4 px-3.5 py-1.5 bg-neutral-100 hover:bg-white text-neutral-950 text-xs font-medium rounded-md transition-colors"
+              className="mt-4 px-3.5 py-1.5 bg-neutral-100 hover:bg-white text-neutral-950 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-950"
             >
               Retry Connection
             </button>
