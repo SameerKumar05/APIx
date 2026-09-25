@@ -1,12 +1,31 @@
+import logging
 import time
-from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException, Request, status
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from collections.abc import AsyncIterator
+
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from backend.app.api.v1.api import api_router
 from backend.app.core.config import settings
+from backend.app.db.session import get_db, init_db, probe_database_readiness
+
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    try:
+        init_db()
+    except SQLAlchemyError:
+        logger.exception("Database schema initialization failed")
+    yield
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -15,6 +34,7 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url=f"{settings.API_V1_STR}/docs",
     redoc_url=f"{settings.API_V1_STR}/redoc",
+    lifespan=lifespan,
 )
 
 # CORS Middleware configuration
@@ -22,8 +42,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_headers=[
+        "Accept",
+        "Authorization",
+        "Content-Type",
+        "X-API-Key",
+        "X-Ingestion-Key",
+    ],
+    expose_headers=["X-Process-Time"],
 )
 
 
@@ -89,13 +116,21 @@ async def generic_exception_handler(request: Request, exc: Exception):
     summary="Service Health Check",
     description="Returns service availability, timestamp, and version metadata.",
 )
-async def health_check():
+async def health_check(db: Session = Depends(get_db)):
+    try:
+        probe_database_readiness(db)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        ) from exc
     return {
         "status": "healthy",
         "service": "apix-backend-api",
         "version": settings.VERSION,
         "environment": settings.ENVIRONMENT,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 

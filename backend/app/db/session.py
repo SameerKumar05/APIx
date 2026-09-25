@@ -10,8 +10,9 @@ import os
 from collections.abc import Generator
 from typing import Any
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 # Database URL configuration
@@ -57,6 +58,24 @@ class Base(DeclarativeBase):
     pass
 
 
+def probe_database_readiness(db: Session) -> None:
+    """Verify routes and the durable queue tables exist and are queryable.
+
+    Rolls the session back when a probe statement fails so the caller can
+    raise without leaving the transaction aborted.
+    """
+    try:
+        for statement in (
+            "SELECT 1 FROM routes LIMIT 1",
+            "SELECT 1 FROM crawler_jobs LIMIT 1",
+            "SELECT 1 FROM worker_heartbeats LIMIT 1",
+        ):
+            db.execute(text(statement))
+    except SQLAlchemyError:
+        db.rollback()
+        raise
+
+
 def get_db() -> Generator[Session, None, None]:
     """FastAPI dependency for yielding database sessions.
 
@@ -75,6 +94,7 @@ def init_db(target_engine: Engine | None = None) -> None:
     Args:
         target_engine: Optional engine override (useful for testing).
     """
+    import backend.app.models  # noqa: F401
     eng = target_engine or engine
     Base.metadata.create_all(bind=eng)
 
