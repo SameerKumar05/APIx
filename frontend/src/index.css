@@ -19,6 +19,72 @@
   }
 }
 
+:focus-visible,
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #ffffff !important;
+  outline-offset: 2px !important;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .recharts-surface *,
+  .recharts-wrapper,
+  .recharts-wrapper *,
+  .recharts-responsive-container *,
+  .recharts-legend-wrapper,
+  .recharts-tooltip-wrapper,
+  .recharts-curve,
+  .recharts-line,
+  .recharts-bar,
+  .recharts-area,
+  .recharts-pie,
+  .recharts-sector,
+  .recharts-rectangle,
+  .recharts-symbols,
+  .recharts-dot,
+  .recharts-cross {
+    animation: none !important;
+    transition: none !important;
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .animate-spin,
+  .animate-pulse,
+  .animate-ping,
+  .animate-bounce {
+    animation: none !important;
+  }
+
+  .live-ticker-track,
+  .live-ticker-stream,
+  .ticker-carousel,
+  [data-ticker-stream],
+  .live-fare-ticker {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
 /* Custom subtle scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
