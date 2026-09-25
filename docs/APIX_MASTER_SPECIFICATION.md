@@ -10,7 +10,7 @@
 | **Problem Statement** | SIH 2026 PS 26056: Real-time Airfare Price Index for CPI Augmentation & Dynamic Tariff Monitoring |
 | **Target Agencies** | Central Statistics Office (CSO / MoSPI), Reserve Bank of India (RBI MPC), Directorate General of Civil Aviation (DGCA) |
 | **System Version** | Cycle 4 Production Master Specification (Release 1.0.0) |
-| **Verification Status** | **188/188 Pytest Unit Tests Passing (100%)** \| **23/23 Invariant Verification Steps Passed** |
+| **Verification Status** | **Current: 226 passed with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`** \| Historical: 187/187 and 23/23 claims are historical, not current |
 | **Primary Authors** | DocLibral Swarm Consortium (Architecture, Econometrics, Ingestion, API, Deployment) |
 | **Classification** | Official System Specification / Open Public Digital Public Infrastructure (DPI) |
 
@@ -97,7 +97,7 @@ flowchart TD
 
     ScrapingEngine --> BATCH_API
 
-    subgraph StorageLayer ["PostgreSQL / TimescaleDB (14 Production Tables)"]
+    subgraph StorageLayer ["PostgreSQL / TimescaleDB (16 Tables on Fresh Startup: 14 Domain + crawler_jobs + worker_heartbeats)"]
         RAW[("raw_fares<br/>(Partitioned by recorded_at)")]
         ECON[("econometric_indices<br/>(Fisher, Paasche, Laspeyres)")]
         VIOL[("dgca_violations<br/>(Rule 135 Tariff Breaches)")]
@@ -329,16 +329,16 @@ APIx ingests domestic airfares across an exact **40-slot matrix** composed of In
 
 | Corridor Code | Origin | Destination | Direction | Monthly Pax (DGCA) | Corridor Weight |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| `DEL-BOM` | DEL | BOM | North $\to$ West | 550,000 | **0.220** |
-| `BOM-DEL` | BOM | DEL | West $\to$ North | 550,000 | **0.220** |
-| `BLR-DEL` | BLR | DEL | South $\to$ North | 350,000 | **0.140** |
-| `DEL-BLR` | DEL | BLR | North $\to$ South | 350,000 | **0.140** |
-| `BOM-BLR` | BOM | BLR | West $\to$ South | 250,000 | **0.100** |
-| `BLR-BOM` | BLR | BOM | South $\to$ West | 250,000 | **0.100** |
-| `DEL-HYD` | DEL | HYD | North $\to$ South | 100,000 | **0.040** |
-| `HYD-DEL` | HYD | DEL | South $\to$ North | 100,000 | **0.040** |
-| `DEL-CCU` | DEL | CCU | North $\to$ East | 100,000 | **0.040** |
-| `CCU-DEL` | CCU | DEL | East $\to$ North | 100,000 | **0.040** |
+| `DEL-BOM` | DEL | BOM | North $\to$ West | 437,500 | **0.175** |
+| `BOM-DEL` | BOM | DEL | West $\to$ North | 437,500 | **0.175** |
+| `BLR-DEL` | BLR | DEL | South $\to$ North | 312,500 | **0.125** |
+| `DEL-BLR` | DEL | BLR | North $\to$ South | 312,500 | **0.125** |
+| `BOM-BLR` | BOM | BLR | West $\to$ South | 225,000 | **0.090** |
+| `BLR-BOM` | BLR | BOM | South $\to$ West | 225,000 | **0.090** |
+| `DEL-CCU` | DEL | CCU | North $\to$ East | 162,500 | **0.065** |
+| `CCU-DEL` | CCU | DEL | East $\to$ North | 162,500 | **0.065** |
+| `DEL-HYD` | DEL | HYD | North $\to$ South | 112,500 | **0.045** |
+| `HYD-DEL` | HYD | DEL | South $\to$ North | 112,500 | **0.045** |
 | **Total Baseline** | | | | **2,500,000** | **1.000000** |
 
 Each corridor is evaluated daily across the four booking horizons ($T+1, T+7, T+15, T+30$):
@@ -394,9 +394,9 @@ The `StreamingDedupEngine` processes incoming fare quotes in real time:
 
 ---
 
-## 5. Database Architecture & 14 Production Models
+## 5. Database Architecture & 16 Tables on Fresh Startup (14 Domain + 2 Queue)
 
-The database layer utilizes **PostgreSQL** (augmented with **TimescaleDB** hypertable extensions in production) managed via **SQLAlchemy 2.0**. The schema consists of exactly **14 production tables**:
+The database layer utilizes **PostgreSQL** (augmented with **TimescaleDB** hypertable extensions in production) managed via **SQLAlchemy 2.0**. Fresh startup `init_db()` (`backend/app/db/session.py:72`) calls `Base.metadata.create_all()` and creates 16 tables on an empty SQLite file (measured on `/tmp/opencode/apix-verify/startup-empty.db` and `/tmp/opencode/apix-verify/final3.db`). `create_all` is table creation only, not a migration system. The schema consists of the 14 domain tables below plus `crawler_jobs` and `worker_heartbeats` for the durable trigger queue.
 
 ```mermaid
 erDiagram
@@ -549,7 +549,7 @@ erDiagram
     }
 ```
 
-### 14 Production Table Catalogue:
+### 14 Production Table Catalogue (plus 2 queue tables = 16 on fresh startup):
 1. `routes`: Domestic city-pair corridors with DGCA base weights, passenger volumes, and airport identifiers.
 2. `airlines`: Scheduled air carriers with DGCA domestic market shares (IndiGo 62%, Air India 20%, Air India Express 8%, Akasa 5%, SpiceJet 4%).
 3. `raw_fares`: Deduplicated flight fare quotes partitioned by `recorded_at` with deterministic `hash_id`.
@@ -564,13 +564,17 @@ erDiagram
 12. `route_elasticity`: Intertemporal demand elasticity parameters across booking windows ($T+1 \to T+30$).
 13. `dgca_violations`: Statutory audit log for Rule 135 violations (3-sigma breaches, $>2.5\times$ median spikes, DoD surges).
 14. `dgca_traffic_weights`: Official DGCA quarterly city-pair passenger volume weights updated for index reweighting.
+15. `crawler_jobs`: Durable trigger queue rows backing 202 `QUEUED` acceptance.
+16. `worker_heartbeats`: Worker liveness leases backing the trigger liveness gate.
+
+Standalone worker: `python -m ingestion.worker` (`ingestion/worker.py`), also the Compose `apix-worker` service command (`docker-compose.yml`). The API no longer calls a process-local scheduler. Live OTA execution through this path is unverified because the verified worker ran in synthetic mode.
 
 **Database Initialization & Seed Routine:**
 Database schema creation and initial reference seeding is executed deterministically via:
 ```bash
 python -m backend.app.db.seed
 ```
-This initializes all 14 tables, seeds the 10 baseline corridors (sum of weights = 1.000000), seeds the 5 major domestic carriers, and configures database integrity constraints.
+This initializes the tables via `init_db()` (`create_all`, not a migration system), seeds the 10 baseline corridors (sum of weights = 1.000000), seeds the 5 major domestic carriers, and configures database integrity constraints. Retention `cleanup_old_raw_fares()` uses `synchronize_session="fetch"` (`backend/app/db/ingestion_repo.py:479`); a clean-room probe pruned 1 row older than 90 days and retained the 89-day and 1-day rows (evidence: `.debug-journal.md` 2026-09-25T14:40Z).
 
 ---
 
@@ -594,8 +598,12 @@ APIx provides high-performance asynchronous REST endpoints implemented via **Fas
 
 ---
 
-### 6.2 Batch Ingestion Contract (`X-Ingestion-Key`)
+### 6.2 Batch Ingestion Contract (`X-Ingestion-Key`) and Trigger Contract
 Scraper workers and external GDS collectors dispatch micro-batches (up to 100 quotes per request) to `POST /api/v1/ingestion/batch`.
+
+Trigger contract for `POST /api/v1/ingestion/trigger`: 401 without a key, 503 without a fresh worker (`No active crawler worker available`) or with unavailable DB (`Database unavailable`), and 202 `QUEUED` only after a committed `crawler_jobs` row plus a fresh `worker_heartbeats` signal. Identical in-flight triggers deduplicate to the same task ID (evidence: `.omo/ulw-research/20260925-180203/evidence/trigger-idempotency-8014.json`, `evidence/trigger-liveness-8014.json`, `.debug-journal.md` 2026-09-25T16:38Z).
+
+Health readiness is computed once by `probe_database_readiness(db)` in `backend/app/db/session.py`, which verifies `routes`, `crawler_jobs` and `worker_heartbeats` exist and are queryable and rolls the session back on failure. Both endpoints call that one function, so they cannot disagree about whether the service is ready. Health contract: `/health` and `/api/v1/health` return 503 `Database unavailable` on unreachable DB or reachable-but-uninitialized schema (evidence: `.omo/ulw-research/20260925-180203/evidence/api-8015-final.json`). CORS allows the configured origins with credentials, does not reflect `https://evil.example`, rejects evil preflight with 400, and rejects wildcard config (evidence: `evidence/cors-and-trigger-8014.json`, `backend/app/core/config.py`).
 
 **Request Header:**
 ```http
@@ -631,7 +639,7 @@ Content-Type: application/json
 ---
 
 ### 6.3 WebSocket Real-Time Fare Stream Protocol
-For live trading terminals, travel aggregators, and regulatory oversight desks, APIx provides sub-50ms push updates via WebSocket at `WS /api/v1/stream/fares`.
+For live trading terminals, travel aggregators, and regulatory oversight desks, APIx provides sub-50ms push updates via WebSocket at `WS /api/v1/stream/fares`. Idle behavior after the fix: `no_update` packets with `fare_update_count: 0` and no synthetic fare packets (raw_fares 463 unchanged; evidence: `.omo/ulw-research/20260925-180203/evidence/websocket-idle-8014-after-fix.json`). Nine mounted aliases all connect and remain a duplicate-mount residual, not separate contracts (evidence: `evidence/websocket-alias-matrix-8014.json`).
 
 ```mermaid
 sequenceDiagram
@@ -736,7 +744,7 @@ All configuration settings are centralized via Pydantic `BaseSettings`:
 APIx has completed rigorous multi-stage verification across empirical econometric suites, database relational invariants, deduplication performance, and API route contracts.
 
 ```mermaid
-pie title APIx Test Suite Breakdown (188 Total Tests Passing)
+pie title APIx Test Suite Breakdown (Current 226 Passing; Historical Split Below Was 188)
     "Econometrics & Math Invariants" : 65
     "API & Router Contracts" : 51
     "Ingestion, Crawlers & Repo" : 39
@@ -744,11 +752,14 @@ pie title APIx Test Suite Breakdown (188 Total Tests Passing)
     "Database Models & Seed Data" : 4
 ```
 
+Current: **226 passed** with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`. The 188 pie above is historical. The 23-step invariant harness is historical until re-run.
+
 ### 9.1 Verification Suites Summary
 
 | Test Suite / Script | Verification Target | Status | Passing Checks |
 |:---|:---|:---:|:---:|
-| `pytest tests/` | Complete repository unit & integration tests | **PASSED** | **188 / 188 passed (100%)** |
+| `pytest tests/` | Complete repository unit & integration tests | **PASSED (current)** | **226 passed on `/tmp/opencode/apix-verify/final3.db`, one Starlette TestClient deprecation warning** |
+| `pytest tests/` | Historical full-suite counts | **HISTORICAL** | **188 / 188, 187 / 187, 190, and 194 counts are historical and superseded** |
 | `scripts/test_econometric_specs.py` | Bortkiewicz bounds, Fisher axioms, elasticity, 38-day lead | **PASSED** | **6 / 6 steps passed** |
 | `scripts/test_econometric_engine.py` | Vectorized Fisher/Paasche/Laspeyres, RMSD, MAPE | **PASSED** | **10 / 10 checks passed** |
 | `scripts/test_db_models.py` | 14 production tables, 10 corridors, weight sum = 1.000 | **PASSED** | **6 / 6 checks passed** |
@@ -789,7 +800,7 @@ The APIx system represents a transformative advancement in macroeconomic price m
 2. **For the Ministry of Statistics & Programme Implementation (MoSPI):** Establishes an automated, reproducible digital methodology to augment CPI Item 6.2.03, replacing sparse manual physical surveys with real-time, multi-source, transaction-weighted superlative Fisher Ideal indexing.
 3. **For the Directorate General of Civil Aviation (DGCA) & MoCA:** Automates statutory tariff monitoring under Aircraft Rules 1937 Rule 135, replacing reactive public grievance handling with automated 3-sigma surge detection, median multiple tracking, and real-time evidence generation.
 
-With **188/188 pytest unit tests passing** and all **23 invariant verification steps satisfied**, APIx stands production-ready as a definitive Digital Public Infrastructure solution for Indian civil aviation and macroeconomic statistics.
+**Live scraping: what is real and what is blocked.** Genuine data does arrive. Playwright captures `https://www.spicejet.com/api/v3/search/availability` (HTTP 200, 17777 bytes, `data.trips[]`) and flight identity extracts unambiguously (`SG 815`, DEL 09:50 to BOM 12:25). Two blockers stop a live fare from being persisted. First, client-side bot defence: `makemytrip.com` resolves and serves pages from this host, but Akamai rejects the request. Measured three ways: stock `curl` gets `403`, Playwright's bundled Chromium is reset with `net::ERR_HTTP2_PROTOCOL_ERROR`, and driving the distro build at `/usr/bin/chromium` returned HTTP 200 with 500864 bytes of real page content. The scraper now prefers a system Chromium via `resolve_launch_kwargs` with a `playwright_browser_executable` override, but that unblock is not durable: retested under repetition the same client returned 0 of 3 successes, so sustained probing tips the egress IP into a temporary Akamai throttle. Separately, `api.spicejet.com` is not blocked at all, it is NXDOMAIN on both 1.1.1.1 and 8.8.8.8, meaning the hostname does not exist; no provider change can make a nonexistent hostname resolve. Second, SpiceJet publishes no structured fare field; the price is embedded in an opaque key decoding to fragments such as `USAV~5511~~0~665~` and `X!0:48004:1004:854:5994:2364:1524:895:280`, and the mapping is undocumented, so no fare was guessed. Separately, a critical provenance defect was found and fixed: `amadeus.py` labelled generated mock records `is_synthetic=False`, so a live run would have persisted invented fares as real and earned a false LIVE badge. Provenance now follows the payload, and `scripts/audit_provenance.py` fails closed if any row claims to be live without corroborating telemetry, a scraping run, proxy evidence and scrape-time diversity (evidence: `evidence/live-ingestion-verification.json`, `evidence/provenance-audit.json`). **The airfare data is simulated, not live.** `INGESTION_MODE` defaults to `synthetic` and no live OTA scrape has been verified; the UI labels simulated rows as `SIMULATED`, and a record with no provenance is persisted as synthetic rather than presumed real (evidence: `evidence/ingestion-provenance-mislabelling.json`). With **226 passed (current, one Starlette TestClient deprecation warning)** and open findings below, APIx is not claimed as final. Preserved limitations: sparse-FK coverage (evidence: `/tmp/opencode/apix-verify/constraints.db`); no role separation and false-success 200 with `database_updated: false` plus fixed recalculation tuple (evidence: `evidence/auth-matrix-8014.json`, `evidence/api-boundary-matrix-8014.json`); unknown route returns success-shaped 200 and stream status reports `LIVE` independently of writes; The frontend audit blockers from the baseline pass were remediated and re-measured directly against the frozen production build: 24 of 24 tab renders across 375/768/1280 with zero console errors, zero crashes and zero synthetic-zero fare tokens, and focus-ring contrast at a minimum of 17.93:1 over 24 tab stops. That is first-party measurement, not an independent reviewer pass. **CRITICAL, partially fixed: `GET /api/v1/indices/routes` served fabricated airfares as measured data.** **Fixed:** the swallowed `except Exception: pass` that returned the entire hardcoded seed list on any failure is replaced by a 503 `Database unavailable`, and a reachable database with no active routes now reports zero coverage instead of seven invented corridors. Verified at runtime on a current-source instance and locked by two regression tests (`test_routes_overview_does_not_fabricate_when_database_is_unavailable`, `test_routes_overview_reports_no_coverage_instead_of_seeded_corridors`). **Still open:** a route that has no `RouteDailyIndex` is still replaced by its hardcoded `DOMESTIC_ROUTES_SEED` entry or an invented `avg_fare_inr=5000.0` default, and `/api/v1/indices/routes/{route_code}/history` applies the same seed fallback including an invented base index of 108.0. On a sparse database 7 of 7 served routes matched the hardcoded literals exactly, so the whole response was invented. That part needs a product decision, because `RouteOverviewItem` requires `current_index` and `avg_fare_inr` (evidence: `evidence/indices-routes-fabricated-fares.json`). Also preserved: `prefers-reduced-motion` does not reach Recharts chart animation, and enqueue deduplication is still check-then-insert. No independent reviewer PASS, Lighthouse, live OTA crawling, or final campaign pass is claimed.
 
 ---
 *Authored by the DocLibral Swarm Consortium | APIx System Architecture | Smart India Hackathon 2026 PS 26056*

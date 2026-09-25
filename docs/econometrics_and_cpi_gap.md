@@ -685,9 +685,9 @@ In accordance with BackendApiDev-4's router implementation in `backend/app/api/v
 
 ---
 
-### 9. Verification & Mathematical Proof Reference
+### 9. Verification, Open Findings, and Mathematical Proof Reference
 
-The mathematical invariants and econometric specifications established in this document are codified and continuously verified by `scripts/test_econometric_specs.py`.
+Current isolated suite: **226 passed** with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`. Older counts are historical. The mathematical invariants and econometric specifications established in this document are codified and continuously verified by `scripts/test_econometric_specs.py`.
 
 The test suite validates seven fundamental mathematical assertions:
 1. **Assertion 1 (Index Axioms):** Identity, proportionality, time reversal, and factor reversal tests.
@@ -697,6 +697,8 @@ The test suite validates seven fundamental mathematical assertions:
 5. **Assertion 5 (MoSPI Divergence & Lead-Lag):** Gap tracking accuracy and cross-correlation peak at positive lead lag ($\tau^* \in [15, 45]$ days).
 6. **Assertion 6 (DGCA Statutory 3-Sigma Surge):** $Z \ge 3.0$ triggers CRITICAL classification.
 7. **Assertion 7 (DGCA Abnormal Route Spike):** Fares $> 2.5\times$ route median trigger CRITICAL classification.
+
+Open analytical-read findings preserved: recalculate writes a fixed benchmark tuple (DEL-BOM `118.5/114.2/116.3301/2.1699 chain_weighted`) rather than proving a live recomputation, both ingestion and analyst keys reach the mutation (no role separation), and non-existent violation IDs return success-shaped 200 with `database_updated: false` (evidence: `.omo/ulw-research/20260925-180203/evidence/auth-matrix-8014.json`, `evidence/api-boundary-matrix-8014.json`, `.debug-journal.md` auth/boundary records). Unknown route `XXX-YYY` returns success-shaped 200 and stream status reports `LIVE` independently of writes. The frontend audit blockers are fixed: the synthesized horizon and MoSPI lines, the `toLowerCase` crash, the route zero-coercion, the Telemetry status vocabulary, the anomaly type set, the 1.06:1 focus ring and the hardcoded preview proxy (evidence: `evidence/header-truthfulness-fix.json`). The frontend was re-measured directly against the frozen production build: 24 of 24 tab renders across 375/768/1280 with zero console errors, zero crashes and zero synthetic-zero fare tokens, and focus-ring contrast at a minimum of 17.93:1 over 24 tab stops. That is first-party measurement, not an independent reviewer pass, so no independent visual PASS and no Lighthouse result is claimed. No live OTA crawling and no final campaign pass is claimed.
 
 ---
 *Authored by LeadArchitect-4 | APIx System Architecture | SIH 2026 PS 26056*

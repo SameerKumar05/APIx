@@ -43,8 +43,8 @@ flowchart TD
         VALID["Sanity Bounds Filter<br/>(IQR & Boundary Check)"]
     end
 
-    subgraph DB ["3. Storage Layer (PostgreSQL 16)"]
-        POSTGRES[("PostgreSQL 16 Engine<br/>(14 Relational Tables)")]
+    subgraph DB ["3. Storage Layer (PostgreSQL 16; 16 Tables on Fresh Startup)"]
+        POSTGRES[("PostgreSQL 16 Engine<br/>(14 Domain Tables + crawler_jobs + worker_heartbeats)")]
         TS_DATA[("TimescaleDB / Hypertable Partitions<br/>(raw_fares, indices)")]
     end
 
@@ -185,7 +185,7 @@ $$\text{Spread}_{\%} = \frac{P_{\text{OTA}} - P_{\text{Direct}}}{P_{\text{Direct
 
 ### 5. Database Schema Blueprint
 
-APIx utilizes a unified PostgreSQL 16 schema comprising 14 production tables structured across six core functional domains:
+APIx utilizes a unified PostgreSQL 16 schema comprising 14 domain tables plus the durable-queue tables `crawler_jobs` and `worker_heartbeats` (16 tables on fresh startup via `init_db()` calling `create_all`; `create_all` is not a migration system; evidence: `/tmp/opencode/apix-verify/startup-empty.db`, `/tmp/opencode/apix-verify/final3.db`), structured across six core functional domains plus the queue:
 
 ```sql
 -- ============================================================================
@@ -469,14 +469,14 @@ flowchart TD
         BACKEND["FastAPI Application Backend<br/>(Uvicorn ASGI Workers, 4 Procs)"]
     end
 
-    subgraph WORKERS ["Ingestion Worker Cluster"]
-        INGEST_WORKER["Playwright Headless Workers<br/>(Stealth Mode & Anti-Bot Jitter)"]
+    subgraph WORKERS ["Ingestion Worker Cluster (Durable Queue)"]
+        INGEST_WORKER["Standalone Crawler Worker<br/>(python -m ingestion.worker + Compose apix-worker)"]
         GDS_CONNECTOR["Amadeus GDS OAuth Connector<br/>(Token Auto-Refresh)"]
-        SCHEDULER["APScheduler Cron Engine<br/>(Periodic Ingestion & Index Runs)"]
+        SCHEDULER["Trigger Queue + Heartbeat Leases<br/>(crawler_jobs + worker_heartbeats)"]
     end
 
     subgraph DATA ["Data Persistence Layer"]
-        DB_SERVER[("PostgreSQL 16 Instance<br/>(14 Production Tables)")]
+        DB_SERVER[("PostgreSQL 16 Instance<br/>(16 Tables on Fresh Startup)")]
         VOLUME[("Persistent Storage Volume<br/>(WAL & Timeseries Snapshots)")]
     end
 
@@ -496,10 +496,11 @@ flowchart TD
 ```
 
 #### 6.1 Container Specifications
-- **`apix-backend`:** FastAPI application exposing RESTful JSON and WebSocket streaming endpoints.
-- **`apix-database`:** PostgreSQL 16 instance storing relational metadata, econometric series, and time-series fares.
+- **`apix-backend`:** FastAPI application exposing RESTful JSON and WebSocket streaming endpoints. Health returns 503 `Database unavailable` on unreachable or uninitialized DB; trigger returns 401 without a key, 503 without a fresh worker or unavailable DB, and 202 `QUEUED` only after a committed `crawler_jobs` row plus fresh `worker_heartbeats` signal (evidence: `evidence/api-8015-final.json`, `evidence/trigger-liveness-8014.json`, `evidence/trigger-idempotency-8014.json`).
+- **`apix-database`:** PostgreSQL 16 instance storing relational metadata, econometric series, and time-series fares. Current isolated suite is 226 passed with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`; older 187/188/190/194 counts are historical.
 - **`apix-ingestion`:** Headless Playwright worker container equipped with Chromium dependencies and APScheduler daemon.
-- **`apix-frontend`:** React 19 + TypeScript + Vite single page application with Tailwind CSS and Recharts / Leaflet.
+- **`apix-worker` (Compose):** Runs `python -m ingestion.worker`, consuming `crawler_jobs` with atomic claims and `worker_heartbeats` leases; the standalone command is also `python -m ingestion.worker`. The API no longer calls a process-local scheduler. Live OTA execution is unverified (synthetic-mode worker only).
+- **`apix-frontend`:** React 19 + TypeScript + Vite single page application with Tailwind CSS and Recharts / Leaflet. The Arbitrage search crash, route zero-coercion, status-vocabulary, anomaly-type, focus-contrast and preview-proxy defects are fixed. The frontend was re-measured directly against the frozen production build: 24 of 24 tab renders across 375/768/1280 with zero console errors, zero crashes and zero synthetic-zero fare tokens, and focus-ring contrast at a minimum of 17.93:1 over 24 tab stops. That is first-party measurement, not an independent reviewer pass, so no independent visual PASS and no Lighthouse result is claimed.
 
 ---
 
@@ -509,3 +510,5 @@ flowchart TD
 2. **Secrets & Credentials Management:** Zero hardcoded credentials. All API keys (`AMADEUS_CLIENT_ID`, `AMADEUS_CLIENT_SECRET`, `INGESTION_API_KEY`, `BACKEND_CORS_ORIGINS`) managed via environment variables and Docker secrets.
 3. **Data Integrity & Immutability:** Raw scrape records are immutable and stored with SHA-256 deduplication hashes to ensure auditability for DGCA regulators.
 4. **Graceful Degradation:** If external OTA scraping encounters anti-bot challenges or downtime, the pipeline gracefully falls back to Amadeus GDS API feeds, logging telemetry without interrupting index calculations.
+5. **Verified boundaries:** CORS allows only the configured origins with credentials and rejects wildcard config (`backend/app/core/config.py`); retention cleanup uses `synchronize_session="fetch"` and pruned 1 old row while retaining 89-day and 1-day rows (evidence: `.debug-journal.md` 2026-09-25T14:40Z); idle WebSocket sends `no_update` with zero fare updates (evidence: `evidence/websocket-idle-8014-after-fix.json`).
+6. **Preserved limitations:** Sparse-FK coverage; no role separation and false-success mutations; fixed/generated analytical reads; unknown-route 200; nine duplicate WebSocket mounts; frontend contract mismatches and blockers. No PostgreSQL runtime verification, live OTA crawling, visual QA, Lighthouse, or final campaign pass is claimed.
