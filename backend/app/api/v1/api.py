@@ -16,6 +16,7 @@ from backend.app.api.v1.endpoints.telemetry import router as telemetry_router
 from backend.app.db.session import get_db, probe_database_readiness
 from backend.app.models.raw_fare import RawFare
 from backend.app.models.telemetry import ScraperTelemetry
+from ingestion.sources import source_contract
 
 api_router = APIRouter()
 
@@ -61,14 +62,7 @@ async def api_health(db: Session = Depends(get_db)):
         "records_ingested_today": records_ingested_today,
         "last_sync_timestamp": last_scraped_at.isoformat() if last_scraped_at else "",
         "supported_airlines": ["6E", "AI", "IX", "QP", "SG"],
-        "supported_sources": ["makemytrip", "easemytrip", "spicejet"],
-        "source_types": {
-            "makemytrip": "ota",
-            "easemytrip": "ota",
-            "spicejet": "airline_direct",
-        },
-        "ps_named_sources_total": 11,
-        "ps_named_sources_implemented": 3,
+        **source_contract(),
         "latency_ms": latency_ms,
         "service": "apix-backend-api",
         "timestamp": timestamp,

@@ -188,11 +188,13 @@ export interface SystemHealthResponse {
   records_ingested_today: number;
   last_sync_timestamp: string;
   supported_airlines: string[];
-  /** Sources actually implemented. Not every PS-named portal: only these have scrapers. */
+  /** Scraper classes that exist. Implemented is not the same as a live fare. */
   supported_sources: string[];
   source_types: Record<string, 'ota' | 'airline_direct'>;
   ps_named_sources_total: number;
   ps_named_sources_implemented: number;
+  live_verified_sources: string[];
+  produces_live_fares: boolean;
   latency_ms: number;
 }
 
