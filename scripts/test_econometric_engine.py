@@ -327,25 +327,30 @@ def test_mospi_cpi_divergence_analytics() -> None:
         mospi_cpi_series=BENCHMARK_MOSPI_CPI_SERIES,
     )
 
-    # 1. Divergence gap must be computed and positive (airfare higher volatility than basket)
-    if div_result.current_divergence_gap <= 0:
+    # No verified MoSPI series exists. The bundled benchmark was withdrawn for
+    # contradicting NSO press notes, so the engine must refuse to produce a
+    # comparison rather than fabricate a gap and a lead time.
+    if div_result.metadata.get("benchmark_sound") is not False:
         raise VerificationFailure(
-            f"APIx airfare index divergence gap should be positive, got {div_result.current_divergence_gap}"
+            "Divergence must be reported unsound while no MoSPI series is verified"
+        )
+    if div_result.current_divergence_gap != 0.0 or div_result.estimated_lead_days != 0:
+        raise VerificationFailure(
+            "An unsound comparison must report zero gap and zero lead, got "
+            f"{div_result.current_divergence_gap} and {div_result.estimated_lead_days}"
         )
 
-    # 2. Estimated lead time should demonstrate predictive lead (~38 days)
-    if div_result.estimated_lead_days < 30:
+    # 3. An unsound comparison reports no tracking error rather than a small one
+    if div_result.tracking_error_rmse != 0.0:
         raise VerificationFailure(
-            f"APIx should lead published MoSPI CPI by at least 30 days, got {div_result.estimated_lead_days}"
+            f"An unsound comparison must report zero RMSE, got {div_result.tracking_error_rmse}"
         )
 
-    # 3. Tracking error RMSE must be finite positive
-    if div_result.tracking_error_rmse <= 0.0:
-        raise VerificationFailure("Tracking error RMSE must be strictly positive")
-
-    # 4. Lead-lag cross correlation table must contain lag offsets
-    if "lag_+1m" not in div_result.lead_lag_correlations:
-        raise VerificationFailure("Lead-lag correlations must contain lag_+1m")
+    # 4. And no lead-lag table, since there is nothing to correlate against
+    if div_result.lead_lag_correlations:
+        raise VerificationFailure(
+            f"An unsound comparison must report no lead-lag table, got {sorted(div_result.lead_lag_correlations)}"
+        )
 
 
 # ===========================================================================

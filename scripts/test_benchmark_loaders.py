@@ -71,17 +71,18 @@ def test_mospi_cpi_loader() -> None:
     loader = MospiCpiLoader()
     series = loader.get_cpi_series()
 
-    # 1.1 Period count and range
+    # The bundled MoSPI series was withdrawn for contradicting NSO press notes, so
+    # there is nothing to validate. Assert the provenance gate rather than a period
+    # count, then skip the series-dependent checks below.
     log_test(
-        "MoSPI 27-month period completeness",
-        len(series) == 27,
-        f"Expected 27 months (2024-01..2026-03), got {len(series)}",
+        "MoSPI series withdrawn rather than bundled",
+        series == []
+        and loader.provenance.get("official") is False
+        and loader.provenance.get("status") == "withdrawn",
+        f"Expected a withdrawn, non-official series, got {loader.provenance}",
     )
-    log_test(
-        "MoSPI range bounds",
-        series[0].year_month == "2024-01" and series[-1].year_month == "2026-03",
-        f"Bounds: {series[0].year_month} to {series[-1].year_month}",
-    )
+    if not series:
+        return
 
     # 1.2 Monotonicity and positive values
     all_positive = all(
@@ -297,8 +298,8 @@ def test_database_seeding() -> None:
             mospi_loader = MospiCpiLoader()
             mospi_count = mospi_loader.seed_database(db=session)
             log_test(
-                "MoSPI CPI database seeding",
-                mospi_count == 27,
+                "MoSPI CPI seeding seeds nothing while the series is withdrawn",
+                mospi_count == 0,
                 f"Seeded {mospi_count} MoSPI records",
             )
 
@@ -404,17 +405,27 @@ def test_agent_contracts() -> None:
     # Contract 1: StatsQuantEngineer CPI Divergence Contract
     # Sequence of dicts with {"period": "YYYY-MM", "cpi_transport": float, "cpi_general": float}
     cpi_series = mospi_loader.to_stats_format()
-    sample_cpi = cpi_series[-1]
-    contract_cpi_valid = (
-        isinstance(sample_cpi["period"], str)
-        and len(sample_cpi["period"]) == 7
-        and isinstance(sample_cpi["cpi_transport"], float)
-        and sample_cpi["cpi_transport"] > 100.0
-    )
+    if cpi_series:
+        sample_cpi = cpi_series[-1]
+        contract_cpi_valid = (
+            isinstance(sample_cpi["period"], str)
+            and len(sample_cpi["period"]) == 7
+            and isinstance(sample_cpi["cpi_transport"], float)
+            and sample_cpi["cpi_transport"] > 100.0
+        )
+        sample_detail = (
+            f"period={sample_cpi['period']}, "
+            f"cpi_transport={sample_cpi['cpi_transport']}"
+        )
+    else:
+        # No verified series is bundled, so there is no sample to hold to the
+        # contract. The contract holds vacuously rather than against invented data.
+        contract_cpi_valid = True
+        sample_detail = "no series bundled; contract not exercised"
     log_test(
         "StatsQuant CPI Divergence Contract ({period, cpi_transport, cpi_general})",
         contract_cpi_valid,
-        f"Sample: period={sample_cpi['period']}, cpi_transport={sample_cpi['cpi_transport']}",
+        f"Sample: {sample_detail}",
     )
 
     # Contract 2: StatsQuantEngineer DGCA Route Weights Contract
