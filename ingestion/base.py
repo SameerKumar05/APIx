@@ -9,6 +9,7 @@ from __future__ import annotations
 import abc
 import hashlib
 import logging
+import os
 import random
 import re
 import time
@@ -35,6 +36,13 @@ from ingestion.config import (
 
 logger = logging.getLogger("ingestion.base")
 T = TypeVar("T")
+
+SYSTEM_CHROMIUM_CANDIDATES: Tuple[str, ...] = (
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+)
 
 
 @dataclass
@@ -156,6 +164,25 @@ class BaseScraper(abc.ABC):
         if isinstance(proxy, dict):
             return dict(proxy) or None
         return None
+
+    def resolve_launch_kwargs(self) -> Dict[str, Any]:
+        """Chromium launch options for a portal scraper.
+
+        Prefers a system Chromium when one is installed, because Playwright's
+        bundled build can fail to open a page at all. Does not hide automation
+        flags or solve challenges.
+        """
+        kwargs: Dict[str, Any] = {
+            "headless": self.config.playwright_headless,
+            "args": ["--no-sandbox", "--disable-dev-shm-usage"],
+        }
+        explicit = self.config.playwright_browser_executable
+        candidates = (explicit,) if explicit else SYSTEM_CHROMIUM_CANDIDATES
+        for path in candidates:
+            if path and os.path.isfile(path) and os.access(path, os.X_OK):
+                kwargs["executable_path"] = path
+                return kwargs
+        return kwargs
 
     def robots_policy(self) -> "RobotsPolicy":
         """Policy for this scraper's origin, resolved once per agent per config."""
