@@ -6,6 +6,8 @@ development fee and convenience charge are never estimated.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import StrEnum
 from typing import Final
 
 # ESTIMATE used only when the source does not supply a base/tax split.
@@ -75,21 +77,60 @@ def optional_amount(value: float | int | str | None) -> float | None:
     return float(value)
 
 
+class FareSplitBasis(StrEnum):
+    """How a stored base/tax pair was obtained. Downstream must not treat them alike."""
+
+    MEASURED = "measured"
+    RESIDUAL = "residual"
+    ESTIMATED = "estimated"
+
+
+@dataclass(frozen=True, slots=True)
+class FareSplit:
+    """Base and tax amounts plus the basis that produced them."""
+
+    base_fare: float
+    taxes_and_fees: float
+    basis: FareSplitBasis
+
+
+def classify_fare_split(
+    total_fare: float,
+    base_fare: float | None,
+    taxes_and_fees: float | None,
+) -> FareSplit:
+    """Split a total without inventing a ratio the source already made unnecessary.
+
+    Both sides supplied: measured. One side supplied: the other is the residual
+    of the total, not the ratio. Neither supplied: the single documented estimate.
+    """
+    if base_fare is not None and taxes_and_fees is not None:
+        return FareSplit(float(base_fare), float(taxes_and_fees), FareSplitBasis.MEASURED)
+    if base_fare is not None:
+        return FareSplit(
+            float(base_fare),
+            round(total_fare - base_fare, 2),
+            FareSplitBasis.RESIDUAL,
+        )
+    if taxes_and_fees is not None:
+        return FareSplit(
+            round(total_fare - taxes_and_fees, 2),
+            float(taxes_and_fees),
+            FareSplitBasis.RESIDUAL,
+        )
+    estimated_base = round(total_fare * ESTIMATED_BASE_FARE_RATIO, 2)
+    return FareSplit(
+        estimated_base,
+        round(total_fare - estimated_base, 2),
+        FareSplitBasis.ESTIMATED,
+    )
+
+
 def split_base_and_taxes(
     total_fare: float,
     base_fare: float | None,
     taxes_and_fees: float | None,
 ) -> tuple[float, float]:
-    """Return (base, taxes) without inventing a split the source already gave.
-
-    The ratio is applied only when both components are absent. A supplied
-    side is kept, and the missing side is the residual of the total.
-    """
-    if base_fare is not None and taxes_and_fees is not None:
-        return float(base_fare), float(taxes_and_fees)
-    if base_fare is not None:
-        return float(base_fare), round(total_fare - base_fare, 2)
-    if taxes_and_fees is not None:
-        return round(total_fare - taxes_and_fees, 2), float(taxes_and_fees)
-    estimated_base = round(total_fare * ESTIMATED_BASE_FARE_RATIO, 2)
-    return estimated_base, round(total_fare - estimated_base, 2)
+    """Return (base, taxes). Prefer classify_fare_split when the basis must travel."""
+    split = classify_fare_split(total_fare, base_fare, taxes_and_fees)
+    return split.base_fare, split.taxes_and_fees
