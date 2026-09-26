@@ -182,7 +182,11 @@ export interface SystemHealthResponse {
   records_ingested_today: number;
   last_sync_timestamp: string;
   supported_airlines: string[];
-  supported_otas: string[];
+  /** Sources actually implemented. Not every PS-named portal: only these have scrapers. */
+  supported_sources: string[];
+  source_types: Record<string, 'ota' | 'airline_direct'>;
+  ps_named_sources_total: number;
+  ps_named_sources_implemented: number;
   latency_ms: number;
 }
 

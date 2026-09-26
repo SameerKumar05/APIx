@@ -604,7 +604,10 @@ export const mockSystemHealth: SystemHealthResponse = {
   records_ingested_today: 142850,
   last_sync_timestamp: new Date().toISOString(),
   supported_airlines: ['IndiGo (6E)', 'Air India (AI)', 'SpiceJet (SG)', 'Akasa Air (QP)'],
-  supported_otas: ['MakeMyTrip', 'EaseMyTrip', 'Ixigo', 'Yatra'],
+  supported_sources: ['makemytrip', 'easemytrip', 'spicejet'],
+  source_types: { makemytrip: 'ota', easemytrip: 'ota', spicejet: 'airline_direct' },
+  ps_named_sources_total: 11,
+  ps_named_sources_implemented: 3,
   latency_ms: 42,
 };
 
