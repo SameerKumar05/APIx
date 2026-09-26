@@ -115,7 +115,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   }, [history]);
 
   const criticalCount = anomalies.filter((a) => a.severity === 'CRITICAL').length;
-  const topSurgeRoute = [...routes].sort((a, b) => b.change_24h - a.change_24h)[0];
+  const topSurgeRoute = [...routes].sort(
+    (a, b) => (b.change_24h ?? Number.NEGATIVE_INFINITY) - (a.change_24h ?? Number.NEGATIVE_INFINITY),
+  )[0];
 
   const hasMospi = typeof latest.mospi_cpi === 'number';
   const mospiLatest = latest.mospi_cpi;
@@ -159,7 +161,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           <div className="mt-3 text-xs text-neutral-500 flex items-center justify-between border-t border-neutral-800/80 pt-2.5 font-mono tabular-nums">
             <span>7-day change</span>
             <span className="text-neutral-300 font-medium">
-              {latest.change_7d >= 0 ? `+${latest.change_7d}%` : `${latest.change_7d}%`}
+              {latest.change_7d == null
+                ? '—'
+                : latest.change_7d >= 0
+                  ? `+${latest.change_7d}%`
+                  : `${latest.change_7d}%`}
             </span>
           </div>
         </div>
@@ -647,7 +653,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                       <td className="py-2.5 text-right tabular-nums text-white font-semibold">{(route.current_index ?? 100).toFixed(1)}</td>
                       <td className="py-2.5 text-right tabular-nums text-neutral-400">
                         <span>
-                          {(route.change_24h ?? 0) >= 0 ? `+${route.change_24h ?? 0}%` : `${route.change_24h ?? 0}%`}
+                          {route.change_24h == null
+                            ? '—'
+                            : route.change_24h >= 0
+                              ? `+${route.change_24h}%`
+                              : `${route.change_24h}%`}
                         </span>
                         <span className="text-[10px] text-neutral-500 block">
                           {route.change_7d !== undefined && route.change_7d !== null
