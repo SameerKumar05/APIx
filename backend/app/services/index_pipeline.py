@@ -25,6 +25,7 @@ from typing import Any
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
+from backend.app.core.cleaning import is_index_eligible
 from backend.app.db.seed import INITIAL_ROUTES
 from backend.app.models.anomaly import AnomalyAlert
 from backend.app.models.index import NationalDailyIndex, RouteDailyIndex
@@ -457,6 +458,8 @@ def _execute_daily_pipeline(
     # key: ((origin, destination), canonical_window) -> list of quotes
     grouped_fares: dict[tuple[tuple[str, str], str], list[RawFare]] = defaultdict(list)
     for rf in raw_fares:
+        if not is_index_eligible(rf.flight_status, rf.index_exclusion_reason):
+            continue
         orig = str(rf.origin).strip().upper()
         dest = str(rf.destination).strip().upper()
         win = normalize_window_code(rf.booking_window)
