@@ -1,6 +1,9 @@
-from typing import List, Union
-from pydantic import AnyHttpUrl, Field, field_validator
+from typing import Any, List, Union
+from pydantic import AnyHttpUrl, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+INSECURE_DEFAULT_INGESTION_KEY = "apix-ingestion-secret-key-2026"
 
 
 class Settings(BaseSettings):
@@ -25,7 +28,7 @@ class Settings(BaseSettings):
     )
 
     # Ingestion Security
-    INGESTION_API_KEY: str = "apix-ingestion-secret-key-2026"
+    INGESTION_API_KEY: str = INSECURE_DEFAULT_INGESTION_KEY
     INGESTION_HEADER_NAME: str = "X-Ingestion-Key"
 
     # CORS Configuration
@@ -60,6 +63,22 @@ class Settings(BaseSettings):
         case_sensitive=True,
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def _reject_published_ingestion_key(self) -> "Settings":
+        """Refuse the shipped default outside development.
+
+        The default is committed to the repository, so anyone can read it. Silently
+        falling back to it would mean a deployment that forgets to set the variable
+        accepts ingestion from anyone who has seen this file.
+        """
+        if self.INGESTION_API_KEY == INSECURE_DEFAULT_INGESTION_KEY and self.ENVIRONMENT != "development":
+            raise ValueError(
+                "INGESTION_API_KEY is still the published default. Set a unique value "
+                "before running outside development."
+            )
+        return self
+
 
 
 settings = Settings()
