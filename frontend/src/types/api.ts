@@ -5,7 +5,7 @@
 
 export type SeverityLevel = 'CRITICAL' | 'HIGH' | 'WARNING' | 'MEDIUM' | 'LOW' | 'INFO';
 
-export type ComplianceStatus = 'COMPLIANT' | 'WARNING' | 'BREACH' | 'PENDING';
+export type ComplianceStatus = 'COMPLIANT' | 'WARNING' | 'BREACH' | 'BREACH_DETECTED' | 'PENDING';
 
 export type SystemStatus = 'HEALTHY' | 'DEGRADED' | 'MAINTENANCE' | 'SYNCING';
 
@@ -32,7 +32,7 @@ export interface NationalIndexLatestResponse {
   timestamp: string;
   index_value: number;
   change_24h: number; // percentage change e.g. +1.85
-  change_7d: number; // percentage change e.g. +4.12
+  change_7d: number | null; // null when no observation exists 7 days earlier
   sample_size: number; // total flight observations in window
   base_period: string; // "2026-01=100"
   confidence_interval_lower?: number;
@@ -63,7 +63,7 @@ export interface RouteOverviewItem {
   origin_city?: string; // "Delhi"
   destination_city?: string; // "Mumbai"
   current_index: number; // e.g. 124.5
-  change_24h: number; // e.g. -0.8
+  change_24h: number | null; // null when no prior observation exists
   change_7d?: number; // e.g. +3.2
   avg_fare_inr?: number; // representative average economy fare in INR
   median_fare_inr?: number; // representative median fare in INR
@@ -84,6 +84,7 @@ export interface RouteOverviewItem {
 export interface RoutesOverviewResponse {
   routes: RouteOverviewItem[];
   total_routes: number;
+  data_available?: boolean;
 }
 
 export interface RouteHistoryResponse {
@@ -91,6 +92,7 @@ export interface RouteHistoryResponse {
   origin: string;
   destination: string;
   points: NationalIndexPoint[];
+  data_available?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +105,7 @@ export interface LeadTimeCurvePoint {
   median_fare_inr: number;
   p10_fare_inr: number; // 10th percentile
   p90_fare_inr: number; // 90th percentile
-  elasticity_factor: number; // price ratio relative to 30d baseline
+  elasticity_factor: number | null;
   booking_window_label?: string; // "T+1", "T+3", "T+7", "T+15", "T+30"
   sample_count?: number;
 }
@@ -112,12 +114,13 @@ export interface LeadTimeCurveResponse {
   route_code?: string;
   curve_points: LeadTimeCurvePoint[];
   generated_at: string;
+  data_available?: boolean;
 }
 
 export interface HeatmapCell {
   day_of_week: number; // 0 = Monday, 1 = Tuesday, ... 6 = Sunday (Backend schema)
   hour_of_day: number; // 0 to 23
-  fare_index: number;
+  fare_index: number | null;
   avg_fare_inr: number;
 }
 
@@ -125,8 +128,9 @@ export interface HeatmapMatrixResponse {
   route_code?: string;
   metric: string;
   matrix: HeatmapCell[];
-  min_val: number;
-  max_val: number;
+  min_val: number | null;
+  max_val: number | null;
+  data_available?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +174,8 @@ export interface DGCAValidationResponse {
   total_routes_evaluated: number;
   total_violations: number;
   violations: DGCAValidationViolation[];
+  data_available?: boolean;
+  evaluation_status?: 'not_evaluated' | 'evaluated';
 }
 
 // ---------------------------------------------------------------------------
