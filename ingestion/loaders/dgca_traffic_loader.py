@@ -556,7 +556,7 @@ class DgcaTrafficLoader:
             # Check if existing weights sum to 1.0 within tolerance
             has_valid_weights = (
                 all(x["share_weight"] is not None for x in items)
-                and abs(sum(x["share_weight"] for x in items) - 1.0) < 0.001  # type: ignore[arg-type]
+                and abs(sum(x["share_weight"] for x in items) - 1.0) < 0.001
             )
 
             if not has_valid_weights:
@@ -565,8 +565,7 @@ class DgcaTrafficLoader:
                 if diff != 0.0 and weights:
                     weights[0] = round(weights[0] + diff, 6)
             else:
-                weights = [x["share_weight"] for x in items]  # type: ignore[misc]
-
+                weights = [x["share_weight"] for x in items]
             for rank, (item, weight) in enumerate(
                 zip(items, weights, strict=False), start=1
             ):
@@ -673,16 +672,17 @@ class DgcaTrafficLoader:
         for ym, items in sorted(raw_rows_by_period.items()):
             items.sort(key=lambda x: x["pax_volume"], reverse=True)
             total_pax = sum(x["pax_volume"] for x in items) or 1
-            has_valid = all(x["share_weight"] is not None for x in items) and abs(sum(x["share_weight"] for x in items) - 1.0) < 0.001  # type: ignore[arg-type]
-
+            has_valid = (
+                all(x["share_weight"] is not None for x in items)
+                and abs(sum(x["share_weight"] for x in items) - 1.0) < 0.001
+            )
             if not has_valid:
                 weights = [round(x["pax_volume"] / total_pax, 6) for x in items]
                 diff = round(1.0 - sum(weights), 6)
                 if diff != 0.0 and weights:
                     weights[0] = round(weights[0] + diff, 6)
             else:
-                weights = [x["share_weight"] for x in items]  # type: ignore[misc]
-
+                weights = [x["share_weight"] for x in items]
             for rank, (item, weight) in enumerate(
                 zip(items, weights, strict=False), start=1
             ):

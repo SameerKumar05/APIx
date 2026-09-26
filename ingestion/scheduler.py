@@ -404,6 +404,8 @@ class IngestionScheduler:
                 return scraped, slot_summary
 
             scrape_res, summary = await asyncio.to_thread(_guarded_slot)
+            if scrape_res is None or summary is None:
+                raise RuntimeError(f"slot {slot_key} yielded no result")
 
             records_count = len(scrape_res.records)
             blocked = scrape_res.metadata.get("outcome") == BLOCKED_BY_CAPTCHA

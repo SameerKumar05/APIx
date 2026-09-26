@@ -37,11 +37,9 @@ from ingestion.crawlers.amadeus import AmadeusFlightClient
 from ingestion.crawlers.synthetic import SyntheticFlightGenerator
 
 try:
-    from playwright.sync_api import (
-        PlaywrightResponse,
-        PlaywrightRoute,
-        sync_playwright,
-    )
+    from playwright.sync_api import Response as PlaywrightResponse
+    from playwright.sync_api import Route as PlaywrightRoute
+    from playwright.sync_api import sync_playwright
 
     HAS_PLAYWRIGHT_SYNC = True
 except ImportError:
