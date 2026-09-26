@@ -2,7 +2,7 @@
 """Verification script for APIx Ingestion Synthetic Flight Fare Generator.
 
 Validates:
-1. Exactly 40 slots generated (10 routes x 4 booking windows).
+1. Exactly 50 slots generated (10 routes x 5 booking windows).
 2. Exactly 0 null fares across all generated records.
 3. All origin and destination codes are valid 3-letter IATA airport codes.
 4. All airline codes are valid Indian domestic carrier codes.
@@ -41,14 +41,14 @@ def run_verification() -> None:
     print("[1/5] Executing synthetic generation across all routes and windows...")
     slots = generator.generate_all_slots()
 
-    # --- Assertion 1: Exactly 40 slots generated ---
+    # --- Assertion 1: Exactly 50 slots generated ---
     expected_slots = len(DEFAULT_ROUTES) * len(BOOKING_WINDOWS)
     actual_slots = len(slots)
     print(f"      Generated slots: {actual_slots} (Expected: {expected_slots})")
     assert (
-        actual_slots == 40
-    ), f"Assertion failed: Expected exactly 40 slots, got {actual_slots}"
-    print("      ✓ Assertion Passed: Exactly 40 slots generated.")
+        actual_slots == 50
+    ), f"Assertion failed: Expected exactly 50 slots, got {actual_slots}"
+    print("      ✓ Assertion Passed: Exactly 50 slots generated.")
 
     # Check uniqueness of slot keys (route x window)
     slot_keys = set()
@@ -57,9 +57,9 @@ def run_verification() -> None:
         assert key not in slot_keys, f"Duplicate slot detected: {key}"
         slot_keys.add(key)
     assert (
-        len(slot_keys) == 40
-    ), f"Assertion failed: Expected 40 unique slot keys, got {len(slot_keys)}"
-    print("      ✓ Assertion Passed: All 40 slots are distinct route-window pairs.")
+        len(slot_keys) == 50
+    ), f"Assertion failed: Expected 50 unique slot keys, got {len(slot_keys)}"
+    print("      ✓ Assertion Passed: All 50 slots are distinct route-window pairs.")
 
     # Flatten records
     all_records = []
@@ -185,14 +185,14 @@ def run_verification() -> None:
     )
 
     # --- Route-level Breakdown ---
-    print("\n[4/5] Route Summary (10 Route Pairs x 4 Windows = 40 Slots):")
+    print("\n[4/5] Route Summary (10 Route Pairs x 5 Windows = 50 Slots):")
     route_counts = defaultdict(int)
     for s in slots:
         route_counts[s.metadata["route"]] += 1
 
     for route_key, count in sorted(route_counts.items()):
         print(f"      Route {route_key}: {count} windows configured")
-        assert count == 4, f"Route {route_key} does not have 4 windows"
+        assert count == 5, f"Route {route_key} does not have 5 windows"
 
     # --- Sample Record Preview ---
     sample = all_records[0]
@@ -202,7 +202,7 @@ def run_verification() -> None:
 
     print("\n" + "=" * 80)
     print(
-        "PREMIER VERIFICATION CONFIRMED: 40/40 SLOTS, 0 NULL FARES, VALID IATA CODES."
+        "PREMIER VERIFICATION CONFIRMED: 50/50 SLOTS, 0 NULL FARES, VALID IATA CODES."
     )
     print("=" * 80)
 

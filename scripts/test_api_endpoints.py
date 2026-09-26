@@ -6,7 +6,7 @@ Verifies FastAPI routing, Pydantic v2 validation, authentication, and endpoint c
 
 import os
 import sys
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 
 # Ensure worktree root is in python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -14,11 +14,44 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from fastapi.testclient import TestClient
 
 from backend.app.core.config import settings
-from backend.app.db.session import Base, engine
+from backend.app.db.seed import seed_routes
+from backend.app.db.session import Base, SessionLocal, engine
 from backend.app.main import app
+from backend.app.models.index import RouteDailyIndex
+from backend.app.models.route import Route
 
 # Ensure tables exist in database for endpoints using DB sessions
 Base.metadata.create_all(bind=engine)
+
+# verify_all.sh deletes apix.db immediately before this script, so the assertions
+# below need their own rows. /indices/routes only reports corridors holding a stored
+# RouteDailyIndex, and its 24h change divides by a prior day, hence two dates each.
+with SessionLocal() as seed_db:
+    seed_routes(seed_db)
+    for route in seed_db.query(Route).filter(Route.is_active.is_(True)).all():
+        for days_ago in (1, 0):
+            seed_db.add(
+                RouteDailyIndex(
+                    origin=route.origin,
+                    destination=route.destination,
+                    index_date=date.today() - timedelta(days=days_ago),
+                    booking_window="T+7",
+                    index_type="composite",
+                    sample_size=4,
+                    median_fare=5000.0 + days_ago * 100,
+                    mean_fare=5100.0 + days_ago * 100,
+                    min_fare=4500.0,
+                    max_fare=6000.0,
+                    percentile_25=4800.0,
+                    percentile_75=5400.0,
+                    std_dev=350.0,
+                    index_value=100.0 + days_ago * 2.0,
+                    base_period="synthetic",
+                    calculation_timestamp=datetime.now(UTC),
+                    created_at=datetime.now(UTC),
+                )
+            )
+    seed_db.commit()
 
 client = TestClient(app)
 

@@ -155,6 +155,7 @@ def populate_mock_data(session: Session, calc_date: date) -> None:
         "T+7": 1.15,
         "T+15": 1.05,
         "T+30": 0.95,
+        "T+45": 0.88,
     }
 
     for r in routes:
@@ -303,10 +304,10 @@ def run_tests() -> bool:
         )
 
         print(f"      Total RouteDailyIndex records saved: {len(db_route_indices)}")
-        # 10 routes x (4 windows + 1 composite) = 50 records
+        # 10 routes x (5 windows + 1 composite) = 60 records
         assert (
-            len(db_route_indices) == 50
-        ), f"Expected 50 RouteDailyIndex records, got {len(db_route_indices)}"
+            len(db_route_indices) == 60
+        ), f"Expected 60 RouteDailyIndex records, got {len(db_route_indices)}"
 
         # Verify composite records exist for all 10 routes
         composite_records = [
@@ -473,8 +474,8 @@ def run_tests() -> bool:
         ).scalar()
 
         assert (
-            route_count_after == 50
-        ), f"Expected 50 route indices after re-run, got {route_count_after}"
+            route_count_after == 60
+        ), f"Expected 60 route indices after re-run, got {route_count_after}"
         assert (
             nat_count_after == 3
         ), f"Expected 3 national indices (Laspeyres, Paasche, Fisher) after re-run, got {nat_count_after}"

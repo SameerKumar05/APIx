@@ -476,9 +476,10 @@ def test_route_composite_fare_formula() -> None:
         "T30": 4000.0,
     }
 
-    # Expected: 0.20*8000 + 0.35*6000 + 0.30*5000 + 0.15*4000
-    # = 1600 + 2100 + 1500 + 600 = 5800.0
-    expected = 5800.0
+    # Five-window default weights: T1 .20, T7 .32, T15 .26, T30 .14, T45 .08.
+    # No T+45 fare here, so the four present carry .92 and renormalise to 1.0:
+    # (0.20*8000 + 0.32*6000 + 0.26*5000 + 0.14*4000) / 0.92 = 5380 / 0.92
+    expected = 5380.0 / 0.92
     composite = calculate_route_composite_fare(window_fares)
 
     if not math.isclose(composite, expected, abs_tol=1e-9):
