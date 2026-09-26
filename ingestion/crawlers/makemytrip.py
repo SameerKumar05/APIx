@@ -255,10 +255,9 @@ class MakeMyTripScraper(BaseScraper):
         }
 
         if proxy_config:
-            if isinstance(proxy_config, str):
-                options["proxy"] = {"server": proxy_config}
-            elif isinstance(proxy_config, dict):
-                options["proxy"] = proxy_config
+            resolved = self.playwright_proxy_config(proxy_config)
+            if resolved:
+                options["proxy"] = resolved
 
         return options
 

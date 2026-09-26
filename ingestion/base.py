@@ -111,6 +111,27 @@ class BaseScraper(abc.ABC):
     def __init__(self, config: Optional[IngestionConfig] = None) -> None:
         self.config = config or IngestionConfig()
 
+    @staticmethod
+    def playwright_proxy_config(proxy: Any) -> Optional[Dict[str, str]]:
+        """Normalise any accepted proxy form into a Playwright proxy dict.
+
+        Accepts a bare server string, an already-shaped dict, or a ProxyPool
+        Proxy. The Proxy form matters: Proxy carries username and password as
+        separate fields, so collapsing it to a URL string first loses
+        credentials that Playwright needs as distinct keys.
+        """
+        if proxy is None:
+            return None
+        if hasattr(proxy, "to_playwright_proxy"):
+            return proxy.to_playwright_proxy()
+        if isinstance(proxy, str):
+            if not proxy:
+                return None
+            return {"server": proxy}
+        if isinstance(proxy, dict):
+            return dict(proxy) or None
+        return None
+
     def robots_policy(self) -> "RobotsPolicy":
         """Policy for this scraper's origin, resolved once per agent per config."""
         from ingestion.robots import cached_policy

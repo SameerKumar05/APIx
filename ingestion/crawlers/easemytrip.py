@@ -224,10 +224,9 @@ class EaseMyTripScraper(BaseScraper):
         }
         proxy_config = proxy_override or self.proxy
         if proxy_config:
-            if isinstance(proxy_config, str):
-                options["proxy"] = {"server": proxy_config}
-            elif isinstance(proxy_config, dict):
-                options["proxy"] = proxy_config
+            resolved = self.playwright_proxy_config(proxy_config)
+            if resolved:
+                options["proxy"] = resolved
         return options
 
     def build_search_url(self, origin: str, destination: str, flight_date: date) -> str:

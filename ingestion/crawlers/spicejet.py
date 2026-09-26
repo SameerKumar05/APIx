@@ -404,10 +404,9 @@ class SpiceJetScraper(BaseScraper):
                     "ignore_https_errors": True,
                 }
                 if self.proxy:
-                    if isinstance(self.proxy, str):
-                        context_opts["proxy"] = {"server": self.proxy}
-                    elif isinstance(self.proxy, dict):
-                        context_opts["proxy"] = self.proxy
+                    resolved = self.playwright_proxy_config(self.proxy)
+                    if resolved:
+                        context_opts["proxy"] = resolved
 
                 context = browser.new_context(**context_opts)
                 context.add_init_script(STEALTH_INIT_SCRIPT)
