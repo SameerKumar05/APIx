@@ -16,6 +16,11 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypeVar, Union
 
+from backend.app.core.fare_components import (
+    canonical_booking_class,
+    canonical_flight_status,
+    split_base_and_taxes,
+)
 from ingestion.config import (
     AIRLINE_MAP,
     BOOKING_WINDOW_MAP,
@@ -54,6 +59,10 @@ class RawFareRecord:
     total_fare: Optional[float] = None
     is_synthetic: bool = False
     source_platform: Optional[str] = None
+    booking_class: Optional[str] = None  # RBD / fare basis (Y, B, M). Not cabin.
+    udf_fee: Optional[float] = None  # INR. NULL unless the source supplied it.
+    convenience_fee: Optional[float] = None  # INR. NULL unless the source supplied it.
+    flight_status: Optional[str] = None  # scheduled / cancelled / sold_out, or None.
 
     def __post_init__(self) -> None:
         # Align secondary / compatibility fields
@@ -63,10 +72,13 @@ class RawFareRecord:
             self.total_fare = self.fare_inr
         if self.source_platform is None:
             self.source_platform = self.source
-        if self.base_fare is None:
-            # DGCA standard breakdown: approx 78% base fare, 22% taxes/UDF/PSF
-            self.base_fare = round(self.fare_inr * 0.78, 2)
-            self.taxes_and_fees = round(self.fare_inr - self.base_fare, 2)
+        self.base_fare, self.taxes_and_fees = split_base_and_taxes(
+            self.total_fare,
+            self.base_fare,
+            self.taxes_and_fees,
+        )
+        self.booking_class = canonical_booking_class(self.booking_class)
+        self.flight_status = canonical_flight_status(self.flight_status)
 
     @property
     def origin_iata(self) -> str:
