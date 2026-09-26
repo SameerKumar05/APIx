@@ -10,16 +10,51 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
+from backend.app.core.fare_components import (
+    canonical_booking_class,
+    canonical_flight_status,
+    optional_amount,
+    split_base_and_taxes,
+)
 from backend.app.models.raw_fare import RawFare
 from backend.app.models.scraping import ScrapingRun
 
 logger = logging.getLogger("backend.app.db.ingestion_repo")
+
+
+def _optional_component(data: Dict[str, Any], key: str) -> Optional[float]:
+    """Read a fare component. Missing and blank stay None; 0 is a real value."""
+    if key not in data:
+        return None
+    value = data[key]
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float, str)):
+        return optional_amount(value)
+    return float(value)
+
+
+def _optional_token(
+    data: Dict[str, Any],
+    key: str,
+    canonical: Callable[[str | None], str | None],
+) -> Optional[str]:
+    """Read a string field and canonicalise it. Non-strings are treated as absent."""
+    if key not in data:
+        return None
+    value = data[key]
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return None
+    return canonical(value)
 
 
 def compute_dedup_hash(
@@ -35,6 +70,9 @@ def compute_dedup_hash(
 
     Format matches canonical key across pipeline crawlers:
     `{airline_code}:{flight_number}:{origin}:{destination}:{departure_time}:{booking_window}`
+
+    booking_class, udf_fee, convenience_fee, and flight_status are not part of
+    the key. A fee or status change must not mint a second observation.
     """
     dep_str = ""
     if isinstance(departure_time, datetime):
@@ -147,10 +185,17 @@ def _normalize_fare_record(
     else:
         fdate = now_utc.date()
 
-    # Pricing calculations
+    # Pricing. The ratio is an estimate and runs only when both parts are absent.
     total_fare = float(data.get("total_fare") or data.get("fare_inr") or 0.0)
-    base_fare = float(data.get("base_fare") or (total_fare * 0.85))
-    taxes_and_fees = float(data.get("taxes_and_fees") or (total_fare - base_fare))
+    base_fare, taxes_and_fees = split_base_and_taxes(
+        total_fare,
+        _optional_component(data, "base_fare"),
+        _optional_component(data, "taxes_and_fees"),
+    )
+    booking_class = _optional_token(data, "booking_class", canonical_booking_class)
+    udf_fee = _optional_component(data, "udf_fee")
+    convenience_fee = _optional_component(data, "convenience_fee")
+    flight_status = _optional_token(data, "flight_status", canonical_flight_status)
 
     stops = int(data.get("stops") or 0)
     fare_class = str(data.get("fare_class") or data.get("cabin_class") or "Economy").strip()
@@ -191,8 +236,12 @@ def _normalize_fare_record(
         "duration_minutes": duration_minutes,
         "stops": stops,
         "fare_class": fare_class,
+        "booking_class": booking_class,
         "base_fare": base_fare,
         "taxes_and_fees": taxes_and_fees,
+        "udf_fee": udf_fee,
+        "convenience_fee": convenience_fee,
+        "flight_status": flight_status,
         "total_fare": total_fare,
         "source_platform": source_platform,
         "scraped_at": scraped_dt,
