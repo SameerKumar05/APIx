@@ -569,11 +569,14 @@ def test_mock_fallback_on_unseeded_route():
     res = client.get(f"/api/v1/econometrics/indices?route_code={unseeded_route}")
     assert res.status_code == 200
     data = res.json()
-    assert len(data["series"]) >= 10, "Expected fallback series points"
-    assert data["series"][0]["route_code"] == unseeded_route
-    assert data["base_period"] == "2024-Q1"
+    # No calibrated fallback exists, and there must not be one: synthesising a
+    # plausible index series for a corridor with no data is exactly the fabrication
+    # this project exists to avoid. An unseeded route reports no data instead.
+    assert data["data_available"] is False
+    assert data["series"] == []
+    assert data["base_period"] is None
     print(
-        f"  ✓ Fallback resilience verified: returned {len(data['series'])} calibrated points for unseeded route {unseeded_route}"
+        f"  ✓ Unseeded route {unseeded_route} correctly reports no data rather than a synthetic series"
     )
 
 
