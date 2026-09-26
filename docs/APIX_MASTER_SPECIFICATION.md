@@ -194,7 +194,7 @@ $$I_{F,t} = \sqrt{I_{L,t} \cdot I_{P,t}} = 100 \times \sqrt{\left(\frac{\sum_{r=
 | **Identity Test** | $P_t = P_0 \implies I = 100.0$ | **Pass** | **Pass** | **Pass** |
 | **Proportionality Test** | $P_t = \lambda P_0 \implies I = 100 \lambda$ | **Pass** | **Pass** | **Pass** |
 | **Time Reversal Test** | $I(0 \to t) \cdot I(t \to 0) = 1.0$ | **Fail** | **Fail** | **Pass** |
-| **Factor Reversal Test** | $P(0 \to t) \cdot Q(0 \to t) = V_t / V_0$ | **Fail** | **Fail** | **Not asserted** |
+| **Factor Reversal Test** | $P(0 \to t) \cdot Q(0 \to t) = V_t / V_0$ | **Fail** | **Fail** | **Fails: Laspeyres side is a relative mean, not a true Laspeyres** |
 | **Commensurability Test** | Invariant to currency & unit scaling | **Pass** | **Pass** | **Pass** |
 
 ---
