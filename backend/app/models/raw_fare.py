@@ -172,6 +172,22 @@ class RawFare(Base):
             "NULL when the source did not report one; never defaulted to scheduled."
         ),
     )
+    index_exclusion_reason: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+        doc=(
+            "Why this row is kept out of the index: outlier, cancelled, or "
+            "sold_out. NULL means eligible. The row is never deleted for this."
+        ),
+    )
+    fare_split_basis: Mapped[str | None] = mapped_column(
+        String(16),
+        nullable=True,
+        doc=(
+            "measured, residual, or estimated. NULL on rows written before the "
+            "basis was recorded. estimated is the ratio, not a measurement."
+        ),
+    )
     total_fare: Mapped[float] = mapped_column(
         Float,
         nullable=False,
@@ -285,6 +301,8 @@ class RawFare(Base):
             "udf_fee": self.udf_fee,
             "convenience_fee": self.convenience_fee,
             "flight_status": self.flight_status,
+            "index_exclusion_reason": self.index_exclusion_reason,
+            "fare_split_basis": self.fare_split_basis,
             "total_fare": self.total_fare,
             "source_platform": self.source_platform,
             "scraped_at": self.scraped_at.isoformat() if self.scraped_at else None,
