@@ -10,8 +10,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from datetime import date, timedelta
+
 from sqlalchemy import create_engine, func, inspect, select
 from sqlalchemy.orm import Session
+
+from backend.app.models.index import NationalDailyIndex
 
 import backend.app.models  # noqa: F401
 from backend.app.core.config import Settings, settings
@@ -426,5 +430,136 @@ def test_fabrication_endpoints_fail_closed_on_unavailable_database(
 
                 assert response.status_code == 503, f"{path} -> {response.status_code} {response.text[:120]}"
                 assert response.json()["detail"] == "Database unavailable", path
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def seeded_index_session(tmp_path: Path) -> Generator[Session, None, None]:
+    """A reachable database holding a known daily Fisher index series."""
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'index-history.db'}",
+        connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(bind=engine)
+    session = Session(engine)
+    # 70 consecutive days, deterministic ramp, one sample per day.
+    start = date(2026, 1, 1)
+    for offset in range(70):
+        session.add(
+            NationalDailyIndex(
+                index_date=start + timedelta(days=offset),
+                booking_window="COMPOSITE",
+                index_type="fisher",
+                index_value=100.0 + offset,
+                total_samples=10,
+                base_period="2026-01-01",
+            )
+        )
+    session.commit()
+    try:
+        yield session
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_index_history_reports_missing_data_instead_of_inventing_it(
+    tmp_path: Path,
+) -> None:
+    """An unseeded database must yield an empty, explicitly-unavailable series.
+
+    This endpoint used to fall through to a fabricated ramp with a sample count
+    of 45000+ per point, which the dashboard could not distinguish from a real one.
+    """
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'unseeded.db'}", connect_args={"check_same_thread": False}
+    )
+    Base.metadata.create_all(bind=engine)
+    session = Session(engine)
+    app.dependency_overrides[get_db] = lambda: session
+    try:
+        with TestClient(app) as client:
+            response = client.get("/api/v1/indices/national/history")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["points"] == []
+        assert body["total_points"] == 0
+        assert body["data_available"] is False
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+        engine.dispose()
+
+
+def test_index_latest_reports_503_when_nothing_is_computed(tmp_path: Path) -> None:
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'unseeded-latest.db'}",
+        connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(bind=engine)
+    session = Session(engine)
+    app.dependency_overrides[get_db] = lambda: session
+    try:
+        with TestClient(app) as client:
+            response = client.get("/api/v1/indices/national/latest")
+        assert response.status_code == 503
+        assert "not yet computed" in response.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+        engine.dispose()
+
+
+def test_index_history_aggregates_daily_weekly_and_monthly(
+    seeded_index_session: Session,
+) -> None:
+    """The problem statement requires daily, weekly and monthly frequencies."""
+    app.dependency_overrides[get_db] = lambda: seeded_index_session
+    try:
+        with TestClient(app) as client:
+            daily = client.get("/api/v1/indices/national/history", params={"frequency": "daily"})
+            weekly = client.get("/api/v1/indices/national/history", params={"frequency": "weekly"})
+            monthly = client.get("/api/v1/indices/national/history", params={"frequency": "monthly"})
+
+        assert daily.status_code == weekly.status_code == monthly.status_code == 200
+
+        d, w, m = daily.json(), weekly.json(), monthly.json()
+        assert d["data_available"] and w["data_available"] and m["data_available"]
+
+        # 70 daily observations must collapse into fewer weekly and monthly buckets.
+        assert d["total_points"] == 70, d["total_points"]
+        assert w["total_points"] == 11, w["total_points"]
+        assert m["total_points"] == 3, m["total_points"]
+        assert w["total_points"] < d["total_points"]
+
+        # Sample counts are summed across the bucket, not averaged away.
+        assert d["points"][0]["sample_size"] == 10
+        # The first ISO bucket is partial because the series starts on 2026-01-01,
+        # so assert conservation across buckets rather than a fixed bucket size.
+        assert sum(p["sample_size"] for p in w["points"]) == 70 * 10
+        assert sum(p["sample_size"] for p in m["points"]) == 70 * 10
+
+        # The final bucket is March, which holds 11 of the 70 seeded days
+        # (offsets 59..69), so its value is the mean of exactly those points.
+        assert len(d["points"]) == 70
+        assert m["points"][-1]["index_value"] == pytest.approx(
+            sum(p["index_value"] for p in d["points"][-11:]) / 11, abs=0.01
+        )
+        assert m["points"][-1]["index_value"] == pytest.approx(164.0, abs=0.01)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_index_history_rejects_an_unknown_frequency(
+    seeded_index_session: Session,
+) -> None:
+    app.dependency_overrides[get_db] = lambda: seeded_index_session
+    try:
+        with TestClient(app) as client:
+            response = client.get(
+                "/api/v1/indices/national/history", params={"frequency": "fortnightly"}
+            )
+        assert response.status_code == 422
     finally:
         app.dependency_overrides.clear()

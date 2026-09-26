@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import SQLAlchemyError
@@ -198,21 +198,15 @@ async def get_national_index_latest(
                 status="published",
                 **_horizon_context(db, val),
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Index not yet computed. Run the index pipeline before requesting the latest value.",
+        ) from exc
 
-    # Fallback to realistic benchmark mock data if unseeded
-    now = datetime.now(timezone.utc)
-    return NationalIndexLatestResponse(
-        timestamp=now,
-        index_value=114.28,
-        change_24h=1.42,
-        change_7d=3.85,
-        sample_size=48250,
-        base_period="2026-01-01",
-        confidence_interval_lower=113.10,
-        confidence_interval_upper=115.46,
-        status="published",
+    raise HTTPException(
+        status_code=503,
+        detail="Index not yet computed. Run the index pipeline before requesting the latest value.",
     )
 
 
@@ -220,81 +214,73 @@ async def get_national_index_latest(
     "/national/history",
     response_model=NationalIndexHistoryResponse,
     summary="Get historical National Airfare Price Index time-series",
-    description="Returns daily chronological historical index points over the requested lookback window.",
+    description=(
+        "Returns chronological index points aggregated at the requested frequency. "
+        "Daily uses the stored daily observations. Weekly buckets by ISO week and "
+        "monthly by calendar month, averaging the index and summing the sample count. "
+        "An empty series means no index has been computed for the window, not that "
+        "prices were flat."
+    ),
 )
 async def get_national_index_history(
-    days: int = Query(30, ge=1, le=365, description="Number of historical days to retrieve"),
+    days: int = Query(365, ge=1, le=1095, description="Lookback window in days"),
+    frequency: str = Query(
+        "daily",
+        pattern="^(daily|weekly|monthly)$",
+        description="Aggregation frequency for the returned series",
+    ),
     db: Session = Depends(get_db),
 ) -> NationalIndexHistoryResponse:
-    try:
-        records = (
-            db.query(NationalDailyIndex)
-            .order_by(NationalDailyIndex.index_date.desc())
-            .limit(days)
-            .all()
+    cutoff = date.today() - timedelta(days=days)
+    records = (
+        db.query(NationalDailyIndex)
+        .filter(NationalDailyIndex.index_date >= cutoff)
+        .filter(func.lower(func.coalesce(NationalDailyIndex.index_type, "")) == "fisher")
+        .order_by(NationalDailyIndex.index_date.asc())
+        .all()
+    )
+
+    buckets: dict[str, List[NationalDailyIndex]] = {}
+    for r in records:
+        buckets.setdefault(_bucket_key(r.index_date, frequency), []).append(r)
+
+    points: List[NationalIndexPoint] = []
+    previous_value: float | None = None
+    for key in sorted(buckets):
+        group = buckets[key]
+        index_value = sum(g.index_value for g in group) / len(group)
+        sample_size = sum(g.total_samples or 0 for g in group)
+        bucket_date = date.fromisoformat(f"{key}-01") if frequency == "monthly" else group[-1].index_date
+        change = 0.0 if previous_value in (None, 0) else round(
+            (index_value - previous_value) / previous_value * 100.0, 2
         )
-        if records:
-            records.reverse()
-            points: List[NationalIndexPoint] = []
-            for r in records:
-                ts = datetime.combine(r.index_date, datetime.min.time(), tzinfo=timezone.utc)
-                if r.calculation_timestamp:
-                    ts = r.calculation_timestamp
-                    if ts.tzinfo is None:
-                        ts = ts.replace(tzinfo=timezone.utc)
-                chg_24 = round(r.inflation_dod_pct or 0.0, 2)
-                points.append(
-                    NationalIndexPoint(
-                        timestamp=ts,
-                        index_value=round(r.index_value, 2),
-                        change_24h=chg_24,
-                        change_7d=round(r.inflation_mom_pct or (chg_24 * 3.5), 2),
-                        sample_size=r.total_samples or 0,
-                        base_period=r.base_period or "2026-01-01",
-                    )
-                )
-            return NationalIndexHistoryResponse(
-                points=points,
-                total_points=len(points),
-            )
-    except Exception:
-        pass
-
-    # Fallback to realistic benchmark mock data if unseeded
-    now = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    base_val = 100.0
-    points = []
-
-    for i in range(days, 0, -1):
-        dt = now - timedelta(days=i)
-        val = round(base_val + (days - i) * 0.45 + ((i % 5) * 0.2 - 0.4), 2)
-        change_24h = round((0.45 + ((i % 5) * 0.2 - 0.4)) / val * 100, 2)
         points.append(
             NationalIndexPoint(
-                timestamp=dt,
-                index_value=val,
-                change_24h=change_24h,
-                change_7d=round(change_24h * 3.5, 2),
-                sample_size=45000 + (i * 120),
-                base_period="2026-01-01",
+                timestamp=datetime.combine(bucket_date, datetime.min.time(), tzinfo=timezone.utc),
+                index_value=round(index_value, 2),
+                change_24h=change if frequency == "daily" else 0.0,
+                change_7d=change,
+                sample_size=sample_size,
+                base_period=group[-1].base_period or "2026-01-01",
             )
         )
-
-    points.append(
-        NationalIndexPoint(
-            timestamp=now,
-            index_value=114.28,
-            change_24h=1.42,
-            change_7d=3.85,
-            sample_size=48250,
-            base_period="2026-01-01",
-        )
-    )
+        previous_value = index_value
 
     return NationalIndexHistoryResponse(
         points=points,
         total_points=len(points),
+        frequency=frequency,
+        data_available=bool(points),
     )
+
+
+def _bucket_key(value: date, frequency: str) -> str:
+    if frequency == "monthly":
+        return f"{value.year:04d}-{value.month:02d}"
+    if frequency == "weekly":
+        iso = value.isocalendar()
+        return f"{iso.year:04d}-W{iso.week:02d}"
+    return value.isoformat()
 
 
 @router.get(

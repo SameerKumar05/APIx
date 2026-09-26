@@ -33,6 +33,14 @@ class NationalIndexLatestResponse(BaseModel):
 class NationalIndexHistoryResponse(BaseModel):
     points: List[NationalIndexPoint] = Field(..., description="Historical chronological series of index points")
     total_points: int = Field(..., description="Total points in this response window")
+    frequency: str = Field("daily", description="Aggregation frequency of the returned series")
+    data_available: bool = Field(
+        ...,
+        description=(
+            "False when no index has been computed for the requested window. Callers must "
+            "treat an empty series as missing data, never as a flat price trend."
+        ),
+    )
 
 
 class RouteOverviewItem(BaseModel):
