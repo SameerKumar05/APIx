@@ -226,10 +226,10 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "dgca":
-        loader = DgcaTrafficLoader(data_path=args.data_path)
-        summary = loader.get_network_summary()
-        target_period = args.period or loader.get_latest_period()
-        weights = loader.get_route_weights(target_period)
+        dgca_loader = DgcaTrafficLoader(data_path=args.data_path)
+        summary = dgca_loader.get_network_summary()
+        target_period = args.period or dgca_loader.get_latest_period()
+        weights = dgca_loader.get_route_weights(target_period)
 
         print("=" * 70)
         print("  DGCA Domestic City-Pair Passenger Traffic Reports")
@@ -253,16 +253,16 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
         print("-" * 70)
 
         if args.export_csv:
-            p = loader.export_csv(args.export_csv)
+            p = dgca_loader.export_csv(args.export_csv)
             print(f"Exported CSV to: {p}")
 
         if args.export_json:
-            p = loader.export_json(args.export_json)
+            p = dgca_loader.export_json(args.export_json)
             print(f"Exported JSON to: {p}")
 
         if args.seed:
             print("Seeding DGCA traffic records and synchronizing Route weights...")
-            res = loader.seed_database(update_active_routes=args.update_routes)
+            res = dgca_loader.seed_database(update_active_routes=args.update_routes)
             print(
                 f"Successfully seeded {res['weights_upserted']} traffic weights; synchronized {res['routes_updated']} active routes."
             )

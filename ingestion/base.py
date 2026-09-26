@@ -142,6 +142,12 @@ class BaseScraper(abc.ABC):
 
     def __init__(self, config: IngestionConfig | None = None) -> None:
         self.config = config or IngestionConfig()
+        # Declared here because the orchestrator assigns scraper.proxy per slot
+        # and the portal crawlers read it; both were relying on an attribute
+        # BaseScraper never defined.
+        self.proxy: str | dict[str, str] | None = getattr(
+            self.config, "proxy_url", None
+        )
 
     @staticmethod
     def playwright_proxy_config(proxy: Any) -> dict[str, str] | None:
