@@ -7,24 +7,31 @@ challenge page is returned as a reason with no payloads.
 from __future__ import annotations
 
 import json
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
-try:
+HAS_PLAYWRIGHT_SYNC: bool
+
+if TYPE_CHECKING:
     from playwright.sync_api import Error as PlaywrightError
     from playwright.sync_api import TimeoutError as PlaywrightTimeout
     from playwright.sync_api import sync_playwright
+else:
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import TimeoutError as PlaywrightTimeout
+        from playwright.sync_api import sync_playwright
 
-    HAS_PLAYWRIGHT_SYNC = True
-except ImportError:
+        HAS_PLAYWRIGHT_SYNC = True
+    except ImportError:
 
-    class PlaywrightError(Exception):
-        """Stand-in so the module imports when Playwright is absent."""
+        class PlaywrightError(Exception):
+            """Stand-in so the module imports when Playwright is absent."""
 
-    class PlaywrightTimeout(PlaywrightError):
-        """Stand-in so the module imports when Playwright is absent."""
+        class PlaywrightTimeout(PlaywrightError):
+            """Stand-in so the module imports when Playwright is absent."""
 
-    sync_playwright = None
-    HAS_PLAYWRIGHT_SYNC = False
+        sync_playwright = None
+        HAS_PLAYWRIGHT_SYNC = False
 
 _CHALLENGE_MARKERS: tuple[str, ...] = (
     "captcha",
