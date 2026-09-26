@@ -421,4 +421,4 @@ Paths of the form `evidence/<file>.json` and `.debug-journal.md` refer to local 
 
 ### Fare decomposition is an estimate, not a measurement
 
-`raw_fares` has separate `base_fare`, `taxes_and_fees` and `total_fare` columns, but when a source does not supply the split it is synthesised by a hardcoded ratio, and the two implementations disagree: `ingestion/base.py:68` uses 0.78 and `backend/app/db/ingestion_repo.py:150` uses 0.85. Every row in the current database is exactly 0.85 x total. Only `ingestion/crawlers/makemytrip.py` parses a real split, and no live scrape has yet supplied one. Do not present base-versus-tax figures as measured.
+When a source does not supply both `base_fare` and `taxes_and_fees`, both write paths use `ESTIMATED_BASE_FARE_RATIO` (0.78) in `backend/app/core/fare_components.py`. That ratio is an estimate, not a measurement. Rows stored before the unification used the repository's old 0.85 fallback and were not rewritten. `udf_fee` and `convenience_fee` stay NULL unless the source supplied them. MakeMyTrip still keeps a parsed `baseFare`/`tax` when present. Do not present base-versus-tax figures as measured.
