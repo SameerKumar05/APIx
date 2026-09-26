@@ -97,9 +97,15 @@ Current docs: `https://porkbun.com/llms/dns`. The older
 
 ```bash
 # 1. transfer (secrets and build output stay behind)
+# WARNING: --exclude .env is MANDATORY. /opt/apix/.env holds the live secrets and is
+# gitignored, so it is absent from this checkout. Without that exclude, --delete
+# erases it (verified with rsync --dry-run: '*deleting .env') and the next deploy
+# loses every credential. Note the leading ./ - without a local source, rsync
+# merely LISTS the remote instead of syncing.
 rsync -az --delete --exclude .git --exclude .venv --exclude node_modules \
       --exclude frontend/dist --exclude '*.db' --exclude evidence/ \
-      --exclude artifacts/ volt-rust:/opt/apix/
+      --exclude artifacts/ --exclude .env --exclude backups/ \
+      ./ volt-rust:/opt/apix/
 
 # 2. secrets, generated ON the VM, mode 600, never committed
 ssh volt-rust 'cd /opt/apix && cp .env.deploy.template .env && chmod 600 .env'
@@ -352,8 +358,14 @@ ssh volt-rust 'cd /opt/apix && docker compose -p apix-deploy \
   -f docker-compose.yml -f docker-compose.deploy.yml run --rm backend alembic upgrade head'
 
 # redeploy after a code change
+# WARNING: --exclude .env is MANDATORY. /opt/apix/.env holds the live secrets and is
+# gitignored, so it is absent from this checkout. Without that exclude, --delete
+# erases it (verified with rsync --dry-run: '*deleting .env') and the next deploy
+# loses every credential. Note the leading ./ - without a local source, rsync
+# merely LISTS the remote instead of syncing.
 rsync -az --delete --exclude .git --exclude .venv --exclude node_modules \
-  --exclude frontend/dist volt-rust:/opt/apix/
+  --exclude frontend/dist --exclude .env --exclude backups/ \
+  ./ volt-rust:/opt/apix/
 ssh volt-rust 'cd /opt/apix && docker compose -p apix-deploy \
   -f docker-compose.yml -f docker-compose.deploy.yml up -d --build backend'
 ```
