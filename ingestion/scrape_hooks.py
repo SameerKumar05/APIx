@@ -71,7 +71,7 @@ def install_scrape_hooks(store: SessionStore, ledger: BackoffLedger) -> bool:
         return context
 
     setattr(hooked, _INSTALLED, True)
-    Browser.new_context = hooked
+    setattr(Browser, "new_context", hooked)  # noqa: B010 - deliberate patch
     return True
 
 
@@ -206,5 +206,5 @@ def guard_scrape(scrape: Callable[..., ScrapeResult]) -> Callable[..., ScrapeRes
     def wrapped(*args, **kwargs) -> ScrapeResult:  # noqa: ANN001
         return consume_challenge(scrape(*args, **kwargs))
 
-    wrapped._apix_guarded = True
+    setattr(wrapped, "_apix_guarded", True)  # noqa: B010 - deliberate marker
     return wrapped

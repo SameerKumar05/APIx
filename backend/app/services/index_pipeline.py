@@ -517,7 +517,7 @@ def _execute_daily_pipeline(
                 continue
 
             # Step 2: Tukey IQR Outlier Trimming
-            trimmed_quotes = filter_quotes_tukey(deduped_quotes, k=1.5)
+            trimmed_quotes: list[Any] = filter_quotes_tukey(deduped_quotes, k=1.5)
             if not trimmed_quotes:
                 trimmed_quotes = deduped_quotes
 

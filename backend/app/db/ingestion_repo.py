@@ -427,24 +427,29 @@ def bulk_insert_raw_fares(
         if not chunk:
             continue
 
+        # Each branch builds its own dialect-specific Insert and executes it
+        # locally. Sharing one `stmt` across branches made mypy infer the
+        # postgres type and reject the sqlite one; the statement is used
+        # immediately, so scoping it costs one duplicated line.
         if dialect_name == "postgresql":
             from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-            stmt = (
+            pg_stmt = (
                 pg_insert(RawFare)
                 .values(chunk)
                 .on_conflict_do_nothing(index_elements=["hash_id"])
             )
+            res = cast("CursorResult[Any]", db.execute(pg_stmt))
         else:
             from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-            stmt = (
+            sqlite_stmt = (
                 sqlite_insert(RawFare)
                 .values(chunk)
                 .on_conflict_do_nothing(index_elements=["hash_id"])
             )
+            res = cast("CursorResult[Any]", db.execute(sqlite_stmt))
 
-        res = cast("CursorResult[Any]", db.execute(stmt))
         # res.rowcount returns the number of newly inserted rows
         if res.rowcount is not None and res.rowcount >= 0:
             inserted_count += res.rowcount

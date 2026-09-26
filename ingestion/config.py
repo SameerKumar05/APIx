@@ -229,7 +229,8 @@ class IngestionConfig:
 
     api_base_url: str = field(
         default_factory=lambda: os.getenv("INGESTION_ENDPOINT_URL")
-        or os.getenv("API_BASE_URL", "http://localhost:8000")
+        or os.getenv("API_BASE_URL")
+        or "http://localhost:8000"
     )
     ingestion_key: str = field(
         default_factory=lambda: os.getenv(
