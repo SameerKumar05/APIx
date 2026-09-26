@@ -56,6 +56,7 @@ with SessionLocal() as seed_db:
             )
     seed_db.commit()
 
+
 def _seed_fare(session, origin, destination, window, total_fare, departure, tag):
     session.add(
         RawFare(
@@ -85,18 +86,40 @@ def _seed_fare(session, origin, destination, window, total_fare, departure, tag)
 # cell per observed (weekday, hour) rather than zero-filling, so its 168-cell
 # assertion needs 7x24 real rows. Curve rows stay on DEL-BOM to keep that count
 # at exactly 11; heatmap rows go on the reverse corridor to avoid adding windows.
-_LEAD_WINDOWS = ["T+0", "T+1", "T+3", "T+7", "T+14", "T+21", "T+30", "T+45", "T+60", "T+75", "T+90"]
+_LEAD_WINDOWS = [
+    "T+0",
+    "T+1",
+    "T+3",
+    "T+7",
+    "T+14",
+    "T+21",
+    "T+30",
+    "T+45",
+    "T+60",
+    "T+75",
+    "T+90",
+]
 with SessionLocal() as fare_db:
     for i, win in enumerate(_LEAD_WINDOWS):
         _seed_fare(
-            fare_db, "DEL", "BOM", win, 5500.0 - i * 150.0,
-            datetime(2026, 1, 5, 9, 0), f"lead{i}",
+            fare_db,
+            "DEL",
+            "BOM",
+            win,
+            5500.0 - i * 150.0,
+            datetime(2026, 1, 5, 9, 0),
+            f"lead{i}",
         )
     for day in range(7):
         for hour in range(24):
             _seed_fare(
-                fare_db, "BOM", "DEL", "T+7", 4200.0 + hour * 10.0 + day,
-                datetime(2026, 1, 5 + day, hour, 0), f"heat{day}-{hour}",
+                fare_db,
+                "BOM",
+                "DEL",
+                "T+7",
+                4200.0 + hour * 10.0 + day,
+                datetime(2026, 1, 5 + day, hour, 0),
+                f"heat{day}-{hour}",
             )
     fare_db.commit()
 
@@ -122,7 +145,9 @@ with SessionLocal() as alert_db:
 # The DGCA audit reports stored violation rows grouped by route; the assertions
 # expect five evaluated routes and at least one fare above its statutory band cap.
 with SessionLocal() as dgca_db:
-    for idx, route_code in enumerate(["DEL-BOM", "BOM-BLR", "BLR-DEL", "DEL-BLR", "BOM-DEL"]):
+    for idx, route_code in enumerate(
+        ["DEL-BOM", "BOM-BLR", "BLR-DEL", "DEL-BLR", "BOM-DEL"]
+    ):
         dgca_db.add(
             DgcaViolation(
                 route_code=route_code,
