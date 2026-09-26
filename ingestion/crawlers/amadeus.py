@@ -26,6 +26,7 @@ except ImportError:
     httpx = None  # type: ignore
     HAS_HTTPX = False
 
+from backend.app.core.fare_components import ESTIMATED_BASE_FARE_RATIO
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
 from ingestion.config import (
     AIRLINE_MAP,
@@ -249,9 +250,13 @@ class AmadeusFlightClient(BaseScraper):
                 # Pricing details
                 price_data = offer.get("price", {})
                 total_raw = price_data.get("grandTotal") or price_data.get("total") or 5000.0
-                base_raw = price_data.get("base") or (float(total_raw) * 0.78)
                 fare_inr = self.normalize_fare(total_raw)
-                base_fare_inr = self.normalize_fare(base_raw)
+                supplied_base = price_data.get("base")
+                base_fare_inr = (
+                    self.normalize_fare(supplied_base)
+                    if supplied_base not in (None, "")
+                    else None
+                )
 
                 # Cabin class extraction
                 cabin_class = "economy"
@@ -340,7 +345,7 @@ class AmadeusFlightClient(BaseScraper):
             arr_dt = dep_dt + timedelta(minutes=dur_m)
 
             final_fare = round(route_base * window_multiplier * carrier_mult, 2)
-            base_fare = round(final_fare * 0.78, 2)
+            base_fare = round(final_fare * ESTIMATED_BASE_FARE_RATIO, 2)
 
             dur_hours = dur_m // 60
             dur_mins = dur_m % 60
