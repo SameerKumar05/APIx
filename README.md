@@ -24,7 +24,7 @@ IndiGo and Air India also operate partner-gated NDC portals (developer.goindigo.
 
 ## 1. Executive Summary & Problem Domain
 
-The **Consumer Price Index (CPI)** published monthly by the Ministry of Statistics and Programme Implementation (**MoSPI**) serves as India's benchmark indicator for macroeconomic inflation and Reserve Bank of India (**RBI**) monetary policy. Within the Transport & Communication group (8.59% national CPI basket weight, 12.08% urban weight), the airfare sub-component (Item 6.2.03) suffers from severe structural deficits:
+The **Consumer Price Index (CPI)** published monthly by the Ministry of Statistics and Programme Implementation (**MoSPI**) serves as India's benchmark indicator for macroeconomic inflation and Reserve Bank of India (**RBI**) monetary policy. Within the Transport & Communication group (8.59% national CPI basket weight, 9.73% urban weight), the airfare sub-component (Item 6.2.03) suffers from severe structural deficits:
 
 1. **High Latency & Low Sampling:** Calculated via manual monthly surveys from ~20 urban centers, covering merely ~10% of market fare variance, published with a 15–45 day reporting lag (average ~38 days).
 2. **Dynamic Pricing Blind Spot:** Modern Indian Low-Cost Carriers (IndiGo, Air India, SpiceJet, Akasa) alter dynamic pricing up to 100,000 times daily. Monthly surveys miss intra-month surges, festival price spikes, and route-level yield shifts.
@@ -138,7 +138,7 @@ To completely eliminate consumer substitution bias, APIx implements the **Fisher
 
 3. **Superlative Fisher Ideal Index ($I_F$):**
    $$I_F^{(t)} = \sqrt{I_L^{(t)} \times I_P^{(t)}}$$
-   *Axiomatic Properties:* Satisfies the **Time Reversal Test** ($I_{0,t} \times I_{t,0} = 1$) and **Factor Reversal Test** ($P \times Q = V_t / V_0$).
+   *Axiomatic Properties:* Satisfies the **Time Reversal Test** ($I_{0,t} \times I_{t,0} = 1$), which is asserted in `tests/test_cycle4_econometrics.py`. It does **not** satisfy the **Factor Reversal Test** ($P \times Q = V_t / V_0$): `calculate_paasche_index` is the true Paasche but `calculate_laspeyres_index` is a fixed-weight mean of price relatives rather than a true Laspeyres, so the pair is not the Fisher ideal. `tests/test_factor_reversal.py` proves both halves of that statement.
 
 4. **Bortkiewicz Substitution Bias ($\Delta$):**
    $$\Delta = I_L^{(t)} - I_F^{(t)} \ge 0$$
@@ -147,7 +147,7 @@ To completely eliminate consumer substitution bias, APIx implements the **Fisher
 ### 4.3 MoSPI CPI Transport Sub-Index Divergence & Leading Indicator
 APIx tracks the divergence gap $\Delta_{\text{CPI}}$ against the official MoSPI Transport Sub-Index:
 $$\Delta_{\text{CPI}}^{(t)} = I_{\text{APIx}}^{(t)} - I_{\text{MoSPI}}^{(t)}$$
-Empirical cross-correlation analysis confirms APIx leads official published MoSPI transport inflation releases by **~38 days** with a Pearson correlation coefficient of **$r = 0.89$** ($p < 0.001$).
+**This lead is a hypothesis, not a measurement.** No cross-correlation has been estimated against published MoSPI releases, because the index has no history yet. `scripts/backtest_vs_mospi.py` implements the estimator and refuses to emit a verdict until 30 days of Fisher index history exist; it currently exits non-zero rather than reporting a number. Any lead time or correlation quoted for APIx today would be invented. See the back-test section below.
 
 ### 4.4 DGCA Rule 135 Regulatory Surge Surveillance
 Under **Aircraft Rules 1937 Rule 135**, airlines are prohibited from charging unreasonable tariffs or predatory surges. The ML surveillance engine detects violations across multi-feature criteria:
@@ -313,7 +313,7 @@ The frontend SPA delivers institutional-grade analytics across eight dedicated t
 
 ## 9. Verification and Open Findings (Current: 226 Passed)
 
-Current isolated suite: **226 passed** with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`. Earlier counts (187, 188, 190, 194) are historical and superseded; keep them only as historical labels, not current claims. The 23-step harness (`scripts/verify_all.sh`) is historical until re-run against the queue/stream/startup edits.
+Current isolated suite: **388 passed** with two Starlette TestClient deprecation warnings on `/tmp/opencode/apix-verify/final3.db`. Earlier counts (187, 188, 190, 194) are historical and superseded; keep them only as historical labels, not current claims. The 23-step harness (`scripts/verify_all.sh`) is historical until re-run against the queue/stream/startup edits.
 
 ```bash
 ./scripts/verify_all.sh
@@ -352,7 +352,7 @@ Steps Failed: 0
 - **Step 19:** Cycle 4 backend API (22/22 endpoints passed).
 - **Step 20:** Lead-time price elasticity dynamics.
 - **Step 21:** Cycle 4 comprehensive integration pytest suite.
-- **Step 22:** Master Pytest Full Test Suite (historical 187/187 claim; current suite is 226 passed on `/tmp/opencode/apix-verify/final3.db`).
+- **Step 22:** Master Pytest Full Test Suite (historical 187/187 claim; current suite is 388 passed on `/tmp/opencode/apix-verify/final3.db`).
 - **Step 23:** Frontend build (current: `tsc -b && vite build` exit 0, 2521 modules, 873.16 kB JS / 224.95 kB gzip). A direct browser sweep against the frozen production build, 8 tabs x 375/768/1280 with no route interception, recorded 24 of 24 tab renders with zero console errors, zero page errors, zero crashes, zero network-error states and zero synthetic-zero fare tokens; focus-ring contrast measured across 24 tab stops at a minimum of 17.93:1 with no step below the WCAG 3:1 floor. This is first-party measurement, not an independent reviewer pass.
 
 Open findings preserved: **CRITICAL, partially fixed: `GET /api/v1/indices/routes` served fabricated airfares as measured data.** **Fixed:** the swallowed `except Exception: pass` that returned the entire hardcoded seed list on any failure is replaced by a 503 `Database unavailable`, and a reachable database with no active routes now reports zero coverage instead of seven invented corridors. Verified at runtime on a current-source instance and locked by two regression tests (`test_routes_overview_does_not_fabricate_when_database_is_unavailable`, `test_routes_overview_reports_no_coverage_instead_of_seeded_corridors`). **Still open:** a route that has no `RouteDailyIndex` is still replaced by its hardcoded `DOMESTIC_ROUTES_SEED` entry or an invented `avg_fare_inr=5000.0` default, and `/api/v1/indices/routes/{route_code}/history` applies the same seed fallback including an invented base index of 108.0. On a sparse database 7 of 7 served routes matched the hardcoded literals exactly, so the whole response was invented. That part needs a product decision, because `RouteOverviewItem` requires `current_index` and `avg_fare_inr` (evidence: `evidence/indices-routes-fabricated-fares.json`). Other preserved findings: sparse-FK limitation, with only declared FKs enforced and other relationships unverified (evidence: `/tmp/opencode/apix-verify/constraints.db`); no role separation on recalculate/acknowledge mutations and success-shaped 200 with `database_updated: false` for non-existent IDs plus a fixed benchmark recalculation tuple (evidence: `evidence/auth-matrix-8014.json`, `evidence/api-boundary-matrix-8014.json`); unknown route `XXX-YYY` returns success-shaped 200 and the stream status endpoint reports `LIVE` independently of writes (evidence: `evidence/api-boundary-matrix-8014.json`); nine WebSocket aliases all connect and are a duplicate-mount residual, not separate contracts (evidence: `evidence/websocket-alias-matrix-8014.json`); enqueue deduplication remains check-then-insert and is not concurrency-safe without a unique key, which needs a migration; `prefers-reduced-motion` does not reach Recharts chart animation because react-smooth is JS-driven, so roughly 33 chart instances still need an explicit `isAnimationActive`; the Anomaly Detector leaks 6px at 375px width.

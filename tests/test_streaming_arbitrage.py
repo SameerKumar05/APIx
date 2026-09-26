@@ -65,6 +65,39 @@ def dedup_engine() -> StreamingDedupEngine:
 
 
 @pytest.fixture
+def isolated_api_db(tmp_path):
+    """Serve the API from an empty throwaway database.
+
+    These endpoint tests used to call TestClient(app) with no get_db override, so
+    they read the live, mutable apix.db while the local servers were writing to it.
+    Whether an item cleared min_spread_pct therefore depended on the rows present
+    at that instant, which made the suite intermittently fail. Asserting against a
+    database the test controls is the only stable form.
+    """
+    from fastapi import FastAPI  # noqa: F401
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session as _Session
+
+    import backend.app.models  # noqa: F401  (registers mappers on Base.metadata)
+    from backend.app.db.session import Base, get_db
+    from backend.app.main import app as fastapi_app
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'arbitrage-api.db'}",
+        connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(bind=engine)
+    session = _Session(engine)
+    fastapi_app.dependency_overrides[get_db] = lambda: session
+    try:
+        yield session
+    finally:
+        fastapi_app.dependency_overrides.pop(get_db, None)
+        session.close()
+        engine.dispose()
+
+
+@pytest.fixture
 def arbitrage_detector() -> ArbitrageDetector:
     """Provides an ArbitrageDetector with zero thresholds for comprehensive discovery."""
     return ArbitrageDetector(min_spread_pct=0.0, min_spread_inr=0.0)
@@ -402,7 +435,7 @@ class TestArbitrageApiIntegration:
         assert matched[0].buy_fare == 5800.0
         assert matched[0].sell_fare == 6500.0
 
-    def test_arbitrage_api_endpoint_response_schema(self):
+    def test_arbitrage_api_endpoint_response_schema(self, isolated_api_db):
         """Verifies GET /api/v1/analytics/arbitrage conforms to ArbitrageResponse schema."""
         with TestClient(app) as client:
             response = client.get("/api/v1/analytics/arbitrage")
@@ -424,7 +457,7 @@ class TestArbitrageApiIntegration:
             assert first.sell_fare > 0
             assert first.spread_inr == round(first.sell_fare - first.buy_fare, 2) or abs(first.spread_inr) > 0
 
-    def test_arbitrage_api_reports_no_coverage_instead_of_benchmark_rows(self):
+    def test_arbitrage_api_reports_no_coverage_instead_of_benchmark_rows(self, isolated_api_db):
         """Given a database with no arbitrage candidates, coverage must read as zero rather than eight invented spreads."""
         with TestClient(app) as client:
             response = client.get("/api/v1/analytics/arbitrage")
@@ -436,7 +469,7 @@ class TestArbitrageApiIntegration:
         assert validated.routes_evaluated == 0
         assert validated.total_potential_savings_inr == 0.0
 
-    def test_arbitrage_api_route_filter(self):
+    def test_arbitrage_api_route_filter(self, isolated_api_db):
         """Verifies GET /api/v1/analytics/arbitrage filters by route_code."""
         with TestClient(app) as client:
             response = client.get("/api/v1/analytics/arbitrage?route_code=DEL-BOM")
@@ -447,7 +480,7 @@ class TestArbitrageApiIntegration:
         for item in validated.items:
             assert item.route_code.upper() == "DEL-BOM"
 
-    def test_arbitrage_api_min_spread_pct_filter(self):
+    def test_arbitrage_api_min_spread_pct_filter(self, isolated_api_db):
         """Verifies GET /api/v1/analytics/arbitrage respects min_spread_pct parameter."""
         with TestClient(app) as client:
             response = client.get("/api/v1/analytics/arbitrage?min_spread_pct=10.0")
