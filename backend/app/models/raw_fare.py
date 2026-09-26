@@ -125,6 +125,14 @@ class RawFare(Base):
         default="Economy",
         doc="Cabin fare class (Economy, Premium Economy, Business)",
     )
+    booking_class: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        doc=(
+            "Airline booking / fare-basis code (Y, B, M, X). Distinct from "
+            "fare_class, which is cabin. NULL when the source did not supply one."
+        ),
+    )
     base_fare: Mapped[float] = mapped_column(
         Float,
         nullable=False,
@@ -135,7 +143,34 @@ class RawFare(Base):
         Float,
         nullable=False,
         default=0.0,
-        doc="Fuel surcharge, passenger service fee, and GST in INR",
+        doc=(
+            "Fuel surcharge, passenger service fee, and GST in INR. "
+            "Does not include a separately reported udf_fee or convenience_fee."
+        ),
+    )
+    udf_fee: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        doc=(
+            "User development fee in INR, kept separate from taxes_and_fees. "
+            "NULL when the source did not supply it; never estimated."
+        ),
+    )
+    convenience_fee: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        doc=(
+            "Convenience charge in INR. NULL when the source did not supply it; "
+            "never estimated."
+        ),
+    )
+    flight_status: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        doc=(
+            "Reported flight status: scheduled, cancelled, or sold_out. "
+            "NULL when the source did not report one; never defaulted to scheduled."
+        ),
     )
     total_fare: Mapped[float] = mapped_column(
         Float,
@@ -244,8 +279,12 @@ class RawFare(Base):
             "duration_minutes": self.duration_minutes,
             "stops": self.stops,
             "fare_class": self.fare_class,
+            "booking_class": self.booking_class,
             "base_fare": self.base_fare,
             "taxes_and_fees": self.taxes_and_fees,
+            "udf_fee": self.udf_fee,
+            "convenience_fee": self.convenience_fee,
+            "flight_status": self.flight_status,
             "total_fare": self.total_fare,
             "source_platform": self.source_platform,
             "scraped_at": self.scraped_at.isoformat() if self.scraped_at else None,
