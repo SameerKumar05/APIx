@@ -116,8 +116,9 @@ services:
       INGESTION_API_KEY: ${INGESTION_API_KEY:-apix-ingestion-secret-key-2026}
       AMADEUS_CLIENT_ID: ${AMADEUS_CLIENT_ID:-}
       AMADEUS_CLIENT_SECRET: ${AMADEUS_CLIENT_SECRET:-}
-      INGESTION_MODE: synthetic
-      SCRAPER_SOURCES: synthetic
+      INGESTION_MODE: ${INGESTION_MODE:-synthetic}
+      SCRAPER_SOURCE: ${SCRAPER_SOURCE:-synthetic}
+      SCRAPER_SESSION_REUSE: ${SCRAPER_SESSION_REUSE:-0}
       PLAYWRIGHT_HEADLESS: "true"
       PYTHONPATH: /app
     command: ["python", "-m", "ingestion.worker"]
@@ -147,8 +148,8 @@ services:
       INGESTION_API_KEY: ${INGESTION_API_KEY:-apix-ingestion-secret-key-2026}
       AMADEUS_CLIENT_ID: ${AMADEUS_CLIENT_ID:-}
       AMADEUS_CLIENT_SECRET: ${AMADEUS_CLIENT_SECRET:-}
-      INGESTION_MODE: synthetic
-      SCRAPER_SOURCES: synthetic
+      INGESTION_MODE: ${INGESTION_MODE:-synthetic}
+      SCRAPER_SOURCE: ${SCRAPER_SOURCE:-synthetic}
       PLAYWRIGHT_HEADLESS: "true"
       PYTHONPATH: /app
     command: ["python", "-m", "ingestion.orchestrator"]
@@ -160,8 +161,52 @@ services:
     networks:
       - apix-network
 
+  # Daily extraction. Starts with the stack. Do not also enable the GitHub
+  # Actions cron against the same database: that is a second sweep.
+  scheduler:
+    container_name: apix-scheduler
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    restart: on-failure
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-apix_user}:${POSTGRES_PASSWORD:-apix_password}@db:5432/${POSTGRES_DB:-apix_db}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-apix_user}:${POSTGRES_PASSWORD:-apix_password}@db:5432/${POSTGRES_DB:-apix_db}
+      INGESTION_ENDPOINT_URL: http://backend:8000
+      API_BASE_URL: http://backend:8000
+      INGESTION_API_KEY: ${INGESTION_API_KEY:-apix-ingestion-secret-key-2026}
+      AMADEUS_CLIENT_ID: ${AMADEUS_CLIENT_ID:-}
+      AMADEUS_CLIENT_SECRET: ${AMADEUS_CLIENT_SECRET:-}
+      INGESTION_MODE: ${INGESTION_MODE:-synthetic}
+      SCRAPER_SOURCE: ${SCRAPER_SOURCE:-synthetic}
+      SCRAPER_SESSION_REUSE: ${SCRAPER_SESSION_REUSE:-0}
+      SCRAPER_SESSION_DIR: /var/lib/apix/scheduler/sessions
+      SCHEDULER_CRON: ${SCHEDULER_CRON:-0 2 * * *}
+      SCHEDULER_DISPATCH: enqueue
+      SCHEDULER_STATE_DIR: /var/lib/apix/scheduler
+      PLAYWRIGHT_HEADLESS: "true"
+      PYTHONPATH: /app
+    command: ["python", "-m", "ingestion.scheduler"]
+    volumes:
+      - apix_scheduler_state:/var/lib/apix/scheduler
+    healthcheck:
+      disable: true
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    networks:
+      - apix-network
+
 volumes:
   apix_postgres_data:
+    driver: local
+  apix_scheduler_state:
     driver: local
 
 networks:
