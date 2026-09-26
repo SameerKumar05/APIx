@@ -70,12 +70,38 @@ with SessionLocal() as fare_db:
                 is_synthetic=True,
             )
         )
+    for window, fare in (
+        ("T+30", 4000.0),
+        ("T+15", 4500.0),
+        ("T+7", 5200.0),
+        ("T+1", 6100.0),
+    ):
+        fare_db.add(
+            RawFare(
+                batch_id=1,
+                origin="ELA",
+                destination="STL",
+                flight_date=date.today() + timedelta(days=30),
+                booking_window=window,
+                airline_code="6E",
+                flight_number=f"6E-ela-{window}",
+                stops=0,
+                fare_class="ECONOMY",
+                base_fare=fare - 500.0,
+                taxes_and_fees=500.0,
+                total_fare=fare,
+                source_platform="synthetic",
+                scraped_at=datetime.now(UTC),
+                hash_id=f"cycle4-ela-{window}",
+                is_synthetic=True,
+            )
+        )
     fare_db.commit()
 
 # The elasticity endpoint returns an empty gradient when no RouteElasticity row
 # exists, so the curve needs one. Elasticities are negative: demand slopes down.
 with SessionLocal() as el_db:
-    for target in ("NATIONAL", "BOM-BLR"):
+    for target in ("NATIONAL", "BOM-BLR", "ELA-STL"):
         el_db.add(
             RouteElasticity(
                 route_code=target,
@@ -270,7 +296,7 @@ def test_cpi_gap_alias_endpoint():
 
 def test_elasticity_default():
     print("[TEST 7/22] GET /api/v1/econometrics/elasticity (default)")
-    res = client.get("/api/v1/econometrics/elasticity")
+    res = client.get("/api/v1/econometrics/elasticity?route_code=ELA-STL")
     assert res.status_code == 200, f"Expected 200, got {res.status_code}: {res.text}"
     data = res.json()
     assert "route_code" in data
