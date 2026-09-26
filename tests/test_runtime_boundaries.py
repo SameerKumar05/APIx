@@ -423,8 +423,12 @@ def test_fabrication_endpoints_fail_closed_on_unavailable_database(
         with TestClient(app) as client:
             for path in (
                 "/api/v1/indices/routes",
+                "/api/v1/indices/routes/DEL-BOM/history",
                 "/api/v1/analytics/arbitrage",
                 "/api/v1/analytics/anomalies",
+                "/api/v1/analytics/lead-time-curve",
+                "/api/v1/analytics/heatmap",
+                "/api/v1/analytics/dgca-validation",
             ):
                 response = client.get(path)
 

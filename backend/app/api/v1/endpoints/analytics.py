@@ -1,14 +1,17 @@
-from datetime import datetime, timedelta, timezone
-import math
+from datetime import datetime, timezone
 from typing import List, Optional
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import status as http_status
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db
 from backend.app.models.anomaly import AnomalyAlert
+from backend.app.models.econometrics import DgcaViolation
+from backend.app.models.raw_fare import RawFare
 from backend.app.schemas.analytics import (
     AnomalyAlertItem,
     AnomalyAlertsResponse,
@@ -19,71 +22,122 @@ from backend.app.schemas.analytics import (
     LeadTimeCurvePoint,
     LeadTimeCurveResponse,
 )
-from backend.app.schemas.arbitrage import (
-    ArbitrageItem,
-    ArbitrageResponse,
-)
-from backend.app.services.arbitrage_detector import (
-    ArbitrageDetector,
-    ArbitrageOpportunity,
-    get_current_arbitrage_opportunities,
-)
-
 router = APIRouter()
 
+_IST = ZoneInfo("Asia/Kolkata")
+_DISMISSED = "DISMISSED"
+
+
+def _normalize_route(route_code: Optional[str]) -> str:
+    return (route_code or "NATIONAL").strip().upper()
+
+
+def _route_airports(route_code: str) -> tuple[str, str] | None:
+    parts = route_code.split("-")
+    if len(parts) == 2 and len(parts[0]) == 3 and len(parts[1]) == 3:
+        return parts[0], parts[1]
+    return None
+
+
+def _window_days(tag: str) -> int | None:
+    cleaned = tag.strip().upper()
+    if cleaned.startswith("T+"):
+        tail = cleaned[2:]
+        if tail.isdigit():
+            return int(tail)
+    if cleaned.isdigit():
+        return int(cleaned)
+    return None
+
+
+def _linear_percentile(values: list[float], percentile: float) -> float:
+    """Linear percentile (numpy/R type 7) of a non-empty fare list."""
+    ordered = sorted(values)
+    count = len(ordered)
+    if count == 1:
+        return ordered[0]
+    index = percentile * (count - 1)
+    lower = int(index)
+    upper = min(lower + 1, count - 1)
+    weight = index - lower
+    return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
+
+
+def _departure_slot(departure: datetime) -> tuple[int, int]:
+    clock = departure if departure.tzinfo is None else departure.astimezone(_IST)
+    return clock.weekday(), clock.hour
+
+
+def _unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Database unavailable",
+    )
 
 
 @router.get(
     "/lead-time-curve",
     response_model=LeadTimeCurveResponse,
     summary="Get advance purchase lead-time elasticity curve",
-    description="Returns pricing curve dynamics from 90 days before departure down to departure day (D-0).",
+    description="Returns pricing curve dynamics from stored fares grouped by booking window.",
 )
 async def get_lead_time_curve(
     route_code: Optional[str] = Query("NATIONAL", description="Route code (e.g., DEL-BOM) or NATIONAL"),
+    db: Session = Depends(get_db),
 ) -> LeadTimeCurveResponse:
-    target_route = (route_code or "NATIONAL").strip().upper()
+    target_route = _normalize_route(route_code)
+    generated_at = datetime.now(timezone.utc)
+    empty = LeadTimeCurveResponse(
+        route_code=target_route,
+        curve_points=[],
+        generated_at=generated_at,
+        data_available=False,
+    )
+    airports = None if target_route == "NATIONAL" else _route_airports(target_route)
+    if target_route != "NATIONAL" and airports is None:
+        return empty
 
-    # Route baseline multiplier
-    base_price = 4500.0
-    if target_route == "DEL-BOM":
-        base_price = 5200.0
-    elif target_route == "DEL-BLR":
-        base_price = 5600.0
-    elif target_route == "BOM-GOI":
-        base_price = 4100.0
+    try:
+        query = db.query(RawFare.booking_window, RawFare.total_fare)
+        if airports is not None:
+            query = query.filter(RawFare.origin == airports[0], RawFare.destination == airports[1])
+        rows = query.all()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise _unavailable() from exc
 
-    # Advance booking lead times: 90, 60, 45, 30, 21, 14, 7, 3, 2, 1, 0
-    intervals = [90, 60, 45, 30, 21, 14, 7, 3, 2, 1, 0]
+    buckets: dict[int, list[float]] = {}
+    for window, fare in rows:
+        if fare is None:
+            continue
+        days = _window_days(window or "")
+        if days is None:
+            continue
+        buckets.setdefault(days, []).append(float(fare))
+    if not buckets:
+        return empty
+
+    baseline_median = _linear_percentile(buckets[max(buckets)], 0.5)
     curve_points: List[LeadTimeCurvePoint] = []
-
-    for d in intervals:
-        # Exponential surge curve for late bookings
-        if d >= 30:
-            factor = 0.82 + (90 - d) * 0.003
-        elif d >= 14:
-            factor = 1.0 + (30 - d) * 0.015
-        elif d >= 7:
-            factor = 1.24 + (14 - d) * 0.04
-        else:
-            factor = 1.52 + (7 - d) * 0.16
-
-        avg_fare = round(base_price * factor, 2)
+    for days in sorted(buckets, reverse=True):
+        fares = buckets[days]
+        median = _linear_percentile(fares, 0.5)
+        factor = round(median / baseline_median, 3) if baseline_median > 0 else None
         curve_points.append(
             LeadTimeCurvePoint(
-                days_before_departure=d,
-                avg_fare_inr=avg_fare,
-                median_fare_inr=round(avg_fare * 0.96, 2),
-                p10_fare_inr=round(avg_fare * 0.78, 2),
-                p90_fare_inr=round(avg_fare * 1.34, 2),
-                elasticity_factor=round(factor, 3),
+                days_before_departure=days,
+                avg_fare_inr=round(sum(fares) / len(fares), 2),
+                median_fare_inr=round(median, 2),
+                p10_fare_inr=round(_linear_percentile(fares, 0.10), 2),
+                p90_fare_inr=round(_linear_percentile(fares, 0.90), 2),
+                elasticity_factor=factor,
             )
         )
-
     return LeadTimeCurveResponse(
         route_code=target_route,
         curve_points=curve_points,
-        generated_at=datetime.now(timezone.utc),
+        generated_at=generated_at,
+        data_available=True,
     )
 
 
@@ -91,65 +145,69 @@ async def get_lead_time_curve(
     "/heatmap",
     response_model=HeatmapMatrixResponse,
     summary="Get 7x24 Day-of-Week vs Hour-of-Day pricing heatmap",
-    description="Returns pricing intensity matrix across all 168 weekly hour slots.",
+    description="Returns observed departure-slot fares. Slots with no observations are omitted.",
 )
 async def get_heatmap_matrix(
     route_code: Optional[str] = Query("NATIONAL", description="Route code or NATIONAL"),
     metric: str = Query("avg_fare", description="Metric to project: 'avg_fare' or 'fare_index'"),
+    db: Session = Depends(get_db),
 ) -> HeatmapMatrixResponse:
-    target_route = (route_code or "NATIONAL").strip().upper()
-    base_fare = 5400.0 if target_route == "NATIONAL" else 6200.0
+    target_route = _normalize_route(route_code)
+    empty = HeatmapMatrixResponse(
+        route_code=target_route,
+        metric=metric,
+        matrix=[],
+        min_val=None,
+        max_val=None,
+        data_available=False,
+    )
+    airports = None if target_route == "NATIONAL" else _route_airports(target_route)
+    if target_route != "NATIONAL" and airports is None:
+        return empty
 
+    try:
+        query = db.query(RawFare.departure_time, RawFare.total_fare)
+        if airports is not None:
+            query = query.filter(RawFare.origin == airports[0], RawFare.destination == airports[1])
+        rows = query.all()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise _unavailable() from exc
+
+    slots: dict[tuple[int, int], list[float]] = {}
+    for departure, fare in rows:
+        if departure is None or fare is None:
+            continue
+        slots.setdefault(_departure_slot(departure), []).append(float(fare))
+    if not slots:
+        return empty
+
+    observed = [fare for fares in slots.values() for fare in fares]
+    overall = sum(observed) / len(observed)
     matrix: List[HeatmapCell] = []
-    min_val = float("inf")
-    max_val = float("-inf")
-
-    for day in range(7):  # 0=Monday .. 6=Sunday
-        # Weekend multiplier & Friday evening surge
-        day_weight = 1.0
-        if day == 0:  # Monday morning business travel
-            day_weight = 1.15
-        elif day in [1, 2]:  # Tuesday/Wednesday off-peak
-            day_weight = 0.90
-        elif day == 4:  # Friday weekend departure
-            day_weight = 1.25
-        elif day == 6:  # Sunday return flights
-            day_weight = 1.22
-
-        for hour in range(24):
-            # Prime hours: 06:00-09:00 and 17:00-21:00
-            if 6 <= hour <= 9:
-                hour_weight = 1.28
-            elif 17 <= hour <= 21:
-                hour_weight = 1.35
-            elif 1 <= hour <= 5:  # Red-eye slots
-                hour_weight = 0.72
-            else:
-                hour_weight = 1.02
-
-            combined_factor = day_weight * hour_weight
-            cell_fare = round(base_fare * combined_factor, 2)
-            fare_idx = round(combined_factor * 100.0, 2)
-
-            val = cell_fare if metric == "avg_fare" else fare_idx
-            min_val = min(min_val, val)
-            max_val = max(max_val, val)
-
-            matrix.append(
-                HeatmapCell(
-                    day_of_week=day,
-                    hour_of_day=hour,
-                    fare_index=fare_idx,
-                    avg_fare_inr=cell_fare,
-                )
+    scale: list[float] = []
+    for (day, hour), fares in sorted(slots.items()):
+        cell_avg = round(sum(fares) / len(fares), 2)
+        fare_index = round(cell_avg / overall * 100.0, 2) if overall > 0 else None
+        matrix.append(
+            HeatmapCell(
+                day_of_week=day,
+                hour_of_day=hour,
+                fare_index=fare_index,
+                avg_fare_inr=cell_avg,
             )
+        )
+        selected = fare_index if metric == "fare_index" else cell_avg
+        if selected is not None:
+            scale.append(selected)
 
     return HeatmapMatrixResponse(
         route_code=target_route,
         metric=metric,
         matrix=matrix,
-        min_val=min_val,
-        max_val=max_val,
+        min_val=min(scale) if scale else None,
+        max_val=max(scale) if scale else None,
+        data_available=True,
     )
 
 
@@ -165,7 +223,6 @@ async def get_anomalies(
     status: Optional[str] = Query(None, description="Filter by status ('ACTIVE', 'OPEN', 'INVESTIGATING', 'RESOLVED')"),
     db: Session = Depends(get_db),
 ) -> AnomalyAlertsResponse:
-    # Check if database has any recorded AnomalyAlerts
     try:
         total_db_count = db.query(func.count(AnomalyAlert.id)).scalar() or 0
         if total_db_count > 0:
@@ -222,65 +279,61 @@ async def get_anomalies(
             )
     except SQLAlchemyError as exc:
         db.rollback()
-        raise HTTPException(
-            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database unavailable",
-        ) from exc
+        raise _unavailable() from exc
 
     return AnomalyAlertsResponse(alerts=[], total_alerts=0)
+
 
 @router.get(
     "/dgca-validation",
     response_model=DGCAValidationResponse,
     summary="Get DGCA statutory fare band compliance audit",
-    description="Validates observed market fares against Ministry of Civil Aviation / DGCA statutory upper band caps.",
+    description="Reports stored dgca_violations rows. An empty ledger is not evaluated, not a clean audit.",
 )
-async def get_dgca_validation() -> DGCAValidationResponse:
-    now = datetime.now(timezone.utc)
-    violations = [
-        DGCAValidationItem(
-            route_code="DEL-BOM",
-            statutory_band_cap_inr=16000.0,
-            observed_max_fare_inr=18450.0,
-            violations_count=3,
-            compliance_status="BREACH_DETECTED",
-        ),
-        DGCAValidationItem(
-            route_code="BOM-GOI",
-            statutory_band_cap_inr=14000.0,
-            observed_max_fare_inr=24500.0,
-            violations_count=12,
-            compliance_status="BREACH_DETECTED",
-        ),
-        DGCAValidationItem(
-            route_code="DEL-BLR",
-            statutory_band_cap_inr=19000.0,
-            observed_max_fare_inr=18200.0,
-            violations_count=0,
-            compliance_status="COMPLIANT",
-        ),
-        DGCAValidationItem(
-            route_code="BOM-BLR",
-            statutory_band_cap_inr=14500.0,
-            observed_max_fare_inr=13800.0,
-            violations_count=0,
-            compliance_status="COMPLIANT",
-        ),
-        DGCAValidationItem(
-            route_code="BLR-HYD",
-            statutory_band_cap_inr=11000.0,
-            observed_max_fare_inr=9400.0,
-            violations_count=0,
-            compliance_status="COMPLIANT",
-        ),
-    ]
+async def get_dgca_validation(
+    db: Session = Depends(get_db),
+) -> DGCAValidationResponse:
+    checked_at = datetime.now(timezone.utc)
+    try:
+        rows = db.query(DgcaViolation).all()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise _unavailable() from exc
 
-    total_breaches = sum(v.violations_count for v in violations)
+    active = [row for row in rows if (row.status or "").upper() != _DISMISSED]
+    if not rows:
+        return DGCAValidationResponse(
+            checked_at=checked_at,
+            total_routes_evaluated=0,
+            total_violations=0,
+            violations=[],
+            data_available=False,
+            evaluation_status="not_evaluated",
+        )
+
+    grouped: dict[str, list[DgcaViolation]] = {}
+    for row in active:
+        grouped.setdefault(row.route_code, []).append(row)
+
+    violations: List[DGCAValidationItem] = []
+    for route_code in sorted(grouped):
+        group = grouped[route_code]
+        peak = max(group, key=lambda item: item.fare_inr)
+        violations.append(
+            DGCAValidationItem(
+                route_code=route_code,
+                statutory_band_cap_inr=round(peak.median_baseline_fare, 2),
+                observed_max_fare_inr=round(peak.fare_inr, 2),
+                violations_count=len(group),
+                compliance_status="BREACH_DETECTED",
+            )
+        )
 
     return DGCAValidationResponse(
-        checked_at=now,
+        checked_at=checked_at,
         total_routes_evaluated=len(violations),
-        total_violations=total_breaches,
+        total_violations=sum(item.violations_count for item in violations),
         violations=violations,
+        data_available=True,
+        evaluation_status="evaluated",
     )
-

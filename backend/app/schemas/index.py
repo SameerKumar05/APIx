@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 class NationalIndexPoint(BaseModel):
     timestamp: datetime = Field(..., description="Timestamp of the index observation point")
     index_value: float = Field(..., description="Calculated Fisher/Jevons weighted index (Base 100.0)")
-    change_24h: float = Field(..., description="Percentage change over the past 24 hours")
-    change_7d: float = Field(0.0, description="Percentage change over the past 7 days")
+    change_24h: Optional[float] = Field(None, description="Percentage change versus the previous observation. Null when no prior point exists.")
+    change_7d: Optional[float] = Field(None, description="Percentage change versus the observation 7 days earlier. Null when that observation is absent.")
     sample_size: int = Field(..., description="Number of unique flight fare observations in the computation window")
     base_period: str = Field("2026-01-01", description="Baseline benchmark period")
 
@@ -15,8 +15,11 @@ class NationalIndexPoint(BaseModel):
 class NationalIndexLatestResponse(BaseModel):
     timestamp: datetime = Field(..., description="Timestamp of the latest computed index")
     index_value: float = Field(..., description="Current National Airfare Price Index value (Base 100)")
-    change_24h: float = Field(..., description="24-hour rate of change (percentage)")
-    change_7d: float = Field(..., description="7-day rate of change (percentage)")
+    change_24h: float = Field(..., description="Stored day-over-day inflation rate (percentage)")
+    change_7d: Optional[float] = Field(
+        None,
+        description="Percent change versus the same series 7 days earlier. Null when that observation is absent.",
+    )
     sample_size: int = Field(..., description="Count of flight observations included in calculation")
     base_period: str = Field("2026-01-01", description="Baseline reference date")
     confidence_interval_lower: Optional[float] = Field(None, description="95% confidence interval lower bound")
@@ -48,16 +51,26 @@ class RouteOverviewItem(BaseModel):
     origin: str = Field(..., description="Origin 3-letter IATA code")
     destination: str = Field(..., description="Destination 3-letter IATA code")
     current_index: float = Field(..., description="Current route-level fare index (Base 100)")
-    change_24h: float = Field(..., description="24-hour price trend percentage")
+    change_24h: Optional[float] = Field(
+        None,
+        description="Percent change versus the previous route index. Null when no prior observation exists.",
+    )
     avg_fare_inr: float = Field(..., description="Average observed economy fare in INR")
     min_fare_inr: float = Field(..., description="Lowest available fare on the route in INR")
     active_flights_tracked: int = Field(..., description="Count of daily tracked scheduled flights")
-    volatility_score: float = Field(..., description="Price dispersion volatility coefficient (0.0 to 1.0)")
+    volatility_score: Optional[float] = Field(
+        None,
+        description="std_dev divided by mean_fare. Null when mean_fare is zero.",
+    )
 
 
 class RouteListResponse(BaseModel):
-    routes: List[RouteOverviewItem] = Field(..., description="List of domestic route summary overviews")
-    total_routes: int = Field(..., description="Total tracked routes")
+    routes: List[RouteOverviewItem] = Field(..., description="Routes that have a stored daily index. Routes with no observation are omitted.")
+    total_routes: int = Field(..., description="Count of routes included in this response")
+    data_available: bool = Field(
+        False,
+        description="False when no route has a stored daily index. An empty list is missing data, not a zero-fare network.",
+    )
 
 
 class RouteHistoryResponse(BaseModel):
@@ -65,3 +78,7 @@ class RouteHistoryResponse(BaseModel):
     origin: str = Field(..., description="Origin airport code")
     destination: str = Field(..., description="Destination airport code")
     points: List[NationalIndexPoint] = Field(..., description="Historical time-series points for the route")
+    data_available: bool = Field(
+        False,
+        description="False when this route has no stored daily index. An empty series is missing data, not a flat trend.",
+    )
