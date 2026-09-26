@@ -107,11 +107,7 @@ class EconometricIndex(Base):
 
 
 class MospiCpiSeries(Base):
-    """Official Ministry of Statistics and Programme Implementation (MoSPI) CPI benchmarks.
-
-    Tracks monthly official Consumer Price Index releases for transport & communication
-    and airfare sub-indices for divergence analytics against APIx real-time indices.
-    """
+    """Stored CPI rows. Official only when source cites a press note, not the bare label MoSPI."""
 
     __tablename__ = "mospi_cpi_series"
 
@@ -146,8 +142,8 @@ class MospiCpiSeries(Base):
     source: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
-        default="MoSPI",
-        doc="Authoritative publishing agency or statistical office",
+        default="undeclared",
+        doc="Provenance. Bare MoSPI is not a citation.",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

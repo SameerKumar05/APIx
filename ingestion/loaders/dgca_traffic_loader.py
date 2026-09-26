@@ -25,6 +25,11 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from backend.app.db.session import Base, SessionLocal
 from backend.app.models.route import Route
+from ingestion.loaders.traffic_provenance import (
+    declared_token,
+    resolve_traffic_provenance,
+    split_provenance_directive,
+)
 
 logger = logging.getLogger("ingestion.loaders.dgca_traffic")
 
@@ -84,6 +89,10 @@ class DgcaTrafficRecord(BaseModel):
             "but they are not official statistics and must not be presented as such."
         ),
     )
+    provenance: str = Field(
+        default="modelled",
+        description="File declaration: DGCA, generated, or modelled. Absent means modelled.",
+    )
     source: str = Field(
         default="",
         description="Provenance string: the DGCA publication and retrieval date, or the generator name.",
@@ -116,6 +125,9 @@ class DgcaTrafficRecord(BaseModel):
             "share_weight": round(self.share_weight, 6),
             "distance_km": self.distance_km,
             "period_rank": self.period_rank,
+            "is_synthetic": self.is_synthetic,
+            "provenance": self.provenance,
+            "source": self.source,
         }
 
     def to_stats_dict(self) -> dict[str, Any]:
@@ -239,6 +251,7 @@ def _generate_builtin_dgca_series() -> list[DgcaTrafficRecord]:
                 distance_km=item["distance_km"],
                 period_rank=rank_idx,
                 is_synthetic=True,
+                provenance="generated",
                 source=(
                     "MODELLED by ingestion/loaders/dgca_traffic_loader.py::_generate_builtin_dgca_series "
                     "(base volumes x secular trend x seasonality, weights normalised to 1.0). "
@@ -344,6 +357,7 @@ class DgcaTrafficLoader:
         else:
             content = str(csv_source)
 
+        file_declared, content = split_provenance_directive(content)
         reader = csv.DictReader(io.StringIO(content.strip()))
         if not reader.fieldnames:
             raise ValueError("CSV is empty or missing headers")
@@ -396,6 +410,8 @@ class DgcaTrafficLoader:
             w_str = row.get("share_weight") or row.get("weight") or row.get("basket_weight")
             share_weight = float(w_str) if w_str else None
 
+            token = declared_token(row.get("provenance"), row.get("is_synthetic"), file_declared)
+            prov = resolve_traffic_provenance(token)
             raw_rows_by_period.setdefault(ym, []).append({
                 "origin": origin,
                 "destination": dest,
@@ -403,6 +419,8 @@ class DgcaTrafficLoader:
                 "pax_volume": pax,
                 "distance_km": distance,
                 "share_weight": share_weight,
+                "is_synthetic": prov.is_synthetic,
+                "provenance": prov.label,
             })
 
         # Process and normalize each period
@@ -435,12 +453,18 @@ class DgcaTrafficLoader:
                     share_weight=weight,
                     distance_km=item["distance_km"],
                     period_rank=rank,
-                
-                    is_synthetic=False,
-                    source=f"DGCA city-pair traffic file: {self.data_path}",)
+                    is_synthetic=item["is_synthetic"],
+                    provenance=item["provenance"],
+                    source=self._source_for(item["provenance"], item["is_synthetic"]),
+                )
                 records.append(rec)
 
         return records
+
+    def _source_for(self, provenance: str, is_synthetic: bool) -> str:
+        if is_synthetic:
+            return f"MODELLED {provenance} file: {self.data_path}. Not a DGCA release."
+        return f"DGCA city-pair traffic file: {self.data_path}"
 
     def parse_json(self, json_source: str | Path | list[dict[str, Any]] | dict[str, Any]) -> list[DgcaTrafficRecord]:
         """Parse DGCA traffic records from JSON file path, string, or Python list/dict."""
@@ -452,6 +476,7 @@ class DgcaTrafficLoader:
         else:
             data = json_source
 
+        file_declared = data.get("provenance") if isinstance(data, dict) else None
         raw_list = data if isinstance(data, list) else data.get("records", data.get("data", []))
         if not isinstance(raw_list, list):
             raise ValueError("Expected JSON array of traffic records")
@@ -481,6 +506,12 @@ class DgcaTrafficLoader:
             w = item.get("share_weight") or item.get("weight")
             share_weight = float(w) if w is not None else None
 
+            token = declared_token(
+                None if item.get("provenance") is None else str(item.get("provenance")),
+                None if item.get("is_synthetic") is None else str(item.get("is_synthetic")),
+                None if file_declared is None else str(file_declared),
+            )
+            prov = resolve_traffic_provenance(token)
             raw_rows_by_period.setdefault(ym, []).append({
                 "origin": origin,
                 "destination": dest,
@@ -488,6 +519,8 @@ class DgcaTrafficLoader:
                 "pax_volume": pax,
                 "distance_km": dist,
                 "share_weight": share_weight,
+                "is_synthetic": prov.is_synthetic,
+                "provenance": prov.label,
             })
 
         records: list[DgcaTrafficRecord] = []
@@ -514,9 +547,10 @@ class DgcaTrafficLoader:
                     share_weight=weight,
                     distance_km=item["distance_km"],
                     period_rank=rank,
-                
-                    is_synthetic=False,
-                    source=f"DGCA city-pair traffic file: {self.data_path}",)
+                    is_synthetic=item["is_synthetic"],
+                    provenance=item["provenance"],
+                    source=self._source_for(item["provenance"], item["is_synthetic"]),
+                )
                 records.append(rec)
 
         return records
@@ -627,6 +661,9 @@ class DgcaTrafficLoader:
             "share_weight",
             "distance_km",
             "period_rank",
+            "is_synthetic",
+            "provenance",
+            "source",
         ]
 
         with open(path, mode="w", encoding="utf-8", newline="") as f:

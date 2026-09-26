@@ -105,12 +105,22 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
     if args.command == "mospi":
         loader = MospiCpiLoader(data_path=args.data_path)
         series = loader.get_cpi_series()
-        latest = loader.get_latest_cpi()
+        prov = loader.provenance
 
         print("=" * 70)
-        print("  MoSPI Consumer Price Index (Transport & Airfare Sub-group)")
+        print("  MoSPI Consumer Price Index")
         print("=" * 70)
+        print(f"Official bundled series: {prov.get('official')}")
+        print(f"Status                 : {prov.get('status')}")
+        if not series:
+            print(prov.get("reason", "No CPI records loaded."))
+            if args.seed:
+                seeded = loader.seed_database()
+                print(f"Seeded {seeded} records.")
+            return 0
+        latest = loader.get_latest_cpi()
         print(f"Total Periods Loaded : {len(series)} ({series[0].year_month} to {series[-1].year_month})")
+        print(f"Source               : {latest.source}")
         print(f"Latest Period        : {latest.year_month} (published {latest.published_at})")
         print(f"Transport CPI (2012) : {latest.cpi_transport_index:.2f} (MoM: +{latest.inflation_mom or 0:.2f}%, YoY: +{latest.inflation_yoy or 0:.2f}%)")
         print(f"Airfare Sub-index    : {latest.airfare_sub_index:.2f}")
@@ -188,10 +198,14 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
         print("=" * 70)
         print("  APIx Benchmark Ingestion: MoSPI CPI & DGCA Traffic Weights")
         print("=" * 70)
-        m_latest = mospi_loader.get_latest_cpi()
+        m_series = mospi_loader.get_cpi_series()
         d_summary = dgca_loader.get_network_summary()
 
-        print(f"[MoSPI CPI]  {len(mospi_loader.get_cpi_series())} months (2024-01..{m_latest.year_month}) | Latest Transport CPI: {m_latest.cpi_transport_index:.2f}")
+        if m_series:
+            m_latest = mospi_loader.get_latest_cpi()
+            print(f"[MoSPI CPI]  {len(m_series)} months (to {m_latest.year_month}) | source: {m_latest.source}")
+        else:
+            print(f"[MoSPI CPI]  no official series bundled ({mospi_loader.provenance.get('status')})")
         print(f"[DGCA Pax]   {d_summary['total_periods']} months ({d_summary['corridors_monitored']} corridors) | Latest Pax: {d_summary['total_monthly_pax']:,} | Weight Sum: {d_summary['sum_of_weights']:.6f}")
 
         if args.export_dir:

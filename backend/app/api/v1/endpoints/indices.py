@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db
 from backend.app.models.econometrics import MospiCpiSeries
+from backend.app.services.mospi_provenance import source_cites_press_note
 from backend.app.models.index import NationalDailyIndex, RouteDailyIndex
 from backend.app.models.raw_fare import RawFare
 from backend.app.models.route import Route
@@ -23,88 +24,6 @@ router = APIRouter()
 
 _WINDOW_DAYS = {"T+1": 1, "T+7": 7, "T+15": 15, "T+30": 30}
 
-# Benchmark domestic corridors across Indian aviation network
-DOMESTIC_ROUTES_SEED = [
-    RouteOverviewItem(
-        route_code="DEL-BOM",
-        origin="DEL",
-        destination="BOM",
-        current_index=118.50,
-        change_24h=2.10,
-        avg_fare_inr=6850.0,
-        min_fare_inr=4200.0,
-        active_flights_tracked=112,
-        volatility_score=0.42,
-    ),
-    RouteOverviewItem(
-        route_code="BOM-BLR",
-        origin="BOM",
-        destination="BLR",
-        current_index=111.20,
-        change_24h=-0.80,
-        avg_fare_inr=4950.0,
-        min_fare_inr=3100.0,
-        active_flights_tracked=78,
-        volatility_score=0.35,
-    ),
-    RouteOverviewItem(
-        route_code="DEL-BLR",
-        origin="DEL",
-        destination="BLR",
-        current_index=116.40,
-        change_24h=1.10,
-        avg_fare_inr=7200.0,
-        min_fare_inr=4800.0,
-        active_flights_tracked=84,
-        volatility_score=0.38,
-    ),
-    RouteOverviewItem(
-        route_code="DEL-CCU",
-        origin="DEL",
-        destination="CCU",
-        current_index=109.80,
-        change_24h=0.50,
-        avg_fare_inr=5800.0,
-        min_fare_inr=3600.0,
-        active_flights_tracked=56,
-        volatility_score=0.29,
-    ),
-    RouteOverviewItem(
-        route_code="BOM-GOI",
-        origin="BOM",
-        destination="GOI",
-        current_index=126.30,
-        change_24h=4.80,
-        avg_fare_inr=5100.0,
-        min_fare_inr=2900.0,
-        active_flights_tracked=64,
-        volatility_score=0.58,
-    ),
-    RouteOverviewItem(
-        route_code="BLR-HYD",
-        origin="BLR",
-        destination="HYD",
-        current_index=104.70,
-        change_24h=-0.20,
-        avg_fare_inr=3850.0,
-        min_fare_inr=2400.0,
-        active_flights_tracked=48,
-        volatility_score=0.24,
-    ),
-    RouteOverviewItem(
-        route_code="MAA-DEL",
-        origin="MAA",
-        destination="DEL",
-        current_index=112.90,
-        change_24h=1.50,
-        avg_fare_inr=6400.0,
-        min_fare_inr=4100.0,
-        active_flights_tracked=52,
-        volatility_score=0.31,
-    ),
-]
-
-
 
 def _horizon_context(db: Session, index_value: float) -> dict:
     """Derive the Overview benchmark fields from tables that actually hold data.
@@ -116,7 +35,7 @@ def _horizon_context(db: Session, index_value: float) -> dict:
     out: dict = {}
 
     mospi = db.query(MospiCpiSeries).order_by(MospiCpiSeries.year_month.desc()).first()
-    if mospi is not None and mospi.cpi_transport_index:
+    if mospi is not None and mospi.cpi_transport_index and source_cites_press_note(mospi.source):
         out["mospi_cpi"] = round(float(mospi.cpi_transport_index), 2)
         out["mospi_cpi_divergence"] = round(index_value - float(mospi.cpi_transport_index), 2)
         out["mospi_source"] = mospi.source
@@ -183,9 +102,21 @@ async def get_national_index_latest(
                 ts = latest.calculation_timestamp
                 if ts.tzinfo is None:
                     ts = ts.replace(tzinfo=timezone.utc)
-            change_24h = round(latest.inflation_dod_pct or 0.0, 2)
-            change_7d = round(latest.inflation_mom_pct or (change_24h * 3.5), 2)
+            change_24h = round(latest.inflation_dod_pct, 2)
             val = round(latest.index_value, 2)
+            prior = (
+                db.query(NationalDailyIndex)
+                .filter(
+                    NationalDailyIndex.booking_window == latest.booking_window,
+                    NationalDailyIndex.index_type == latest.index_type,
+                    NationalDailyIndex.index_date == latest.index_date - timedelta(days=7),
+                )
+                .order_by(NationalDailyIndex.id.desc())
+                .first()
+            )
+            change_7d = None
+            if prior is not None and prior.index_value:
+                change_7d = round((latest.index_value - prior.index_value) / prior.index_value * 100.0, 2)
             return NationalIndexLatestResponse(
                 timestamp=ts,
                 index_value=val,
@@ -193,8 +124,6 @@ async def get_national_index_latest(
                 change_7d=change_7d,
                 sample_size=latest.total_samples or 0,
                 base_period=latest.base_period or "2026-01-01",
-                confidence_interval_lower=round(val * 0.99, 2),
-                confidence_interval_upper=round(val * 1.01, 2),
                 status="published",
                 **_horizon_context(db, val),
             )
@@ -287,7 +216,7 @@ def _bucket_key(value: date, frequency: str) -> str:
     "/routes",
     response_model=RouteListResponse,
     summary="Get route-level airfare index overviews",
-    description="Returns summary metrics, current index value, and volatility for domestic high-density corridors.",
+    description="Returns summary metrics for corridors that have a stored daily index.",
 )
 async def get_routes_overview(
     db: Session = Depends(get_db),
@@ -317,46 +246,33 @@ async def get_routes_overview(
                         .order_by(RouteDailyIndex.index_date.desc())
                         .first()
                     )
-                    chg_24 = (
+                    change_24h = (
                         round(((latest_idx.index_value - prior_idx.index_value) / prior_idx.index_value) * 100.0, 2)
-                        if prior_idx and prior_idx.index_value > 0
-                        else 0.0
+                        if prior_idx is not None and prior_idx.index_value
+                        else None
                     )
-                    volatility = round((latest_idx.std_dev / latest_idx.mean_fare) if latest_idx.mean_fare > 0 else 0.35, 2)
+                    volatility = (
+                        round(latest_idx.std_dev / latest_idx.mean_fare, 2)
+                        if latest_idx.mean_fare
+                        else None
+                    )
                     routes_list.append(
                         RouteOverviewItem(
                             route_code=r.route_code,
                             origin=r.origin,
                             destination=r.destination,
                             current_index=round(latest_idx.index_value, 2),
-                            change_24h=chg_24,
+                            change_24h=change_24h,
                             avg_fare_inr=round(latest_idx.mean_fare, 2),
                             min_fare_inr=round(latest_idx.min_fare, 2),
                             active_flights_tracked=latest_idx.sample_size,
                             volatility_score=volatility,
                         )
                     )
-                else:
-                    matching_seed = next((s for s in DOMESTIC_ROUTES_SEED if s.route_code == r.route_code), None)
-                    if matching_seed:
-                        routes_list.append(matching_seed)
-                    else:
-                        routes_list.append(
-                            RouteOverviewItem(
-                                route_code=r.route_code,
-                                origin=r.origin,
-                                destination=r.destination,
-                                current_index=100.0,
-                                change_24h=0.0,
-                                avg_fare_inr=5000.0,
-                                min_fare_inr=3500.0,
-                                active_flights_tracked=50,
-                                volatility_score=0.30,
-                            )
-                        )
             return RouteListResponse(
                 routes=routes_list,
                 total_routes=len(routes_list),
+                data_available=bool(routes_list),
             )
     except SQLAlchemyError as exc:
         db.rollback()
@@ -365,14 +281,14 @@ async def get_routes_overview(
             detail="Database unavailable",
         ) from exc
 
-    return RouteListResponse(routes=[], total_routes=0)
+    return RouteListResponse(routes=[], total_routes=0, data_available=False)
 
 
 @router.get(
     "/routes/{route_code}/history",
     response_model=RouteHistoryResponse,
     summary="Get route-specific historical index series",
-    description="Returns time-series index trajectory for a specific domestic city-pair corridor.",
+    description="Returns the stored time-series for a corridor. An empty series means no index has been computed.",
 )
 async def get_route_history(
     route_code: str,
@@ -401,6 +317,7 @@ async def get_route_history(
         )
         if route_indices:
             route_indices.reverse()
+            by_date = {row.index_date: row for row in route_indices}
             points: List[NationalIndexPoint] = []
             for idx, r in enumerate(route_indices):
                 ts = datetime.combine(r.index_date, datetime.min.time(), tzinfo=timezone.utc)
@@ -409,17 +326,23 @@ async def get_route_history(
                     if ts.tzinfo is None:
                         ts = ts.replace(tzinfo=timezone.utc)
                 prev = route_indices[idx - 1] if idx > 0 else None
-                chg_24 = (
+                change_24h = (
                     round(((r.index_value - prev.index_value) / prev.index_value) * 100.0, 2)
-                    if prev and prev.index_value > 0
-                    else 0.0
+                    if prev is not None and prev.index_value
+                    else None
+                )
+                week_prior = by_date.get(r.index_date - timedelta(days=7))
+                change_7d = (
+                    round(((r.index_value - week_prior.index_value) / week_prior.index_value) * 100.0, 2)
+                    if week_prior is not None and week_prior.index_value
+                    else None
                 )
                 points.append(
                     NationalIndexPoint(
                         timestamp=ts,
                         index_value=round(r.index_value, 2),
-                        change_24h=chg_24,
-                        change_7d=round(chg_24 * 3.5, 2),
+                        change_24h=change_24h,
+                        change_7d=change_7d,
                         sample_size=r.sample_size,
                         base_period=r.base_period or "2026-01-01",
                     )
@@ -429,44 +352,18 @@ async def get_route_history(
                 origin=origin,
                 destination=dest,
                 points=points,
+                data_available=True,
             )
-    except Exception:
-        pass
-
-    matching = next((r for r in DOMESTIC_ROUTES_SEED if r.route_code == clean_code), None)
-    if not matching:
-        # Verify if route is registered in DB
-        try:
-            db_route = db.query(Route).filter(Route.origin == origin, Route.destination == dest).first()
-        except Exception:
-            db_route = None
-        if not db_route:
-            # Check if any seed route matches
-            base_idx = 108.0
-        else:
-            base_idx = 100.0
-    else:
-        base_idx = matching.current_index - (days * 0.3)
-
-    now = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    points = []
-    for i in range(days, -1, -1):
-        dt = now - timedelta(days=i)
-        val = round(base_idx + (days - i) * 0.35 + ((i % 4) * 0.3 - 0.5), 2)
-        points.append(
-            NationalIndexPoint(
-                timestamp=dt,
-                index_value=val,
-                change_24h=round((0.35 + ((i % 4) * 0.3 - 0.5)) / val * 100, 2),
-                change_7d=round(((days - i) * 0.15), 2),
-                sample_size=1800 + (i * 20),
-                base_period="2026-01-01",
-            )
+        return RouteHistoryResponse(
+            route_code=clean_code,
+            origin=origin,
+            destination=dest,
+            points=[],
+            data_available=False,
         )
-
-    return RouteHistoryResponse(
-        route_code=clean_code,
-        origin=origin,
-        destination=dest,
-        points=points,
-    )
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        ) from exc

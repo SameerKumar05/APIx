@@ -50,22 +50,11 @@ CANONICAL_WINDOW_DAYS: dict[str, int] = {
     "T45": 45,
 }
 
-# MoSPI Transport Sub-Index benchmark calibration (Base 2012=100, rebased to 2026=100)
-BENCHMARK_MOSPI_CPI_SERIES: list[dict[str, Any]] = [
-    {"period": "2025-09", "date": "2025-09-01", "cpi_transport": 182.4, "cpi_general": 188.2},
-    {"period": "2025-10", "date": "2025-10-01", "cpi_transport": 183.1, "cpi_general": 189.0},
-    {"period": "2025-11", "date": "2025-11-01", "cpi_transport": 184.0, "cpi_general": 189.6},
-    {"period": "2025-12", "date": "2025-12-01", "cpi_transport": 184.8, "cpi_general": 190.4},
-    {"period": "2026-01", "date": "2026-01-01", "cpi_transport": 185.7, "cpi_general": 191.2},
-    {"period": "2026-02", "date": "2026-02-01", "cpi_transport": 186.5, "cpi_general": 191.9},
-    {"period": "2026-03", "date": "2026-03-01", "cpi_transport": 187.3, "cpi_general": 192.7},
-    {"period": "2026-04", "date": "2026-04-01", "cpi_transport": 188.2, "cpi_general": 193.5},
-    {"period": "2026-05", "date": "2026-05-01", "cpi_transport": 189.0, "cpi_general": 194.2},
-    {"period": "2026-06", "date": "2026-06-01", "cpi_transport": 190.1, "cpi_general": 195.1},
-    {"period": "2026-07", "date": "2026-07-01", "cpi_transport": 191.2, "cpi_general": 196.0},
-    {"period": "2026-08", "date": "2026-08-01", "cpi_transport": 192.4, "cpi_general": 196.8},
-    {"period": "2026-09", "date": "2026-09-01", "cpi_transport": 193.5, "cpi_general": 197.6},
-]
+# Withdrawn. The previous literals were not a MoSPI release and contradicted NSO press notes
+# (January 2026 combined general is 104.46 on base 2024=100, not a 2012=100 continuation).
+# Pass a caller-supplied series. Do not restore numbers here.
+BENCHMARK_MOSPI_CPI_SERIES: list[dict[str, Any]] = []
+
 
 
 # ---------------------------------------------------------------------------
@@ -577,14 +566,31 @@ def calculate_mospi_cpi_divergence(
 
     Args:
         apix_index_series: Sequence of APIx index records with dates and index_value.
-        mospi_cpi_series: Sequence of official MoSPI CPI transport records.
-                          Defaults to BENCHMARK_MOSPI_CPI_SERIES if empty or None.
+        mospi_cpi_series: Caller-supplied CPI rows. There is no bundled official series.
+                          An empty argument returns an unsound result rather than invented levels.
 
     Returns:
         CpiDivergenceResult with aligned comparisons, gap metrics, lead-lag correlations,
         and statistical summary.
     """
-    cpi_data = mospi_cpi_series if mospi_cpi_series and len(mospi_cpi_series) > 0 else BENCHMARK_MOSPI_CPI_SERIES
+    if not mospi_cpi_series:
+        return CpiDivergenceResult(
+            aligned_series=[],
+            latest_apix_index=0.0,
+            latest_mospi_cpi=0.0,
+            current_divergence_gap=0.0,
+            mean_divergence_gap=0.0,
+            tracking_error_rmse=0.0,
+            correlation_coefficient=0.0,
+            estimated_lead_days=0,
+            lead_lag_correlations={},
+            summary=(
+                "No verified MoSPI series was supplied. The bundled benchmark was withdrawn "
+                "because it contradicted NSO press notes. This result is not an official comparison."
+            ),
+            metadata={"benchmark_sound": False},
+        )
+    cpi_data = mospi_cpi_series
 
     # Group APIx daily observations into monthly averages
     apix_monthly_vals: dict[str, list[float]] = defaultdict(list)

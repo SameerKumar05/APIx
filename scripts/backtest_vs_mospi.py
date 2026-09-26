@@ -62,10 +62,16 @@ DGCA_POSITION = {
 }
 
 MOSPI_SOURCE_NOTE = (
-    "MoSPI reference set bundled with the repository. Not live-scraped. The official series is "
-    "available from esankhyiki.mospi.gov.in and the MoSPI API; a production deployment should "
-    "refresh from there rather than ship the bundle."
+    "The repository does not ship an official MoSPI series. A previous bundle labelled source=MoSPI "
+    "contradicted NSO press notes (January 2024 combined general 185.5 not 185.2; January 2024 "
+    "transport and communication 166.8 not 174.5; December 2025 combined general 198.0 not 195.8; "
+    "January 2026 combined general 104.46 on base 2024=100, not 196.4 on base 2012=100) and was "
+    "withdrawn. Rows whose source is the bare label MoSPI, or that still carry those values, are "
+    "not a benchmark. A correlation against them is not emitted."
 )
+
+_BARE_OFFICIAL_LABELS = frozenset({"mospi", "mospi_official", "nso", "official"})
+_UNSOUND_REFERENCE = "UNSOUND_REFERENCE"
 
 
 @dataclass
@@ -137,6 +143,40 @@ def load_apix(conn: sqlite3.Connection) -> Dict[str, float]:
     return {m: sum(v) / len(v) for m, v in by_month.items()}
 
 
+def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def reference_unsound_reason(conn: sqlite3.Connection) -> Optional[str]:
+    """Refuse the withdrawn bundle and any row still labelled as official without a press note."""
+    cols = _columns(conn, "mospi_cpi_series")
+    if not cols:
+        return None
+    if "source" in cols:
+        labels = [row[0] for row in conn.execute("SELECT source FROM mospi_cpi_series")]
+        if any(isinstance(label, str) and label.strip().casefold() in _BARE_OFFICIAL_LABELS for label in labels):
+            return (
+                "mospi_cpi_series contains rows labelled source=MoSPI with no press-note citation. "
+                "That label was used for a withdrawn bundle that contradicted NSO press notes. "
+                "No correlation is emitted."
+            )
+    fingerprints = []
+    if "headline_cpi" in cols:
+        fingerprints.append(("year_month = '2024-01' AND headline_cpi = 185.2", "2024-01 headline 185.2"))
+        fingerprints.append(("year_month = '2025-12' AND headline_cpi = 195.8", "2025-12 headline 195.8"))
+        fingerprints.append(("year_month = '2026-01' AND headline_cpi = 196.4", "2026-01 headline 196.4"))
+    if "cpi_transport_index" in cols:
+        fingerprints.append(("year_month = '2024-01' AND cpi_transport_index = 174.5", "2024-01 transport 174.5"))
+    for clause, label in fingerprints:
+        hit = conn.execute(f"SELECT 1 FROM mospi_cpi_series WHERE {clause} LIMIT 1").fetchone()
+        if hit:
+            return (
+                f"mospi_cpi_series still contains the withdrawn value {label}, which contradicts "
+                "the NSO press note for that month. No correlation is emitted."
+            )
+    return None
+
+
 def load_mospi(conn: sqlite3.Connection) -> Dict[str, float]:
     rows = conn.execute(
         "SELECT year_month, airfare_sub_index FROM mospi_cpi_series "
@@ -162,6 +202,7 @@ def run(db_path: str, required_days: int = REQUIRED_WINDOW_DAYS) -> BacktestResu
         ).fetchone()
         apix = load_apix(conn)
         mospi = load_mospi(conn)
+        unsound = reference_unsound_reason(conn)
     finally:
         conn.close()
 
@@ -179,6 +220,11 @@ def run(db_path: str, required_days: int = REQUIRED_WINDOW_DAYS) -> BacktestResu
         apix_last=last,
         mospi_observations=len(mospi),
     )
+
+    if unsound:
+        result.status = _UNSOUND_REFERENCE
+        result.reason = unsound
+        return result
 
     if distinct_days < required_days or span < required_days:
         result.reason = (

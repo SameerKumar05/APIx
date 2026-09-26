@@ -28,74 +28,53 @@ from ingestion.loaders import (
 
 
 class TestMospiCpiLoader(unittest.TestCase):
-    """Test suite for MoSPI Consumer Price Index loader."""
+    """The bundled CPI table is not an official MoSPI release."""
 
     def setUp(self) -> None:
         self.loader = MospiCpiLoader()
 
-    def test_builtin_records_count_and_range(self) -> None:
+    def test_bundled_series_is_withdrawn_and_not_labelled_mospi(self) -> None:
         series = self.loader.get_cpi_series()
-        self.assertEqual(len(series), 27)
-        self.assertEqual(series[0].year_month, "2024-01")
-        self.assertEqual(series[-1].year_month, "2026-03")
+        self.assertEqual(series, [])
+        prov = self.loader.provenance
+        self.assertEqual(prov["official"], False)
+        self.assertEqual(prov["status"], "withdrawn")
+        self.assertEqual(prov["record_count"], 0)
+        self.assertTrue(all(rec.source != "MoSPI" for rec in series))
 
-        for rec in series:
-            self.assertGreater(rec.cpi_transport_index, 0)
-            self.assertGreater(rec.airfare_sub_index, 0)
-            self.assertGreater(rec.headline_cpi, 0)
-            self.assertEqual(rec.base_year, "2012=100")
-            self.assertIsInstance(rec.date, date)
-            self.assertEqual(rec.date.day, 1)
-            self.assertGreater(rec.published_at, rec.date)
-
-    def test_mom_and_yoy_inflation_properties(self) -> None:
-        rec_2026_01 = self.loader.get_cpi_for_period("2026-01")
-        self.assertIsNotNone(rec_2026_01)
-        rec_2025_01 = self.loader.get_cpi_for_period("2025-01")
-        self.assertIsNotNone(rec_2025_01)
-
-        expected_yoy = (
-            (rec_2026_01.cpi_transport_index - rec_2025_01.cpi_transport_index)
-            / rec_2025_01.cpi_transport_index
-        ) * 100.0
-        self.assertAlmostEqual(rec_2026_01.inflation_yoy, expected_yoy, places=3)
-
-    def test_transport_divergence_calculation(self) -> None:
-        latest = self.loader.get_latest_cpi()
-        airfare_index = 198.50
-        div = self.loader.calculate_transport_divergence(airfare_index)
-
-        self.assertEqual(div["period"], latest.year_month)
-        self.assertEqual(div["airfare_index_value"], 198.50)
-        self.assertEqual(
-            div["divergence_points"],
-            round(airfare_index - latest.cpi_transport_index, 2),
-        )
-        self.assertEqual(
-            div["airfare_divergence_points"],
-            round(airfare_index - latest.airfare_sub_index, 2),
-        )
-
-    def test_csv_and_json_roundtrip(self) -> None:
+    def test_parsed_file_does_not_default_source_to_mospi(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            csv_path = Path(tmpdir) / "mospi.csv"
-            self.loader.export_csv(csv_path)
-            from_csv = MospiCpiLoader(data_path=csv_path).get_cpi_series()
-            self.assertEqual(len(from_csv), 27)
+            csv_path = Path(tmpdir) / "cpi.csv"
+            csv_path.write_text(
+                "year_month,cpi_transport_index,airfare_sub_index,headline_cpi\n"
+                "2024-02,10.0,11.0,12.0\n",
+                encoding="utf-8",
+            )
+            rec = MospiCpiLoader(data_path=csv_path).get_cpi_series()[0]
+        self.assertEqual(rec.source, "undeclared")
+        self.assertNotEqual(rec.source, "MoSPI")
 
-            json_path = Path(tmpdir) / "mospi.json"
-            self.loader.export_json(json_path)
-            from_json = MospiCpiLoader(data_path=json_path).get_cpi_series()
-            self.assertEqual(len(from_json), 27)
+    def test_committed_bundle_does_not_ship_contradicted_values(self) -> None:
+        import json
 
-    def test_stats_quant_interface(self) -> None:
-        stats = self.loader.to_stats_format()
-        self.assertEqual(len(stats), 27)
-        first = stats[0]
-        self.assertIn("period", first)
-        self.assertIn("cpi_transport", first)
-        self.assertIn("cpi_general", first)
-        self.assertIn("base_year", first)
+        root = Path(__file__).resolve().parents[1]
+        csv_text = (root / "data" / "mospi_cpi_historical_2024_2026.csv").read_text(encoding="utf-8")
+        self.assertNotIn("174.5", csv_text)
+        self.assertNotIn("185.2", csv_text)
+        self.assertNotIn("195.8", csv_text)
+        self.assertNotIn("196.4", csv_text)
+        payload = json.loads((root / "data" / "mospi_cpi_historical_2024_2026.json").read_text(encoding="utf-8"))
+        self.assertEqual(payload["official"], False)
+        self.assertEqual(payload["status"], "withdrawn")
+        self.assertEqual(payload["records"], [])
+
+    def test_default_divergence_does_not_invent_a_mospi_level(self) -> None:
+        from backend.app.services.econometric_engine import calculate_mospi_cpi_divergence
+
+        result = calculate_mospi_cpi_divergence([{"date": "2026-01-01", "index_value": 110.0}])
+        self.assertEqual(result.metadata["benchmark_sound"], False)
+        self.assertEqual(result.aligned_series, [])
+        self.assertEqual(result.latest_mospi_cpi, 0.0)
 
 
 class TestDgcaTrafficLoader(unittest.TestCase):
@@ -175,7 +154,7 @@ class TestBenchmarkDatabaseSeeding(unittest.TestCase):
 
                 # Seed MoSPI
                 m_count = MospiCpiLoader().seed_database(db=session)
-                self.assertEqual(m_count, 27)
+                self.assertEqual(m_count, 0)
 
                 # Seed DGCA
                 d_res = DgcaTrafficLoader().seed_database(db=session, update_active_routes=True)
@@ -240,22 +219,88 @@ class TestDgcaWeightProvenance:
             assert record.is_synthetic is True
             assert record.source, "record must name its provenance"
 
-    def test_real_file_is_not_flagged_synthetic(self, tmp_path) -> None:
+    def test_file_declaring_dgca_provenance_is_not_synthetic(self, tmp_path) -> None:
         from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
 
         csv = tmp_path / "dgca.csv"
         csv.write_text(
-            "year_month,origin,destination,pax_volume,distance_km\n"
-            "2026-01,DEL,BOM,437500,1148\n"
-            "2026-01,BOM,DEL,437500,1148\n",
+            "year_month,origin,destination,pax_volume,distance_km,provenance\n"
+            "2026-01,DEL,BOM,437500,1148,DGCA\n"
+            "2026-01,BOM,DEL,400000,1148,DGCA\n",
             encoding="utf-8",
         )
         loader = DgcaTrafficLoader(data_path=csv)
-        prov = loader.provenance
-        assert prov["is_synthetic"] is False
-        assert prov["data_path"] == str(csv)
-        assert all(r.is_synthetic is False for r in loader._records)
-        assert all("dgca.csv" in r.source for r in loader._records)
+        assert loader.provenance["is_synthetic"] is False
+        assert loader._records[0].is_synthetic is False
+        assert loader._records[0].provenance == "DGCA"
+        assert loader._records[0].pax_volume == 437500
+
+    def test_file_without_provenance_is_synthetic(self, tmp_path) -> None:
+        from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
+
+        csv = tmp_path / "weights.csv"
+        csv.write_text(
+            "year_month,origin,destination,pax_volume,distance_km\n"
+            "2026-01,DEL,BOM,437500,1148\n"
+            "2026-01,BOM,DEL,400000,1148\n",
+            encoding="utf-8",
+        )
+        loader = DgcaTrafficLoader(data_path=csv)
+        assert loader.provenance["is_synthetic"] is True
+        assert loader._records[0].is_synthetic is True
+        assert loader._records[0].provenance == "modelled"
+        assert loader._records[0].pax_volume == 437500
+
+    def test_file_declaring_generated_is_synthetic(self, tmp_path) -> None:
+        from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
+
+        csv = tmp_path / "weights.csv"
+        csv.write_text(
+            "year_month,origin,destination,pax_volume,distance_km,provenance\n"
+            "2026-01,DEL,BOM,441875,1148,generated\n"
+            "2026-01,BOM,DEL,400000,1148,generated\n",
+            encoding="utf-8",
+        )
+        loader = DgcaTrafficLoader(data_path=csv)
+        record = loader._records[0]
+        assert record.is_synthetic is True
+        assert record.provenance == "generated"
+        assert record.pax_volume == 441875
+        exported = record.to_dict()
+        assert exported["is_synthetic"] is True
+        assert exported["provenance"] == "generated"
+        assert exported["source"]
+
+    def test_to_dict_round_trips_provenance(self, tmp_path) -> None:
+        from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
+
+        csv = tmp_path / "official.csv"
+        csv.write_text(
+            "year_month,origin,destination,pax_volume,distance_km,provenance\n"
+            "2026-01,DEL,BOM,100,1148,DGCA\n"
+            "2026-01,BOM,DEL,100,1148,DGCA\n",
+            encoding="utf-8",
+        )
+        loader = DgcaTrafficLoader(data_path=csv)
+        out = tmp_path / "roundtrip.csv"
+        loader.export_csv(out)
+        again = DgcaTrafficLoader(data_path=out)
+        assert again._records[0].is_synthetic is False
+        assert again._records[0].provenance == "DGCA"
+        assert again._records[0].pax_volume == 100
+
+    def test_committed_weights_file_declares_itself_generated(self) -> None:
+        from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
+
+        csv = Path(__file__).resolve().parents[1] / "data" / "dgca_passenger_traffic_weights.csv"
+        loader = DgcaTrafficLoader(data_path=csv)
+        january = next(
+            rec for rec in loader._records if rec.year_month == "2024-01" and rec.route_code == "DEL-BOM"
+        )
+        assert january.pax_volume == 441875
+        assert january.is_synthetic is True
+        assert january.provenance == "generated"
+        assert loader.provenance["is_synthetic"] is True
 
     def test_weights_still_sum_to_one_per_period(self) -> None:
         from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader

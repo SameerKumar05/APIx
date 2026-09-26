@@ -1,9 +1,8 @@
-"""MoSPI Consumer Price Index (CPI) Loader for APIx.
+"""MoSPI Consumer Price Index (CPI) loader for APIx.
 
-Automated parser, historical time-series provider, and database loader for official
-Ministry of Statistics and Programme Implementation (MoSPI) Consumer Price Index
-data, with special focus on the Transport & Communication sub-group (Base 2012=100)
-and the domestic air passenger fare sub-index across 2024-2026.
+Parses a caller-supplied CPI file. This module does not ship an official series.
+A previous hardcoded table was labelled source="MoSPI" and contradicted NSO press
+notes; it was removed. See BUNDLED_SERIES_STATUS.
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ import logging
 from datetime import UTC, date, datetime
 from datetime import date as DateType
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from pydantic import BaseModel, Field
 from sqlalchemy import Date, DateTime, Float, Index, Integer, String, select
@@ -64,10 +63,10 @@ class MospiCpiRecord(BaseModel):
         default=None,
         description="Year-on-Year Transport CPI inflation percentage change",
     )
-    published_at: DateType = Field(..., description="Official MoSPI press release date")
+    published_at: DateType = Field(..., description="Publication date carried by the file, if any")
     source: str = Field(
-        default="MoSPI",
-        description="Publishing statistical agency (Ministry of Statistics and Programme Implementation)",
+        default="undeclared",
+        description="Provenance. Bare 'MoSPI' is not a citation; a press-note URL is.",
     )
 
     # Convenience properties for StatsQuantEngineer and econometric analytics
@@ -121,103 +120,32 @@ class MospiCpiRecord(BaseModel):
         }
 
 
-# ============================================================================
-# Authoritative Built-in MoSPI Historical Series (2024-01 to 2026-03)
-# ============================================================================
-
-# Official MoSPI CPI Combined (Base 2012=100) Transport & Communication Sub-group
-# and Airfare Sub-index series reflecting actual Indian macroeconomic benchmarks.
-MOSPI_HISTORICAL_RAW: list[dict[str, Any]] = [
-    # --- Calendar Year 2024 ---
-    {"year_month": "2024-01", "cpi_transport": 174.5, "airfare": 168.2, "headline": 185.2, "pub_day": 12},
-    {"year_month": "2024-02", "cpi_transport": 174.9, "airfare": 169.0, "headline": 185.4, "pub_day": 12},
-    {"year_month": "2024-03", "cpi_transport": 175.2, "airfare": 171.4, "headline": 185.1, "pub_day": 12},
-    {"year_month": "2024-04", "cpi_transport": 175.8, "airfare": 173.2, "headline": 185.8, "pub_day": 12},
-    {"year_month": "2024-05", "cpi_transport": 176.4, "airfare": 175.0, "headline": 186.7, "pub_day": 12},
-    {"year_month": "2024-06", "cpi_transport": 177.1, "airfare": 177.5, "headline": 188.1, "pub_day": 12},
-    {"year_month": "2024-07", "cpi_transport": 178.0, "airfare": 176.8, "headline": 189.8, "pub_day": 12},
-    {"year_month": "2024-08", "cpi_transport": 178.5, "airfare": 174.2, "headline": 189.6, "pub_day": 12},
-    {"year_month": "2024-09", "cpi_transport": 179.2, "airfare": 175.5, "headline": 190.4, "pub_day": 12},
-    {"year_month": "2024-10", "cpi_transport": 180.3, "airfare": 182.1, "headline": 192.1, "pub_day": 12},
-    {"year_month": "2024-11", "cpi_transport": 180.8, "airfare": 181.4, "headline": 191.8, "pub_day": 12},
-    {"year_month": "2024-12", "cpi_transport": 181.5, "airfare": 184.2, "headline": 190.5, "pub_day": 12},
-    # --- Calendar Year 2025 ---
-    {"year_month": "2025-01", "cpi_transport": 182.4, "airfare": 180.1, "headline": 191.2, "pub_day": 12},
-    {"year_month": "2025-02", "cpi_transport": 183.0, "airfare": 181.0, "headline": 191.6, "pub_day": 12},
-    {"year_month": "2025-03", "cpi_transport": 183.6, "airfare": 183.5, "headline": 191.9, "pub_day": 12},
-    {"year_month": "2025-04", "cpi_transport": 184.5, "airfare": 185.2, "headline": 192.8, "pub_day": 12},
-    {"year_month": "2025-05", "cpi_transport": 185.4, "airfare": 187.8, "headline": 193.5, "pub_day": 12},
-    {"year_month": "2025-06", "cpi_transport": 186.2, "airfare": 189.5, "headline": 194.2, "pub_day": 12},
-    {"year_month": "2025-07", "cpi_transport": 187.0, "airfare": 187.0, "headline": 195.0, "pub_day": 12},
-    {"year_month": "2025-08", "cpi_transport": 187.6, "airfare": 185.1, "headline": 194.8, "pub_day": 12},
-    {"year_month": "2025-09", "cpi_transport": 188.4, "airfare": 186.4, "headline": 195.5, "pub_day": 12},
-    {"year_month": "2025-10", "cpi_transport": 189.8, "airfare": 193.2, "headline": 197.0, "pub_day": 12},
-    {"year_month": "2025-11", "cpi_transport": 190.4, "airfare": 191.8, "headline": 196.5, "pub_day": 12},
-    {"year_month": "2025-12", "cpi_transport": 191.2, "airfare": 195.0, "headline": 195.8, "pub_day": 12},
-    # --- Calendar Year 2026 ---
-    {"year_month": "2026-01", "cpi_transport": 192.1, "airfare": 191.5, "headline": 196.4, "pub_day": 12},
-    {"year_month": "2026-02", "cpi_transport": 192.9, "airfare": 193.0, "headline": 197.1, "pub_day": 12},
-    {"year_month": "2026-03", "cpi_transport": 193.7, "airfare": 194.6, "headline": 197.8, "pub_day": 12},
-]
+# The 2024-01..2026-03 table that used to live here was not a MoSPI release.
+# Checked against NSO press notes, then removed rather than patched:
+#   January 2024 CPI General Combined is 185.5, not 185.2.
+#   January 2024 Transport and communication Combined is 166.8, not 174.5.
+#     https://mospi.gov.in/sites/default/files/press_release/CPI_PR_12feb24.pdf
+#     released 12 February 2024.
+#   December 2025 CPI General Combined is 198.0 on base 2012=100, not 195.8.
+#   January 2026 CPI General Combined is 104.46 on base 2024=100, not 196.4 on base 2012=100.
+#     https://www.mospi.gov.in/uploads/latestreleasesfiles/1770893247472-Press%20Relase%20of%20CPI%20for%20Jan26.pdf
+#     released 12 February 2026.
+# Airfare item 6.2.03 and the other months were not verified, so they were not replaced.
+UNDECLARED_SOURCE: Final[str] = "undeclared"
+BUNDLED_SERIES_STATUS: Final[dict[str, Any]] = {
+    "official": False,
+    "status": "withdrawn",
+    "record_count": 0,
+    "reason": (
+        "No official MoSPI series is bundled. The previous table contradicted NSO press notes "
+        "and was removed. See data/mospi_cpi_historical_2024_2026.json."
+    ),
+}
 
 
 def _build_builtin_records() -> list[MospiCpiRecord]:
-    """Construct complete list of MospiCpiRecord with derived MoM and YoY metrics."""
-    records: list[MospiCpiRecord] = []
-    transport_by_period: dict[str, float] = {}
-
-    for row in MOSPI_HISTORICAL_RAW:
-        ym = row["year_month"]
-        y_str, m_str = ym.split("-")
-        year, month = int(y_str), int(m_str)
-        rec_date = date(year, month, 1)
-
-        # Publication date: 12th of following month
-        pub_month = month + 1
-        pub_year = year
-        if pub_month > 12:
-            pub_month = 1
-            pub_year += 1
-        pub_date = date(pub_year, pub_month, row.get("pub_day", 12))
-
-        cpi_transport = float(row["cpi_transport"])
-        transport_by_period[ym] = cpi_transport
-
-        # Calculate MoM %
-        prior_month_num = month - 1
-        prior_year_num = year
-        if prior_month_num < 1:
-            prior_month_num = 12
-            prior_year_num -= 1
-        prior_ym = f"{prior_year_num:04d}-{prior_month_num:02d}"
-
-        mom: float | None = None
-        if prior_ym in transport_by_period:
-            prior_val = transport_by_period[prior_ym]
-            mom = ((cpi_transport - prior_val) / prior_val) * 100.0
-
-        # Calculate YoY % (same month, previous year)
-        yoy_ym = f"{year - 1:04d}-{month:02d}"
-        yoy: float | None = None
-        if yoy_ym in transport_by_period:
-            yoy_val = transport_by_period[yoy_ym]
-            yoy = ((cpi_transport - yoy_val) / yoy_val) * 100.0
-
-        record = MospiCpiRecord(
-            year_month=ym,
-            date=rec_date,
-            cpi_transport_index=cpi_transport,
-            airfare_sub_index=float(row["airfare"]),
-            headline_cpi=float(row["headline"]),
-            base_year="2012=100",
-            inflation_mom=mom,
-            inflation_yoy=yoy,
-            published_at=pub_date,
-            source="MoSPI",
-        )
-        records.append(record)
-
-    return records
+    """Return no bundled series. The previous table was not official and was withdrawn."""
+    return []
 
 
 # ============================================================================
@@ -248,6 +176,23 @@ class MospiCpiLoader:
             self._records = _build_builtin_records()
 
         self._index_records()
+
+    @property
+    def provenance(self) -> dict[str, Any]:
+        """Whether the loaded rows are a cited MoSPI release. The builtin path is not."""
+        if not self.data_path or not self.data_path.exists():
+            return dict(BUNDLED_SERIES_STATUS)
+        sources = sorted({r.source for r in self._records})
+        cited = bool(self._records) and all(
+            "https://" in r.source or "http://" in r.source for r in self._records
+        )
+        status = "cited" if cited else "undeclared"
+        return {
+            "official": cited,
+            "status": status,
+            "record_count": len(self._records),
+            "sources": sources,
+        }
 
     def _index_records(self) -> None:
         """Sort chronologically and build fast lookup mapping."""
@@ -350,7 +295,7 @@ class MospiCpiLoader:
                 pub_date = date(next_y, next_m, 12)
 
             base_year = row.get("base_year", "2012=100")
-            source = row.get("source", "MoSPI")
+            source = row.get("source") or UNDECLARED_SOURCE
 
             rec = MospiCpiRecord(
                 year_month=ym_clean,
@@ -427,7 +372,7 @@ class MospiCpiLoader:
                 inflation_mom=item.get("inflation_mom"),
                 inflation_yoy=item.get("inflation_yoy"),
                 published_at=pub_date,
-                source=item.get("source", "MoSPI"),
+                source=item.get("source") or UNDECLARED_SOURCE,
             )
             records.append(rec)
 
@@ -639,7 +584,7 @@ class MospiCpiLoader:
                 airfare_sub_index: Mapped[float] = mapped_column(Float, nullable=False)
                 headline_cpi: Mapped[float] = mapped_column(Float, nullable=False)
                 published_at: Mapped[date] = mapped_column(Date, nullable=False)
-                source: Mapped[str] = mapped_column(String(100), nullable=False, default="MoSPI")
+                source: Mapped[str] = mapped_column(String(100), nullable=False, default="undeclared")
                 created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
 
             MospiCpiSeries = StandaloneMospiCpi

@@ -97,6 +97,35 @@ def test_detects_that_apix_leads_by_one_month(tmp_path):
     assert res.pearson_r < 1.0, "contemporaneous agreement should not be perfect"
 
 
+def test_bare_mospi_label_is_not_a_benchmark(tmp_path):
+    db = tmp_path / "t.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE national_daily_indices (index_date TEXT, index_type TEXT, index_value REAL)"
+    )
+    conn.execute(
+        "CREATE TABLE mospi_cpi_series (year_month TEXT, airfare_sub_index REAL, source TEXT)"
+    )
+    months = [f"2025-{m:02d}" for m in range(1, 10)]
+    for month in months:
+        for day in (2, 9, 16, 23):
+            conn.execute(
+                "INSERT INTO national_daily_indices VALUES (?,?,?)",
+                (f"{month}-{day:02d}", "fisher", 100.0 + int(month[5:])),
+            )
+        conn.execute(
+            "INSERT INTO mospi_cpi_series VALUES (?,?,?)",
+            (month, 100.0 + int(month[5:]), "MoSPI"),
+        )
+    conn.commit()
+    conn.close()
+
+    res = bt.run(str(db), required_days=30)
+    assert res.status == "UNSOUND_REFERENCE"
+    assert res.pearson_r is None
+    assert "MoSPI" in res.reason
+
+
 def test_dgca_unavailability_is_documented_with_an_authority() -> None:
     assert bt.DGCA_POSITION["verdict"].startswith("FALSE")
     assert "1934" in bt.DGCA_POSITION["authority"]
