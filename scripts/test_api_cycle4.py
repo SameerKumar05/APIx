@@ -23,7 +23,7 @@ import sys
 # Ensure project root is in python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
@@ -34,12 +34,128 @@ from backend.app.db.econometrics_repo import (
 )
 from backend.app.db.session import Base, SessionLocal, engine
 from backend.app.main import app
+from backend.app.models.econometrics import DgcaViolation, RouteElasticity
+from backend.app.models.raw_fare import RawFare
 
 # Ensure all database tables exist cleanly
 Base.metadata.create_all(bind=engine)
 
+# The elasticity curve is derived from stored fares, and this script runs against a
+# freshly created database. Fares escalate toward departure so the gradient has the
+# descending-demand shape the assertions below check.
+with SessionLocal() as fare_db:
+    for window, fare in (
+        ("T+30", 4000.0),
+        ("T+15", 4500.0),
+        ("T+7", 5200.0),
+        ("T+1", 6100.0),
+    ):
+        fare_db.add(
+            RawFare(
+                batch_id=1,
+                origin="DEL",
+                destination="BOM",
+                flight_date=date.today() + timedelta(days=30),
+                booking_window=window,
+                airline_code="6E",
+                flight_number=f"6E-el-{window}",
+                stops=0,
+                fare_class="ECONOMY",
+                base_fare=fare - 500.0,
+                taxes_and_fees=500.0,
+                total_fare=fare,
+                source_platform="synthetic",
+                scraped_at=datetime.now(UTC),
+                hash_id=f"cycle4-el-{window}",
+                is_synthetic=True,
+            )
+        )
+    fare_db.commit()
+
+# The elasticity endpoint returns an empty gradient when no RouteElasticity row
+# exists, so the curve needs one. Elasticities are negative: demand slopes down.
+with SessionLocal() as el_db:
+    for target in ("NATIONAL", "BOM-BLR"):
+        el_db.add(
+            RouteElasticity(
+                route_code=target,
+                calculation_date=date.today(),
+                t1_t7_elasticity=-0.42,
+                t7_t15_elasticity=-0.38,
+                t15_t30_elasticity=-0.31,
+                avg_lead_time_decay=38.0,
+                confidence_score=0.8,
+                created_at=datetime.now(UTC),
+            )
+        )
+    el_db.commit()
+
+# The indices endpoint reads stored EconometricIndex rows; this script runs against a
+# fresh database, so seed a short series. Laspeyres is held at or above Paasche to
+# respect the substitution property the assertions below check.
+with SessionLocal() as idx_db:
+    for target in ("NATIONAL", "DEL-BOM"):
+        for offset in range(3):
+            upsert_econometric_index(
+                db=idx_db,
+                date=date.today() - timedelta(days=2 - offset),
+                route_code=target,
+                laspeyres_index=100.0 + offset,
+                paasche_index=99.5 + offset,
+                fisher_ideal_index=99.75 + offset,
+                substitution_bias=0.5,
+                calculation_method="chain_weighted",
+                commit=False,
+            )
+    idx_db.commit()
+
+# The DGCA feed reports stored violation rows; this script runs against a fresh
+# database, so seed a couple of breaches above their statutory band cap.
+with SessionLocal() as v_db:
+    for target in ("DEL-BOM", "BOM-BLR"):
+        v_db.add(
+            DgcaViolation(
+                route_code=target,
+                airline_code="6E",
+                flight_number=f"6E-v-{target}",
+                flight_date=date.today(),
+                window="T+7",
+                fare_inr=10200.0,
+                median_baseline_fare=5000.0,
+                surge_multiple=2.04,
+                severity="CRITICAL",
+                violation_code="DGCA_CAP_EXCEEDED",
+                detected_at=datetime.now(UTC),
+                status="OPEN",
+            )
+        )
+    # A SEVERE row is needed for the severity-filter test, and SEVERE is defined
+    # as a 3.0x surge, so it cannot reuse the 2.04x CRITICAL value.
+    v_db.add(
+        DgcaViolation(
+            route_code="DEL-BOM",
+            airline_code="6E",
+            flight_number="6E-v-severe",
+            flight_date=date.today(),
+            window="T+7",
+            fare_inr=15500.0,
+            median_baseline_fare=5000.0,
+            surge_multiple=3.1,
+            severity="SEVERE",
+            violation_code="DGCA_CAP_EXCEEDED",
+            detected_at=datetime.now(UTC),
+            status="OPEN",
+        )
+    )
+    v_db.commit()
+
+# The API refuses compiled-in admin tokens and reads keys from APIX_API_KEYS at
+# request time, so the script has to supply the key it then sends.
+_ADMIN_KEY = "cycle4-verification-key"
+os.environ["APIX_API_KEYS"] = _ADMIN_KEY
+
 client = TestClient(app)
-AUTH_HEADERS = {"X-API-Key": "apix-admin-key-2026"}
+AUTH_HEADERS = {"X-API-Key": _ADMIN_KEY}
 INVALID_AUTH_HEADERS = {"X-API-Key": "completely-invalid-key-xyz"}
 
 
@@ -101,22 +217,28 @@ def test_cpi_divergence_default():
     assert "inflation_lead_days" in data
     assert "correlation_coefficient" in data
     assert "divergence_series" in data
-    assert len(data["divergence_series"]) >= 1
-    assert (
-        data["inflation_lead_days"] > 0
-    ), "Expected positive inflation signal lead days"
-    assert (
-        data["correlation_coefficient"] > 0.0
-    ), "Expected positive correlation with MoSPI CPI"
-
-    first_pt = data["divergence_series"][0]
-    assert "date" in first_pt
-    assert "apix_index" in first_pt
-    assert "mospi_cpi" in first_pt
-    assert "gap" in first_pt
-    print(
-        f"  ✓ CPI divergence verified: lead={data['inflation_lead_days']}d, corr={data['correlation_coefficient']}, spread={data['current_divergence_pts']} pts"
-    )
+    # No verified MoSPI series is bundled, so the endpoint must report no
+    # comparison rather than emit a positive gap, lead and correlation.
+    if data.get("data_available"):
+        assert len(data["divergence_series"]) >= 1
+        assert data["inflation_lead_days"] > 0, "Expected positive lead days"
+        assert data["correlation_coefficient"] > 0.0, "Expected positive correlation"
+        first_pt = data["divergence_series"][0]
+        assert "date" in first_pt
+        assert "apix_index" in first_pt
+        assert "mospi_cpi" in first_pt
+        assert "gap" in first_pt
+        print(
+            f"  ✓ CPI divergence verified: lead={data['inflation_lead_days']}d, "
+            f"corr={data['correlation_coefficient']}, "
+            f"spread={data['current_divergence_pts']} pts"
+        )
+    else:
+        assert data["divergence_series"] == []
+        assert data["current_divergence_pts"] is None
+        assert data["inflation_lead_days"] is None
+        assert data["correlation_coefficient"] is None
+        print("  ✓ CPI divergence correctly reports no comparison (no verified series)")
 
 
 def test_cpi_divergence_params_filtering():
@@ -124,10 +246,16 @@ def test_cpi_divergence_params_filtering():
     res = client.get("/api/v1/econometrics/cpi-divergence?months=6&lag_days=45")
     assert res.status_code == 200, f"Expected 200, got {res.status_code}"
     data = res.json()
-    assert (
-        data["inflation_lead_days"] == 45
-    ), f"Expected lag_days=45, got {data['inflation_lead_days']}"
-    print("  ✓ Custom lag_days and lookback parameters accepted")
+    # With no verified series there is no lead to report, so the endpoint returns
+    # None rather than echoing the requested lag back as if it had been measured.
+    if data.get("data_available"):
+        assert (
+            data["inflation_lead_days"] == 45
+        ), f"Expected lag_days=45, got {data['inflation_lead_days']}"
+        print("  ✓ Custom lag_days and lookback parameters accepted")
+    else:
+        assert data["inflation_lead_days"] is None
+        print("  ✓ Parameters accepted; no lead reported without a verified series")
 
 
 def test_cpi_gap_alias_endpoint():
@@ -161,8 +289,14 @@ def test_elasticity_default():
         fares[0] < fares[1] < fares[2] < fares[3]
     ), f"Expected monotonic price escalation: {fares}"
 
-    # Elasticities should be negative (downward sloping demand curve)
+    # Elasticities should be negative where defined. T+30 is the baseline window and
+    # has no preceding segment, so the endpoint reports no elasticity for it.
     for pt in data["gradient_points"]:
+        if pt["price_elasticity"] is None:
+            assert (
+                pt["lead_window"] == "T+30"
+            ), f"Only the T+30 baseline may omit elasticity, got {pt['lead_window']}"
+            continue
         assert (
             pt["price_elasticity"] < 0
         ), f"Elasticity must be negative, got {pt['price_elasticity']}"
@@ -177,7 +311,12 @@ def test_elasticity_route_filtering():
     assert res.status_code == 200, f"Expected 200, got {res.status_code}"
     data = res.json()
     assert data["route_code"] == "BOM-BLR"
-    assert data["segments"]["t1_t7"] > 1.0, "Expected T+1 to T+7 surge multiplier > 1.0"
+    # segments.t1_t7 carries the T+1 to T+7 price elasticity, not a surge
+    # multiplier, so it is negative. The point of this test is that the
+    # corridor-specific lookup resolved at all.
+    assert (
+        data["segments"]["t1_t7"] < 0.0
+    ), f"Expected negative T+1 to T+7 elasticity, got {data['segments']['t1_t7']}"
     print(
         f"  ✓ Corridor-specific elasticity verified for BOM-BLR: t1_t7={data['segments']['t1_t7']}"
     )
@@ -280,9 +419,7 @@ def test_authentication_rejection_invalid_token():
 def test_authentication_acceptance_valid_tokens():
     print("[TEST 15/22] Authentication security: valid credentials accepted")
     # 1. X-API-Key
-    res1 = client.get(
-        "/api/v1/econometrics/indices", headers={"X-API-Key": "apix-admin-key-2026"}
-    )
+    res1 = client.get("/api/v1/econometrics/indices", headers={"X-API-Key": _ADMIN_KEY})
     assert res1.status_code == 200, f"Expected 200, got {res1.status_code}"
 
     # 2. X-Ingestion-Key
@@ -295,7 +432,7 @@ def test_authentication_acceptance_valid_tokens():
     # 3. Bearer Authorization
     res3 = client.get(
         "/api/v1/econometrics/indices",
-        headers={"Authorization": "Bearer apix-dgca-auditor-key-2026"},
+        headers={"Authorization": f"Bearer {_ADMIN_KEY}"},
     )
     assert res3.status_code == 200, f"Expected 200, got {res3.status_code}"
     print(
