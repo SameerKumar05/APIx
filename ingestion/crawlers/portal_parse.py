@@ -175,8 +175,9 @@ def parse_portal_flights(
             fare_inr = _read_fare(first)
         if fare_inr is None:
             continue
-        flight_no_raw = _flight_number(item, segments)
-        airline_code = _airline_code(item, segments, airline_fallback)
+        seg_list: list[Any] = list(segments) if isinstance(segments, list) else []
+        flight_no_raw = _flight_number(item, seg_list)
+        airline_code = _airline_code(item, seg_list, airline_fallback)
         if flight_no_raw is None or airline_code is None:
             continue
         clean_num = flight_no_raw

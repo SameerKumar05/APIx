@@ -543,7 +543,7 @@ class AmadeusFlightClient(BaseScraper):
                 metadata={"tier": 2},
             )
 
-        params = {
+        params: dict[str, str | int | float | bool | None] = {
             "originLocationCode": norm_orig,
             "destinationLocationCode": norm_dest,
             "departureDate": target_date.strftime("%Y-%m-%d"),
@@ -658,7 +658,7 @@ class AmadeusFlightClient(BaseScraper):
                 metadata={"tier": 2},
             )
 
-        params = {
+        params: dict[str, str | int | float | bool | None] = {
             "originLocationCode": norm_orig,
             "destinationLocationCode": norm_dest,
             "departureDate": target_date.strftime("%Y-%m-%d"),
