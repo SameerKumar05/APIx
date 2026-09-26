@@ -14,6 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from backend.app.api.v1.api import api_router
+from backend.app.api.v1.endpoints.stream import router as stream_router
 from backend.app.core.config import settings
 from backend.app.db.session import get_db, init_db, probe_database_readiness
 
@@ -210,7 +211,6 @@ async def root():
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # Convenience root WebSocket mounts for streaming clients
-from backend.app.api.v1.endpoints.stream import router as stream_router
 
 app.include_router(stream_router, prefix="/stream", tags=["Streaming"])
 app.include_router(stream_router, prefix="/ws", tags=["Streaming"])

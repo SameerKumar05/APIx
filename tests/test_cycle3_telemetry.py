@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta, timezone
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -305,7 +305,7 @@ class TestTelemetryRepository:
         now = datetime.now(UTC)
 
         # 3 recent records (today)
-        for i in range(3):
+        for _ in range(3):
             log_scraper_telemetry(
                 db=db_session,
                 crawler_name="synthetic",
@@ -316,7 +316,7 @@ class TestTelemetryRepository:
             )
 
         # 4 old records (45 days old)
-        for i in range(4):
+        for _ in range(4):
             log_scraper_telemetry(
                 db=db_session,
                 crawler_name="synthetic",

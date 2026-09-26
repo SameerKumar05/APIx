@@ -258,7 +258,7 @@ async def get_routes_overview(
     db: Session = Depends(get_db),
 ) -> RouteListResponse:
     try:
-        db_routes = db.query(Route).filter(Route.is_active == True).all()
+        db_routes = db.query(Route).filter(Route.is_active.is_(True)).all()
         if db_routes:
             routes_list: list[RouteOverviewItem] = []
             for r in db_routes:

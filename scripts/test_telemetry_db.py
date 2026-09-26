@@ -96,7 +96,7 @@ def run_tests() -> bool:
     assert expected_t_cols.issubset(
         telemetry_cols
     ), f"Missing telemetry columns: {expected_t_cols - telemetry_cols}"
-    print(f"  ✓ ScraperTelemetry columns verified: {sorted(list(expected_t_cols))}")
+    print(f"  ✓ ScraperTelemetry columns verified: {sorted(expected_t_cols)}")
 
     proxy_cols = {col["name"] for col in inspector.get_columns("proxy_health_records")}
     expected_p_cols = {
@@ -114,7 +114,7 @@ def run_tests() -> bool:
     assert expected_p_cols.issubset(
         proxy_cols
     ), f"Missing proxy columns: {expected_p_cols - proxy_cols}"
-    print(f"  ✓ ProxyHealthRecord columns verified: {sorted(list(expected_p_cols))}")
+    print(f"  ✓ ProxyHealthRecord columns verified: {sorted(expected_p_cols)}")
 
     # 2. Scraper Telemetry Logging
     print("\n[2/7] Testing individual and bulk scraper telemetry logging...")

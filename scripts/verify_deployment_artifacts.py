@@ -15,7 +15,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import yaml
 
@@ -220,7 +220,7 @@ def verify_dockerfile(dockerfile_path: Path) -> list[str]:
     content = dockerfile_path.read_text(encoding="utf-8")
     lines = content.splitlines()
 
-    from_stages = [l for l in lines if l.strip().upper().startswith("FROM")]
+    from_stages = [ln for ln in lines if ln.strip().upper().startswith("FROM")]
     if not any("AS backend" in s for s in from_stages):
         errors.append("Dockerfile missing stage 'AS backend'")
     if not any("AS frontend" in s for s in from_stages):
@@ -344,8 +344,7 @@ def main() -> int:
     try:
         proc = subprocess.run(
             ["docker", "compose", "config"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=15,
         )

@@ -15,35 +15,8 @@ import random
 import re
 import time
 from datetime import UTC, date, datetime, timedelta
+from importlib.util import find_spec
 from typing import Any
-
-try:
-    from playwright.sync_api import (
-        BrowserContext,
-        Page,
-        Playwright,
-        sync_playwright,
-    )
-    from playwright.sync_api import (
-        Request as PlaywrightRequest,
-    )
-    from playwright.sync_api import (
-        Response as PlaywrightResponse,
-    )
-    from playwright.sync_api import (
-        Route as PlaywrightRoute,
-    )
-
-    HAS_PLAYWRIGHT_SYNC = True
-except ImportError:
-    HAS_PLAYWRIGHT_SYNC = False
-
-try:
-    import httpx
-
-    HAS_HTTPX = True
-except ImportError:
-    HAS_HTTPX = False
 
 from backend.app.core.cleaning import reported_flight_status, sourced_duration_minutes
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
@@ -56,6 +29,19 @@ from ingestion.config import (
 )
 from ingestion.crawlers.amadeus import AmadeusFlightClient
 from ingestion.crawlers.synthetic import SyntheticFlightGenerator
+
+try:
+    from playwright.sync_api import (
+        PlaywrightResponse,
+        PlaywrightRoute,
+        sync_playwright,
+    )
+
+    HAS_PLAYWRIGHT_SYNC = True
+except ImportError:
+    HAS_PLAYWRIGHT_SYNC = False
+
+HAS_HTTPX = find_spec("httpx") is not None
 
 logger = logging.getLogger("ingestion.crawlers.spicejet")
 

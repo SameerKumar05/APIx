@@ -16,11 +16,11 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class AnomalySeverity(str, Enum):
+class AnomalySeverity(StrEnum):
     """Classification of airfare pricing anomalies."""
 
     NORMAL = "NORMAL"

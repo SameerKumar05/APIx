@@ -130,11 +130,10 @@ class FlightBufferState:
                 self.latest_event_time = event_dt
 
         # Re-resolve minimum consumer price across platforms
-        old_best = self.best_quote
         best_q: FlightQuote | None = None
         min_p = float("inf")
 
-        for p_name, q in self.quotes_by_portal.items():
+        for _p_name, q in self.quotes_by_portal.items():
             if q.fare < min_p:
                 min_p = q.fare
                 best_q = q

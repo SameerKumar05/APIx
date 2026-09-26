@@ -20,7 +20,7 @@ import json
 import os
 import sys
 from datetime import date, datetime
-from typing import Any, Dict, List
+from typing import Any
 
 # Ensure repository root is on sys.path
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

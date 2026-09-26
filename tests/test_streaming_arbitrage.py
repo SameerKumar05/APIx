@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import time
 from datetime import UTC, date, datetime, timedelta, timezone
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 import pytest
 from fastapi.testclient import TestClient

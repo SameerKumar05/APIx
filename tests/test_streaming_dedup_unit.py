@@ -158,9 +158,7 @@ class TestStreamingDedupEngine:
             for i in range(1000)
         ]
 
-        start_time = time.perf_counter_ns()
         results = engine.ingest_batch(quotes)
-        elapsed_total_ms = (time.perf_counter_ns() - start_time) / 1_000_000.0
 
         stats = engine.stats()
         avg_latency_ms = stats["avg_latency_us"] / 1000.0

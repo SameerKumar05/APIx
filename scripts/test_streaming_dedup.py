@@ -263,7 +263,7 @@ def test_sub_millisecond_latency_benchmark() -> None:
 
     # Benchmark ingestion loop
     start_total = time.perf_counter_ns()
-    results = engine.ingest_batch(quotes)
+    engine.ingest_batch(quotes)
     total_elapsed_ms = (time.perf_counter_ns() - start_total) / 1_000_000.0
 
     stats = engine.stats()

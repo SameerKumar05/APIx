@@ -21,7 +21,6 @@ from __future__ import annotations
 import math
 import os
 import sys
-from typing import List
 
 # Ensure repository root is on sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

@@ -37,7 +37,7 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 REQUIRED_WINDOW_DAYS = 30
 

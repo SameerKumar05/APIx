@@ -121,7 +121,7 @@ async def get_arbitrage_opportunities(
     opportunities = opportunities[:limit]
 
     # Calculate aggregate summary stats
-    routes_evaluated = len(set(o.route_code for o in opportunities))
+    routes_evaluated = len({o.route_code for o in opportunities})
     total_savings = round(sum(o.spread_inr for o in opportunities), 2)
     avg_spread = (
         round(

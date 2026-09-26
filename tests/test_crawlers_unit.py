@@ -25,7 +25,7 @@ import os
 import sys
 import unittest
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict
+from typing import Any
 
 worktree_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if worktree_root not in sys.path:

@@ -38,7 +38,7 @@ import math
 import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
-from enum import Enum
+from enum import Enum, StrEnum
 
 # Ensure repository root is on sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -207,7 +207,7 @@ def normalized_cross_correlation(
 # ------------------------------------------------------------------------------
 
 
-class DgcaSeverity(str, Enum):
+class DgcaSeverity(StrEnum):
     NORMAL = "NORMAL"
     WARNING = "WARNING"
     CRITICAL = "CRITICAL"

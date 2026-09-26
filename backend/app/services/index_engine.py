@@ -462,7 +462,7 @@ def weighted_median_values(
         return float(first_val)
 
     # Pair and sort by value
-    pairs = sorted(zip(values, weights), key=lambda p: p[0])
+    pairs = sorted(zip(values, weights, strict=True), key=lambda p: p[0])
     sorted_vals = [p[0] for p in pairs]
     sorted_weights = [max(0.0, float(p[1])) for p in pairs]
 
@@ -481,7 +481,6 @@ def weighted_median_values(
     n = len(sorted_vals)
 
     for i in range(n):
-        prev_cum = cum_weight
         cum_weight += norm_weights[i]
 
         # Check if cumulative weight crosses 0.5

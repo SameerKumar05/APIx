@@ -20,51 +20,10 @@ import random
 import re
 import time
 from datetime import UTC, date, datetime, timedelta
+from importlib.util import find_spec
 from typing import Any
 
 # Optional Playwright import for headless browser automation
-try:
-    from playwright.sync_api import (
-        Browser,
-        BrowserContext,
-        Page,
-        sync_playwright,
-    )
-    from playwright.sync_api import (
-        Response as PlaywrightResponse,
-    )
-    from playwright.sync_api import (
-        Route as PlaywrightRoute,
-    )
-
-    HAS_PLAYWRIGHT_SYNC = True
-except ImportError:
-    HAS_PLAYWRIGHT_SYNC = False
-
-try:
-    from playwright.async_api import (
-        Browser as AsyncBrowser,
-    )
-    from playwright.async_api import (
-        BrowserContext as AsyncBrowserContext,
-    )
-    from playwright.async_api import (
-        Page as AsyncPage,
-    )
-    from playwright.async_api import (
-        Response as AsyncPlaywrightResponse,
-    )
-    from playwright.async_api import (
-        Route as AsyncPlaywrightRoute,
-    )
-    from playwright.async_api import (
-        async_playwright,
-    )
-
-    HAS_PLAYWRIGHT_ASYNC = True
-except ImportError:
-    HAS_PLAYWRIGHT_ASYNC = False
-
 from backend.app.core.cleaning import reported_flight_status, sourced_duration_minutes
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
 from ingestion.config import (
@@ -76,6 +35,19 @@ from ingestion.config import (
 )
 from ingestion.crawlers.amadeus import AmadeusFlightClient
 from ingestion.crawlers.synthetic import SyntheticFlightGenerator
+
+try:
+    from playwright.sync_api import (
+        PlaywrightResponse,
+        PlaywrightRoute,
+        sync_playwright,
+    )
+
+    HAS_PLAYWRIGHT_SYNC = True
+except ImportError:
+    HAS_PLAYWRIGHT_SYNC = False
+
+HAS_PLAYWRIGHT_ASYNC = find_spec("playwright.async_api") is not None
 
 logger = logging.getLogger("ingestion.crawlers.easemytrip")
 
