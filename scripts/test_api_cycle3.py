@@ -11,7 +11,7 @@ Verifies new Cycle 3 endpoints:
 
 import os
 import sys
-from datetime import UTC, datetime, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 
 # Ensure worktree root is in python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -22,11 +22,48 @@ from backend.app.core.config import settings
 from backend.app.db.crawler_job_repo import register_worker_heartbeat
 from backend.app.db.session import Base, SessionLocal, engine
 from backend.app.main import app
+from backend.app.models.raw_fare import RawFare
 from backend.app.models.telemetry import ProxyHealthRecord, ScraperTelemetry
 
 Base.metadata.create_all(bind=engine)
 with SessionLocal() as db:
     register_worker_heartbeat(db, "worker-test-cycle3", "localhost", os.getpid())
+
+# Arbitrage detection needs one flight quoted by a recognised direct airline
+# channel and by an OTA, on a database this script would otherwise leave empty.
+# is_direct_platform only matches when the airline code or name appears in the
+# platform string, so "indigo" and "6e" both work; unknown names are treated as
+# neither direct nor OTA and the pair is discarded.
+with SessionLocal() as arb_db:
+    for platform, total in (
+        ("indigo", 4200.0),
+        ("makemytrip", 6100.0),
+        ("easemytrip", 5700.0),
+    ):
+        arb_db.add(
+            RawFare(
+                batch_id=1,
+                origin="DEL",
+                destination="BOM",
+                flight_date=date.today(),
+                booking_window="T+7",
+                airline_code="6E",
+                flight_number="6E-118",
+                stops=0,
+                fare_class="ECONOMY",
+                base_fare=total - 500.0,
+                taxes_and_fees=500.0,
+                total_fare=total,
+                source_platform=platform,
+                scraped_at=datetime.now(UTC),
+                hash_id=f"cycle3-arb-{platform}",
+                is_synthetic=True,
+                departure_time=datetime.combine(
+                    date.today(), datetime.min.time()
+                ).replace(hour=7, minute=30),
+            )
+        )
+    arb_db.commit()
 
 client = TestClient(app)
 
