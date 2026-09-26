@@ -221,6 +221,26 @@ def test_worker_heartbeat_and_liveness_helpers(db_session: Session) -> None:
     assert count_after == 0
 
 
+class _StubOrchestrator:
+    """Keeps this test off the network.
+
+    A real orchestrator made the outcome environment-dependent: CI returned
+    captcha_hits > 0 with no records, which telemetry_status_for calls CAPTCHA,
+    and the job was marked FAILED. Pass 388 locally, fail in CI, no code change.
+    """
+
+    scraper_source = "synthetic"
+
+    def scrape_slot(
+        self,
+        origin: object,
+        window_code: object,
+        scraper_source: str | None = None,
+    ) -> ScrapeResult:
+        # Empty records with no CAPTCHA marker keeps the job COMPLETED.
+        return ScrapeResult(source="synthetic", success=True, records=[], errors=[])
+
+
 def test_crawler_worker_process_single_job_simulation(db_session: Session) -> None:
     from sqlalchemy.orm import sessionmaker
 
@@ -237,6 +257,7 @@ def test_crawler_worker_process_single_job_simulation(db_session: Session) -> No
         worker_id="test-sim-worker",
         config=IngestionConfig(ingestion_mode="synthetic"),
         session_factory=testing_session_factory,
+        orchestrator=_StubOrchestrator(),
     )
 
     job = worker._claim_job()
