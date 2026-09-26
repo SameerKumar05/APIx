@@ -89,7 +89,9 @@ def test_paasche_index_axioms() -> None:
         base_value=100.0,
     )
     if not math.isclose(idx_base, 100.00, abs_tol=1e-9):
-        raise VerificationFailure(f"Base period Paasche should equal 100.00, got {idx_base}")
+        raise VerificationFailure(
+            f"Base period Paasche should equal 100.00, got {idx_base}"
+        )
 
     # Axiom 2: Uniform Relative Scaling (+25% across all routes => Paasche == 125.00)
     scaled_fares = {r: f * 1.25 for r, f in base_fares.items()}
@@ -100,7 +102,9 @@ def test_paasche_index_axioms() -> None:
         base_value=100.0,
     )
     if not math.isclose(idx_scaled, 125.00, abs_tol=1e-9):
-        raise VerificationFailure(f"Uniform +25% Paasche should equal 125.00, got {idx_scaled}")
+        raise VerificationFailure(
+            f"Uniform +25% Paasche should equal 125.00, got {idx_scaled}"
+        )
 
     # Axiom 3: Strict Monotonicity (increasing any price strictly increases the index)
     single_up_fares = dict(base_fares)
@@ -112,7 +116,9 @@ def test_paasche_index_axioms() -> None:
         base_value=100.0,
     )
     if idx_mono <= 100.00:
-        raise VerificationFailure(f"Paasche index must strictly increase, got {idx_mono} <= 100.0")
+        raise VerificationFailure(
+            f"Paasche index must strictly increase, got {idx_mono} <= 100.0"
+        )
 
 
 # ===========================================================================
@@ -135,7 +141,9 @@ def test_fisher_ideal_index_properties() -> None:
     # Test 2: Base Period Identity (100.0 and 100.0 => 100.0)
     fisher_base = calculate_fisher_index(100.00, 100.00)
     if not math.isclose(fisher_base, 100.00, abs_tol=1e-9):
-        raise VerificationFailure(f"Base period Fisher should equal 100.00, got {fisher_base}")
+        raise VerificationFailure(
+            f"Base period Fisher should equal 100.00, got {fisher_base}"
+        )
 
     # Test 3: Time Reversal Test
     # In index theory, P_{0,1} * P_{1,0} == 1.0 (or 10000.0 when scaled by 100)
@@ -182,13 +190,17 @@ def test_substitution_bias_bounds_and_invariants() -> None:
 
     # 1. Laspeyres uses base period weights:
     # R1: 1.50 * 0.60 = 0.90; R2: 1.10 * 0.40 = 0.44 => 1.34 * 100 = 134.00
-    idx_l = calculate_laspeyres_index(curr_fares, base_fares, base_weights, base_value=100.0)
+    idx_l = calculate_laspeyres_index(
+        curr_fares, base_fares, base_weights, base_value=100.0
+    )
 
     # 2. Paasche uses current period weights:
     # Num = 7500*0.30 + 5500*0.70 = 2250 + 3850 = 6100
     # Den = 5000*0.30 + 5000*0.70 = 1500 + 3500 = 5000
     # Paasche = (6100 / 5000) * 100 = 122.00
-    idx_p = calculate_paasche_index(curr_fares, base_fares, curr_weights, base_value=100.0)
+    idx_p = calculate_paasche_index(
+        curr_fares, base_fares, curr_weights, base_value=100.0
+    )
 
     # 3. Fisher is geometric mean:
     # Fisher = sqrt(134 * 122) = sqrt(16348) = 127.8593
@@ -225,8 +237,12 @@ def test_substitution_bias_bounds_and_invariants() -> None:
 
     # Invariant: If prices scale uniformly (no relative price change), bias must be 0.00
     scaled_fares = {r: f * 1.20 for r, f in base_fares.items()}
-    idx_l_uniform = calculate_laspeyres_index(scaled_fares, base_fares, base_weights, 100.0)
-    idx_p_uniform = calculate_paasche_index(scaled_fares, base_fares, curr_weights, 100.0)
+    idx_l_uniform = calculate_laspeyres_index(
+        scaled_fares, base_fares, base_weights, 100.0
+    )
+    idx_p_uniform = calculate_paasche_index(
+        scaled_fares, base_fares, curr_weights, 100.0
+    )
     idx_f_uniform = calculate_fisher_index(idx_l_uniform, idx_p_uniform)
     bias_uniform = calculate_substitution_bias(idx_l_uniform, idx_f_uniform)
 
@@ -246,8 +262,8 @@ def test_lead_time_elasticity_curve() -> None:
     window_fares = {
         "T+30": 3800.0,  # Advance leisure (cheapest)
         "T+15": 4600.0,  # Planned travel
-        "T+7": 5400.0,   # Short-lead standard
-        "T+1": 7800.0,   # Last-minute urgent (most expensive)
+        "T+7": 5400.0,  # Short-lead standard
+        "T+1": 7800.0,  # Last-minute urgent (most expensive)
     }
     pax_shares = {
         "T+30": 0.15,
@@ -256,7 +272,9 @@ def test_lead_time_elasticity_curve() -> None:
         "T+1": 0.20,
     }
 
-    result: LeadTimeElasticityResult = calculate_lead_time_elasticity(window_fares, pax_shares)
+    result: LeadTimeElasticityResult = calculate_lead_time_elasticity(
+        window_fares, pax_shares
+    )
 
     # 1. Price escalation: T+1 price > T+30 price
     if result.lead_time_premium_pct <= 0.0:
@@ -277,7 +295,9 @@ def test_lead_time_elasticity_curve() -> None:
 
     # 2. Verify curves structure
     if "T+1" not in result.curves or "T+30" not in result.curves:
-        raise VerificationFailure(f"Curves must contain T+1 and T+30: {result.curves.keys()}")
+        raise VerificationFailure(
+            f"Curves must contain T+1 and T+30: {result.curves.keys()}"
+        )
 
     # 3. Verify dictionary export
     d = result.to_dict()
@@ -423,7 +443,9 @@ def test_carrier_concentration_hhi() -> None:
     # HHI = 0.62^2 + 0.20^2 + 0.08^2 + 0.05^2 + 0.04^2 = 0.3844 + 0.04 + 0.0064 + 0.0025 + 0.0016 = 0.4349
     dgca_hhi = calculate_hhi(DEFAULT_AIRLINE_MARKET_SHARES)
     if not (0.43 <= dgca_hhi <= 0.45):
-        raise VerificationFailure(f"DGCA carrier market HHI expected between 0.43 and 0.45, got {dgca_hhi}")
+        raise VerificationFailure(
+            f"DGCA carrier market HHI expected between 0.43 and 0.45, got {dgca_hhi}"
+        )
 
 
 # ===========================================================================
@@ -446,9 +468,13 @@ def test_multi_feature_surge_classification() -> None:
         route_median=base_mean,
     )
     if res_normal.severity != MLAnomalySeverity.NORMAL:
-        raise VerificationFailure(f"5200 INR should be NORMAL, got {res_normal.severity}")
+        raise VerificationFailure(
+            f"5200 INR should be NORMAL, got {res_normal.severity}"
+        )
     if res_normal.is_anomaly or res_normal.is_dgca_violation:
-        raise VerificationFailure("Normal fare must not trigger anomaly or DGCA violation")
+        raise VerificationFailure(
+            "Normal fare must not trigger anomaly or DGCA violation"
+        )
 
     # Scenario B: 3-Sigma Statistical Price Spike
     res_3sigma = classify_surge_multifeature(
@@ -460,7 +486,9 @@ def test_multi_feature_surge_classification() -> None:
         route_median=base_mean,
     )
     if res_3sigma.severity != MLAnomalySeverity.CRITICAL:
-        raise VerificationFailure(f"3-sigma surge should be CRITICAL, got {res_3sigma.severity}")
+        raise VerificationFailure(
+            f"3-sigma surge should be CRITICAL, got {res_3sigma.severity}"
+        )
     if not res_3sigma.is_dgca_violation:
         raise VerificationFailure("3-sigma surge must trigger DGCA statutory violation")
 
@@ -474,9 +502,13 @@ def test_multi_feature_surge_classification() -> None:
         route_median=base_mean,
     )
     if not res_dod.is_dgca_violation:
-        raise VerificationFailure("DoD surge >= 40% must trigger DGCA statutory violation")
+        raise VerificationFailure(
+            "DoD surge >= 40% must trigger DGCA statutory violation"
+        )
     if res_dod.dod_surge is None or res_dod.dod_surge < 0.40:
-        raise VerificationFailure(f"DoD surge should be >= 0.40, got {res_dod.dod_surge}")
+        raise VerificationFailure(
+            f"DoD surge should be >= 0.40, got {res_dod.dod_surge}"
+        )
 
     # Scenario D: Route Price > 2.5x Route Baseline Median
     res_ceiling = classify_surge_multifeature(
@@ -488,7 +520,9 @@ def test_multi_feature_surge_classification() -> None:
         route_median=base_mean,
     )
     if not res_ceiling.is_dgca_violation:
-        raise VerificationFailure("Price > 2.5x median must trigger DGCA statutory violation")
+        raise VerificationFailure(
+            "Price > 2.5x median must trigger DGCA statutory violation"
+        )
     if res_ceiling.violation_code != "DGCA_CAR_TARIFF_CEILING_BREACH":
         raise VerificationFailure(
             f"Expected DGCA_CAR_TARIFF_CEILING_BREACH, got {res_ceiling.violation_code}"
@@ -542,7 +576,9 @@ def test_econometric_engine_orchestrator() -> None:
     expected_f = round(math.sqrt(l_val * p_val), 4)
 
     if not math.isclose(f_val, expected_f, abs_tol=1e-3):
-        raise VerificationFailure(f"Fisher index mismatch: expected {expected_f}, got {f_val}")
+        raise VerificationFailure(
+            f"Fisher index mismatch: expected {expected_f}, got {f_val}"
+        )
 
 
 # ===========================================================================
@@ -558,16 +594,43 @@ def run_all_tests() -> None:
     print("=" * 80)
 
     tests = [
-        ("Paasche Index Axioms (Base Identity, Uniform Scaling, Monotonicity)", test_paasche_index_axioms),
-        ("Fisher Ideal Index Properties (Geometric Mean, Time Reversal Test)", test_fisher_ideal_index_properties),
-        ("Substitution Bias Invariants & Bounds (L >= F >= P, Delta >= 0)", test_substitution_bias_bounds_and_invariants),
-        ("Lead-Time Price Elasticity Curve (T+30 to T+1, Urgency Multiplier)", test_lead_time_elasticity_curve),
-        ("MoSPI CPI Transport Sub-Index Divergence (+38 Days Lead Analysis)", test_mospi_cpi_divergence_analytics),
-        ("Dynamic Lead-Time Z-Score Volatility Scaling (T+1 vs T+30 Tolerance)", test_dynamic_z_score_scaling),
+        (
+            "Paasche Index Axioms (Base Identity, Uniform Scaling, Monotonicity)",
+            test_paasche_index_axioms,
+        ),
+        (
+            "Fisher Ideal Index Properties (Geometric Mean, Time Reversal Test)",
+            test_fisher_ideal_index_properties,
+        ),
+        (
+            "Substitution Bias Invariants & Bounds (L >= F >= P, Delta >= 0)",
+            test_substitution_bias_bounds_and_invariants,
+        ),
+        (
+            "Lead-Time Price Elasticity Curve (T+30 to T+1, Urgency Multiplier)",
+            test_lead_time_elasticity_curve,
+        ),
+        (
+            "MoSPI CPI Transport Sub-Index Divergence (+38 Days Lead Analysis)",
+            test_mospi_cpi_divergence_analytics,
+        ),
+        (
+            "Dynamic Lead-Time Z-Score Volatility Scaling (T+1 vs T+30 Tolerance)",
+            test_dynamic_z_score_scaling,
+        ),
         ("Tukey IQR Fences Non-Parametric Outlier Bounds", test_tukey_iqr_fences),
-        ("Carrier Market Concentration Herfindahl-Hirschman Index (HHI)", test_carrier_concentration_hhi),
-        ("Multi-Feature Surge Classification & DGCA Statutory Violations", test_multi_feature_surge_classification),
-        ("EconometricEngine High-Level Batch Orchestrator", test_econometric_engine_orchestrator),
+        (
+            "Carrier Market Concentration Herfindahl-Hirschman Index (HHI)",
+            test_carrier_concentration_hhi,
+        ),
+        (
+            "Multi-Feature Surge Classification & DGCA Statutory Violations",
+            test_multi_feature_surge_classification,
+        ),
+        (
+            "EconometricEngine High-Level Batch Orchestrator",
+            test_econometric_engine_orchestrator,
+        ),
     ]
 
     passed = 0

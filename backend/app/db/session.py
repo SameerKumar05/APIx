@@ -95,6 +95,7 @@ def init_db(target_engine: Engine | None = None) -> None:
         target_engine: Optional engine override (useful for testing).
     """
     import backend.app.models  # noqa: F401
+
     eng = target_engine or engine
     Base.metadata.create_all(bind=eng)
 

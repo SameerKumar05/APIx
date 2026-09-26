@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.db.session import Base, SessionLocal, engine, init_db
+from backend.app.db.session import SessionLocal, init_db
 from backend.app.models.airline import Airline
 from backend.app.models.route import Route
 
@@ -223,4 +223,6 @@ if __name__ == "__main__":
     init_db()
     with SessionLocal() as db_session:
         results = seed_all(db_session)
-        print(f"Seeding complete: {results['routes']} routes, {results['airlines']} airlines.")
+        print(
+            f"Seeding complete: {results['routes']} routes, {results['airlines']} airlines."
+        )

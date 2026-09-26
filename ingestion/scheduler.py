@@ -16,35 +16,39 @@ import os
 import random
 import sys
 import time
-from dataclasses import asdict, dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from dataclasses import asdict, dataclass
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, assert_never
+from typing import Any, assert_never
 
 from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, JobExecutionEvent
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
+from ingestion.base import ScrapeResult
+from ingestion.captcha import BLOCKED_BY_CAPTCHA, consume_challenge
 from ingestion.config import (
     BOOKING_WINDOW_MAP,
     BOOKING_WINDOWS,
     DEFAULT_ROUTES,
     BookingWindow,
-    IngestionConfig,
     Route,
 )
-from ingestion.captcha import BLOCKED_BY_CAPTCHA, consume_challenge
 from ingestion.orchestrator import IngestionOrchestrator, SlotResultSummary
 from ingestion.proxy_pool import Proxy, ProxyPoolManager, get_proxy_pool
-from ingestion.schedule_gate import DispatchMode, SweepGate, normalize_scraper_source, parse_dispatch
+from ingestion.schedule_gate import (
+    DispatchMode,
+    SweepGate,
+    normalize_scraper_source,
+    parse_dispatch,
+)
 from ingestion.scrape_hooks import arm_orchestrator
 
 logger = logging.getLogger("ingestion.scheduler")
 
 # Mapping of common alias strings to canonical booking window codes
-WINDOW_ALIAS_MAP: Dict[str, str] = {
+WINDOW_ALIAS_MAP: dict[str, str] = {
     "1-3d": "T+1",
     "1-3days": "T+1",
     "1d": "T+1",
@@ -68,7 +72,7 @@ WINDOW_ALIAS_MAP: Dict[str, str] = {
 }
 
 
-def normalize_window(window_in: Union[str, BookingWindow]) -> BookingWindow:
+def normalize_window(window_in: str | BookingWindow) -> BookingWindow:
     """Resolves arbitrary window string representations or aliases into a canonical BookingWindow."""
     if isinstance(window_in, BookingWindow):
         return window_in
@@ -84,7 +88,7 @@ def normalize_window(window_in: Union[str, BookingWindow]) -> BookingWindow:
     return BOOKING_WINDOW_MAP["T+1"]
 
 
-def normalize_route(route_in: Union[str, Route, Tuple[str, str]]) -> Route:
+def normalize_route(route_in: str | Route | tuple[str, str]) -> Route:
     """Resolves route string (e.g. 'DEL-BOM'), tuple, or Route object into canonical Route."""
     if isinstance(route_in, Route):
         return route_in
@@ -130,19 +134,19 @@ class JobExecutionRecord:
     duration_ms: float
     success: bool
     records_count: int
-    proxy_url: Optional[str] = None
-    proxy_ip: Optional[str] = None
-    error: Optional[str] = None
+    proxy_url: str | None = None
+    proxy_ip: str | None = None
+    error: str | None = None
     tier: int = 1
-    source_platform: Optional[str] = None
+    source_platform: str | None = None
 
 
 @dataclass
 class SchedulerConfig:
     """Runtime configuration for IngestionScheduler."""
 
-    cron_expr: Optional[str] = None  # e.g. "0 2,8,14,20 * * *"
-    interval_minutes: Optional[int] = 360  # Default: Sweep every 6 hours
+    cron_expr: str | None = None  # e.g. "0 2,8,14,20 * * *"
+    interval_minutes: int | None = 360  # Default: Sweep every 6 hours
     jitter_min_seconds: float = 5.0
     jitter_max_seconds: float = 15.0
     stagger_seconds: float = 1.0  # Delay between individual slot triggers in a sweep
@@ -158,11 +162,11 @@ class IngestionScheduler:
 
     def __init__(
         self,
-        config: Optional[SchedulerConfig] = None,
-        orchestrator: Optional[IngestionOrchestrator] = None,
-        proxy_pool: Optional[ProxyPoolManager] = None,
-        routes: Optional[List[Route]] = None,
-        windows: Optional[List[BookingWindow]] = None,
+        config: SchedulerConfig | None = None,
+        orchestrator: IngestionOrchestrator | None = None,
+        proxy_pool: ProxyPoolManager | None = None,
+        routes: list[Route] | None = None,
+        windows: list[BookingWindow] | None = None,
     ) -> None:
         self.config = config or SchedulerConfig()
         self.orchestrator = orchestrator or IngestionOrchestrator()
@@ -175,8 +179,8 @@ class IngestionScheduler:
         self.is_running = False
 
         # Execution audit history
-        self._history: List[JobExecutionRecord] = []
-        self._slot_execution_counts: Dict[str, int] = {}
+        self._history: list[JobExecutionRecord] = []
+        self._slot_execution_counts: dict[str, int] = {}
         self._lock = asyncio.Lock()
 
         # Wire internal job listener
@@ -191,18 +195,28 @@ class IngestionScheduler:
     def _on_job_executed(self, event: JobExecutionEvent) -> None:
         """Internal callback for monitoring APScheduler job lifecycle events."""
         if event.exception:
-            logger.error("Job %s encountered an unhandled exception: %s", event.job_id, event.exception)
+            logger.error(
+                "Job %s encountered an unhandled exception: %s",
+                event.job_id,
+                event.exception,
+            )
         else:
-            logger.debug("Job %s executed successfully (return value: %s)", event.job_id, type(event.retval))
+            logger.debug(
+                "Job %s executed successfully (return value: %s)",
+                event.job_id,
+                type(event.retval),
+            )
 
-    def _format_slot_job_id(self, origin: str, destination: str, window_code: str) -> str:
+    def _format_slot_job_id(
+        self, origin: str, destination: str, window_code: str
+    ) -> str:
         """Generates deterministic unique job ID for a slot."""
         return f"slot_{origin}_{destination}_{window_code}"
 
     def register_all_slots(
         self,
-        routes: Optional[List[Route]] = None,
-        windows: Optional[List[BookingWindow]] = None,
+        routes: list[Route] | None = None,
+        windows: list[BookingWindow] | None = None,
     ) -> int:
         """Registers all 40 route-window combinations as individual jobs in the scheduler."""
         active_routes = routes or self.target_routes
@@ -214,9 +228,11 @@ class IngestionScheduler:
                 job_id = self._format_slot_job_id(r.origin, r.destination, w.code)
                 job_name = f"Scrape {r.origin}-{r.destination} ({w.code})"
 
-                trigger: Union[CronTrigger, IntervalTrigger]
+                trigger: CronTrigger | IntervalTrigger
                 if self.config.cron_expr:
-                    trigger = CronTrigger.from_crontab(self.config.cron_expr, timezone=timezone.utc)
+                    trigger = CronTrigger.from_crontab(
+                        self.config.cron_expr, timezone=UTC
+                    )
                 else:
                     minutes = self.config.interval_minutes or 360
                     trigger = IntervalTrigger(minutes=minutes)
@@ -260,13 +276,15 @@ class IngestionScheduler:
         destination: str,
         window: str,
         apply_jitter: bool = True,
-        base_date: Optional[date] = None,
-    ) -> Dict[str, Any]:
+        base_date: date | None = None,
+    ) -> dict[str, Any]:
         """Hand one slot to the worker queue. Does not scrape in this process."""
         del apply_jitter, base_date
         return await asyncio.to_thread(self._enqueue_slot, origin, destination, window)
 
-    def _enqueue_slot(self, origin: str, destination: str, window: str) -> Dict[str, Any]:
+    def _enqueue_slot(
+        self, origin: str, destination: str, window: str
+    ) -> dict[str, Any]:
         """Enqueue once per UTC day. A second fire of the same slot is a no-op."""
         from sqlalchemy.exc import SQLAlchemyError
 
@@ -275,12 +293,19 @@ class IngestionScheduler:
 
         route = normalize_route((origin, destination))
         b_window = normalize_window(window)
-        job_id = self._format_slot_job_id(route.origin, route.destination, b_window.code)
-        day = datetime.now(timezone.utc).date()
+        job_id = self._format_slot_job_id(
+            route.origin, route.destination, b_window.code
+        )
+        day = datetime.now(UTC).date()
         gate = SweepGate(Path(self.config.state_dir))
         if not gate.claim_slot(day, job_id):
             logger.info("slot %s already scheduled for %s", job_id, day.isoformat())
-            return {"job_id": job_id, "status": "skipped", "reason": "already_scheduled", "day": day.isoformat()}
+            return {
+                "job_id": job_id,
+                "status": "skipped",
+                "reason": "already_scheduled",
+                "day": day.isoformat(),
+            }
         source = os.getenv("SCRAPER_SOURCE", "synthetic")
         try:
             with SessionLocal() as db:
@@ -295,7 +320,12 @@ class IngestionScheduler:
             gate.release_slot(day, job_id)
             raise
         logger.info("enqueued %s as %s", job_id, job.job_id)
-        return {"job_id": job.job_id, "status": "enqueued", "slot": job_id, "day": day.isoformat()}
+        return {
+            "job_id": job.job_id,
+            "status": "enqueued",
+            "slot": job_id,
+            "day": day.isoformat(),
+        }
 
     async def execute_slot_job(
         self,
@@ -303,8 +333,8 @@ class IngestionScheduler:
         destination: str,
         window: str,
         apply_jitter: bool = True,
-        base_date: Optional[date] = None,
-    ) -> Dict[str, Any]:
+        base_date: date | None = None,
+    ) -> dict[str, Any]:
         """Asynchronously executes an individual slot scrape with jitter and proxy rotation."""
         import uuid
 
@@ -312,7 +342,9 @@ class IngestionScheduler:
         route = normalize_route((origin, destination))
         b_window = normalize_window(window)
         slot_key = f"{route.origin}-{route.destination}:{b_window.code}"
-        job_id = self._format_slot_job_id(route.origin, route.destination, b_window.code)
+        job_id = self._format_slot_job_id(
+            route.origin, route.destination, b_window.code
+        )
 
         # 1. Anti-Bot Randomized Jitter
         jitter_applied = 0.0
@@ -330,11 +362,11 @@ class IngestionScheduler:
                 await asyncio.sleep(jitter_applied)
 
         # 2. Assign Health-Scored Proxy from Pool
-        assigned_proxy: Optional[Proxy] = self.proxy_pool.get_proxy(strategy="best_score")
+        assigned_proxy: Proxy | None = self.proxy_pool.get_proxy(strategy="best_score")
         proxy_url = assigned_proxy.url if assigned_proxy else None
         proxy_ip = assigned_proxy.ip if assigned_proxy else None
 
-        start_dt = datetime.now(timezone.utc)
+        start_dt = datetime.now(UTC)
         start_time = time.perf_counter()
 
         logger.info(
@@ -344,9 +376,9 @@ class IngestionScheduler:
             assigned_proxy.identifier if assigned_proxy else "direct",
         )
 
-        scrape_res: Optional[ScrapeResult] = None
-        summary: Optional[SlotResultSummary] = None
-        error_msg: Optional[str] = None
+        scrape_res: ScrapeResult | None = None
+        summary: SlotResultSummary | None = None
+        error_msg: str | None = None
         is_success = False
         records_count = 0
         tier = 1
@@ -356,7 +388,7 @@ class IngestionScheduler:
             slot_idx = self._slot_execution_counts.get(job_id, 0)
             arm_orchestrator(self.orchestrator)
 
-            def _guarded_slot() -> Tuple[ScrapeResult, SlotResultSummary]:
+            def _guarded_slot() -> tuple[ScrapeResult, SlotResultSummary]:
                 scraped, slot_summary = self.orchestrator.run_slot(
                     route=route,
                     window=b_window,
@@ -384,9 +416,15 @@ class IngestionScheduler:
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             if assigned_proxy and not blocked:
                 if is_success:
-                    self.proxy_pool.report_success(assigned_proxy, latency_ms=duration_ms)
+                    self.proxy_pool.report_success(
+                        assigned_proxy, latency_ms=duration_ms
+                    )
                 else:
-                    err_summary = "; ".join(summary.errors) if summary.errors else "Zero records returned"
+                    err_summary = (
+                        "; ".join(summary.errors)
+                        if summary.errors
+                        else "Zero records returned"
+                    )
                     self.proxy_pool.report_failure(assigned_proxy, error=err_summary)
             if self.config.ingest and is_success and scrape_res.records:
                 await asyncio.to_thread(
@@ -398,11 +436,17 @@ class IngestionScheduler:
         except Exception as exc:
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             error_msg = str(exc)
-            logger.error("[%s] Error executing slot %s: %s", exec_id, slot_key, exc, exc_info=True)
+            logger.error(
+                "[%s] Error executing slot %s: %s",
+                exec_id,
+                slot_key,
+                exc,
+                exc_info=True,
+            )
             if assigned_proxy:
                 self.proxy_pool.report_failure(assigned_proxy, error=error_msg)
 
-        completed_dt = datetime.now(timezone.utc)
+        completed_dt = datetime.now(UTC)
         duration_ms = (time.perf_counter() - start_time) * 1000.0
 
         # Record in execution history
@@ -420,7 +464,8 @@ class IngestionScheduler:
             records_count=records_count,
             proxy_url=proxy_url,
             proxy_ip=proxy_ip,
-            error=error_msg or ("; ".join(summary.errors) if summary and summary.errors else None),
+            error=error_msg
+            or ("; ".join(summary.errors) if summary and summary.errors else None),
             tier=tier,
             source_platform=source_plat,
         )
@@ -429,7 +474,9 @@ class IngestionScheduler:
             self._history.append(record)
             if len(self._history) > self.config.max_history_records:
                 self._history.pop(0)
-            self._slot_execution_counts[job_id] = self._slot_execution_counts.get(job_id, 0) + 1
+            self._slot_execution_counts[job_id] = (
+                self._slot_execution_counts.get(job_id, 0) + 1
+            )
 
         logger.info(
             "[%s] Completed slot %s | Success: %s | Fares: %d | Latency: %.1fms | Tier: %d (%s)",
@@ -450,7 +497,7 @@ class IngestionScheduler:
         destination: str,
         window: str,
         apply_jitter: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Dispatches an immediate on-demand execution for a specific route and booking horizon."""
         return await self.execute_slot_job(
             origin=origin,
@@ -461,14 +508,21 @@ class IngestionScheduler:
 
     async def trigger_all(
         self,
-        stagger_seconds: Optional[float] = None,
+        stagger_seconds: float | None = None,
         apply_jitter: bool = False,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Dispatches an immediate full-sweep scrape across all 40 registered slots."""
-        stagger = stagger_seconds if stagger_seconds is not None else self.config.stagger_seconds
-        results: List[Dict[str, Any]] = []
+        stagger = (
+            stagger_seconds
+            if stagger_seconds is not None
+            else self.config.stagger_seconds
+        )
+        results: list[dict[str, Any]] = []
 
-        logger.info("Triggering immediate master sweep across all registered slots (stagger=%.2fs)", stagger)
+        logger.info(
+            "Triggering immediate master sweep across all registered slots (stagger=%.2fs)",
+            stagger,
+        )
 
         for route in self.target_routes:
             for window in self.target_windows:
@@ -511,9 +565,9 @@ class IngestionScheduler:
             return True
         return False
 
-    def get_job_status(self) -> Dict[str, Any]:
+    def get_job_status(self) -> dict[str, Any]:
         """Provides monitoring status for all registered jobs, triggers, and execution counts."""
-        jobs_info: List[Dict[str, Any]] = []
+        jobs_info: list[dict[str, Any]] = []
 
         for job in self.scheduler.get_jobs():
             next_run_dt = getattr(job, "next_run_time", None)
@@ -562,7 +616,10 @@ class IngestionScheduler:
         if not self.is_running:
             self.scheduler.start(paused=paused)
             self.is_running = True
-            logger.info("IngestionScheduler started with %d registered jobs", len(self.scheduler.get_jobs()))
+            logger.info(
+                "IngestionScheduler started with %d registered jobs",
+                len(self.scheduler.get_jobs()),
+            )
 
     def shutdown(self, wait: bool = False) -> None:
         """Stops the scheduler and shuts down its threadpool/event handlers."""
@@ -573,13 +630,13 @@ class IngestionScheduler:
 
 
 # Global singleton instance container
-_GLOBAL_SCHEDULER: Optional[IngestionScheduler] = None
+_GLOBAL_SCHEDULER: IngestionScheduler | None = None
 
 
 def get_scheduler(
-    config: Optional[SchedulerConfig] = None,
-    orchestrator: Optional[IngestionOrchestrator] = None,
-    proxy_pool: Optional[ProxyPoolManager] = None,
+    config: SchedulerConfig | None = None,
+    orchestrator: IngestionOrchestrator | None = None,
+    proxy_pool: ProxyPoolManager | None = None,
 ) -> IngestionScheduler:
     """Returns the process-wide singleton IngestionScheduler instance."""
     global _GLOBAL_SCHEDULER
@@ -661,7 +718,9 @@ async def _dry_tick() -> int:
     """Prove the engine fires. No scrape, no enqueue."""
     fired = asyncio.Event()
     ticker = AsyncIOScheduler()
-    ticker.add_job(fired.set, "interval", seconds=1, id="dry-tick", max_instances=1, coalesce=True)
+    ticker.add_job(
+        fired.set, "interval", seconds=1, id="dry-tick", max_instances=1, coalesce=True
+    )
     ticker.start()
     try:
         await asyncio.wait_for(fired.wait(), timeout=5)
@@ -720,11 +779,13 @@ async def async_main() -> int:
             scheduler.shutdown()
 
     if args.run_once:
-        day = datetime.now(timezone.utc).date()
+        day = datetime.now(UTC).date()
         claim = gate.claim_run_once(day)
         if not claim.acquired:
             logger.info("daily sweep skipped: %s", claim.reason)
-            print(json.dumps({"skipped": True, "reason": claim.reason, "day": claim.day}))
+            print(
+                json.dumps({"skipped": True, "reason": claim.reason, "day": claim.day})
+            )
             return 0
         try:
             logger.info("Executing on-demand single sweep of all slots...")

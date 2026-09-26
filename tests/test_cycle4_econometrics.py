@@ -122,6 +122,7 @@ except ImportError:
 
 # --- Canonical Math Implementations (Guaranteed Invariant Compliance) ---
 
+
 def ref_calculate_paasche_index(
     current_fares: Mapping[str, float],
     base_fares: Mapping[str, float],
@@ -192,8 +193,12 @@ def ref_calculate_lead_time_elasticity(
         q_near = pax.get(w_near, 0.25)
         q_far = pax.get(w_far, 0.25)
 
-        pct_dp = (p_near - p_far) / ((p_near + p_far) / 2.0) if (p_near + p_far) > 0 else 0.0
-        pct_dq = (q_near - q_far) / ((q_near + q_far) / 2.0) if (q_near + q_far) > 0 else 0.0
+        pct_dp = (
+            (p_near - p_far) / ((p_near + p_far) / 2.0) if (p_near + p_far) > 0 else 0.0
+        )
+        pct_dq = (
+            (q_near - q_far) / ((q_near + q_far) / 2.0) if (q_near + q_far) > 0 else 0.0
+        )
 
         # E_d = % dQ / % dP
         ed = (pct_dq / pct_dp) if abs(pct_dp) > 1e-9 else 0.0
@@ -251,29 +256,48 @@ def ref_calculate_mospi_cpi_divergence(
         if d in mospi_map:
             m_val = float(mospi_map[d])
             gap = apix_val - m_val
-            divergence_points.append({
-                "date": d,
-                "apix_index": apix_val,
-                "mospi_cpi": m_val,
-                "divergence_pts": round(gap, 2),
-            })
+            divergence_points.append(
+                {
+                    "date": d,
+                    "apix_index": apix_val,
+                    "mospi_cpi": m_val,
+                    "divergence_pts": round(gap, 2),
+                }
+            )
             apix_vals.append(apix_val)
             mospi_vals.append(m_val)
 
     mean_apix = sum(apix_vals) / len(apix_vals) if apix_vals else 0.0
     mean_mospi = sum(mospi_vals) / len(mospi_vals) if mospi_vals else 0.0
 
-    var_apix = sum((x - mean_apix) ** 2 for x in apix_vals) / len(apix_vals) if len(apix_vals) > 1 else 0.0
-    var_mospi = sum((x - mean_mospi) ** 2 for x in mospi_vals) / len(mospi_vals) if len(mospi_vals) > 1 else 0.0
+    var_apix = (
+        sum((x - mean_apix) ** 2 for x in apix_vals) / len(apix_vals)
+        if len(apix_vals) > 1
+        else 0.0
+    )
+    var_mospi = (
+        sum((x - mean_mospi) ** 2 for x in mospi_vals) / len(mospi_vals)
+        if len(mospi_vals) > 1
+        else 0.0
+    )
     std_apix = math.sqrt(var_apix)
     std_mospi = math.sqrt(var_mospi)
 
-    cov = sum((a - mean_apix) * (m - mean_mospi) for a, m in zip(apix_vals, mospi_vals)) / len(apix_vals) if len(apix_vals) > 1 else 0.0
+    cov = (
+        sum((a - mean_apix) * (m - mean_mospi) for a, m in zip(apix_vals, mospi_vals))
+        / len(apix_vals)
+        if len(apix_vals) > 1
+        else 0.0
+    )
     corr = (cov / (std_apix * std_mospi)) if (std_apix * std_mospi) > 0 else 0.0
     vol_ratio = (std_apix / std_mospi) if std_mospi > 0 else 1.0
 
     current_gap = divergence_points[-1]["divergence_pts"] if divergence_points else 0.0
-    mean_gap = sum(dp["divergence_pts"] for dp in divergence_points) / len(divergence_points) if divergence_points else 0.0
+    mean_gap = (
+        sum(dp["divergence_pts"] for dp in divergence_points) / len(divergence_points)
+        if divergence_points
+        else 0.0
+    )
 
     return {
         "current_divergence_pts": round(current_gap, 2),
@@ -298,10 +322,18 @@ def ref_calculate_dynamic_z_score(
     return (observed_fare - baseline_mean) / adj_std
 
 
-def ref_calculate_tukey_fences(fares: Sequence[float], k: float = 1.5) -> dict[str, float]:
+def ref_calculate_tukey_fences(
+    fares: Sequence[float], k: float = 1.5
+) -> dict[str, float]:
     """Calculate Tukey IQR outlier fences."""
     if not fares:
-        return {"q1": 0.0, "q3": 0.0, "iqr": 0.0, "lower_fence": 0.0, "upper_fence": 0.0}
+        return {
+            "q1": 0.0,
+            "q3": 0.0,
+            "iqr": 0.0,
+            "lower_fence": 0.0,
+            "upper_fence": 0.0,
+        }
     sorted_f = sorted(fares)
     n = len(sorted_f)
     mid = n // 2
@@ -310,7 +342,7 @@ def ref_calculate_tukey_fences(fares: Sequence[float], k: float = 1.5) -> dict[s
         upper_half = sorted_f[mid:]
     else:
         lower_half = sorted_f[:mid]
-        upper_half = sorted_f[mid + 1:]
+        upper_half = sorted_f[mid + 1 :]
 
     def _median(arr: list[float]) -> float:
         if not arr:
@@ -338,7 +370,7 @@ def ref_calculate_hhi(carrier_shares: Mapping[str, float]) -> float:
     hhi = 0.0
     for s in carrier_shares.values():
         pct = (s / total) * 100.0
-        hhi += pct ** 2
+        hhi += pct**2
     return round(hhi, 2)
 
 
@@ -399,9 +431,11 @@ def calc_elasticity(*args, **kwargs):
 def calc_divergence(*args, **kwargs):
     return ref_calculate_mospi_cpi_divergence(*args, **kwargs)
 
+
 # ---------------------------------------------------------------------------
 # Database Model Setup (for Isolated Testing & Cross-Worktree Resilience)
 # ---------------------------------------------------------------------------
+
 
 class Cycle4OrmBase(DeclarativeBase):
     pass
@@ -410,7 +444,9 @@ class Cycle4OrmBase(DeclarativeBase):
 class EconometricIndexTest(Cycle4OrmBase):
     __tablename__ = "econometric_indices"
     __table_args__ = (
-        UniqueConstraint("date", "route_code", "calculation_method", name="uq_econometric_index"),
+        UniqueConstraint(
+            "date", "route_code", "calculation_method", name="uq_econometric_index"
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -420,15 +456,21 @@ class EconometricIndexTest(Cycle4OrmBase):
     paasche_index: Mapped[float] = mapped_column(Float, nullable=False)
     fisher_ideal_index: Mapped[float] = mapped_column(Float, nullable=False)
     substitution_bias: Mapped[float] = mapped_column(Float, nullable=False)
-    calculation_method: Mapped[str] = mapped_column(String(50), nullable=False, default="fisher_ideal")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    calculation_method: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="fisher_ideal"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC)
+    )
 
 
 class MospiCpiSeriesTest(Cycle4OrmBase):
     __tablename__ = "mospi_cpi_series"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    year_month: Mapped[str] = mapped_column(String(7), nullable=False, unique=True, index=True)
+    year_month: Mapped[str] = mapped_column(
+        String(7), nullable=False, unique=True, index=True
+    )
     cpi_transport_index: Mapped[float] = mapped_column(Float, nullable=False)
     airfare_sub_index: Mapped[float] = mapped_column(Float, nullable=False)
     headline_cpi: Mapped[float] = mapped_column(Float, nullable=False)
@@ -464,9 +506,13 @@ class DgcaViolationTest(Cycle4OrmBase):
     fare_inr: Mapped[float] = mapped_column(Float, nullable=False)
     median_baseline_fare: Mapped[float] = mapped_column(Float, nullable=False)
     surge_multiple: Mapped[float] = mapped_column(Float, nullable=False)
-    severity: Mapped[str] = mapped_column(String(20), nullable=False)  # 'WARNING', 'CRITICAL', 'SEVERE'
+    severity: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # 'WARNING', 'CRITICAL', 'SEVERE'
     violation_code: Mapped[str] = mapped_column(String(50), nullable=False)
-    detected_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC)
+    )
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
 
 
@@ -488,6 +534,7 @@ def test_db_session():
 # 1. Fisher & Paasche Index Calculations Test Suite
 # ---------------------------------------------------------------------------
 
+
 class TestFisherPaascheCalculations:
     """Verifies mathematical correctness of Paasche and Fisher Ideal Index formulations."""
 
@@ -501,8 +548,12 @@ class TestFisherPaascheCalculations:
         laspeyres = 100.0  # Definition of base period Laspeyres
         fisher = calc_fisher(laspeyres, paasche)
 
-        assert math.isclose(paasche, 100.00, abs_tol=1e-6), f"Expected Paasche 100.0, got {paasche}"
-        assert math.isclose(fisher, 100.00, abs_tol=1e-6), f"Expected Fisher 100.0, got {fisher}"
+        assert math.isclose(
+            paasche, 100.00, abs_tol=1e-6
+        ), f"Expected Paasche 100.0, got {paasche}"
+        assert math.isclose(
+            fisher, 100.00, abs_tol=1e-6
+        ), f"Expected Fisher 100.0, got {fisher}"
 
     def test_uniform_price_scaling_linearity(self):
         """Invariant: When all current fares scale by factor alpha, Paasche and Fisher scale by alpha * 100."""
@@ -515,8 +566,12 @@ class TestFisherPaascheCalculations:
         laspeyres = 125.0
         fisher = calc_fisher(laspeyres, paasche)
 
-        assert math.isclose(paasche, 125.00, abs_tol=1e-6), f"Expected Paasche 125.0, got {paasche}"
-        assert math.isclose(fisher, 125.00, abs_tol=1e-6), f"Expected Fisher 125.0, got {fisher}"
+        assert math.isclose(
+            paasche, 125.00, abs_tol=1e-6
+        ), f"Expected Paasche 125.0, got {paasche}"
+        assert math.isclose(
+            fisher, 125.00, abs_tol=1e-6
+        ), f"Expected Fisher 125.0, got {fisher}"
 
     def test_fisher_geometric_mean_property(self):
         """Fisher Ideal Index must strictly equal the geometric mean sqrt(I_L * I_P)."""
@@ -537,21 +592,29 @@ class TestFisherPaascheCalculations:
 
         # Forward index from 0 to t
         # Laspeyres 0->t
-        l_0t = (w0["DEL-BOM"] * (pt["DEL-BOM"] / p0["DEL-BOM"]) + w0["BOM-BLR"] * (pt["BOM-BLR"] / p0["BOM-BLR"])) * 100.0
+        l_0t = (
+            w0["DEL-BOM"] * (pt["DEL-BOM"] / p0["DEL-BOM"])
+            + w0["BOM-BLR"] * (pt["BOM-BLR"] / p0["BOM-BLR"])
+        ) * 100.0
         # Paasche 0->t
         p_0t = calc_paasche(pt, p0, wt)
         f_0t = calc_fisher(l_0t, p_0t)
 
         # Reverse index from t to 0
         # Laspeyres t->0 uses wt as base weights
-        l_t0 = (wt["DEL-BOM"] * (p0["DEL-BOM"] / pt["DEL-BOM"]) + wt["BOM-BLR"] * (p0["BOM-BLR"] / pt["BOM-BLR"])) * 100.0
+        l_t0 = (
+            wt["DEL-BOM"] * (p0["DEL-BOM"] / pt["DEL-BOM"])
+            + wt["BOM-BLR"] * (p0["BOM-BLR"] / pt["BOM-BLR"])
+        ) * 100.0
         # Paasche t->0 uses w0 as current weights
         p_t0 = calc_paasche(p0, pt, w0)
         f_t0 = calc_fisher(l_t0, p_t0)
 
         # Normalized product (f_0t / 100) * (f_t0 / 100) == 1.0
         prod = (f_0t / 100.0) * (f_t0 / 100.0)
-        assert math.isclose(prod, 1.00, abs_tol=1e-5), f"Time reversal product was {prod}, expected 1.0"
+        assert math.isclose(
+            prod, 1.00, abs_tol=1e-5
+        ), f"Time reversal product was {prod}, expected 1.0"
 
     def test_paasche_monotone_increase(self):
         """Monotonicity: Increasing any fare in current period strictly increases the Paasche index."""
@@ -591,6 +654,7 @@ class TestFisherPaascheCalculations:
 # 2. Substitution Bias Invariants Test Suite
 # ---------------------------------------------------------------------------
 
+
 class TestSubstitutionBiasInvariants:
     """Verifies microeconomic substitution bias properties: I_L >= I_F >= I_P and Delta >= 0."""
 
@@ -607,16 +671,22 @@ class TestSubstitutionBiasInvariants:
         # Consumers substitute away from ROUTE_SURGE to ROUTE_STABLE (30/70)
         current_weights = {"ROUTE_SURGE": 0.30, "ROUTE_STABLE": 0.70}
 
-        laspeyres = (base_weights["ROUTE_SURGE"] * (6000.0 / 4000.0) +
-                     base_weights["ROUTE_STABLE"] * (4000.0 / 4000.0)) * 100.0
+        laspeyres = (
+            base_weights["ROUTE_SURGE"] * (6000.0 / 4000.0)
+            + base_weights["ROUTE_STABLE"] * (4000.0 / 4000.0)
+        ) * 100.0
         # Laspeyres = 0.5 * 150 + 0.5 * 100 = 125.0
 
         paasche = calc_paasche(current_fares, base_fares, current_weights)
         fisher = calc_fisher(laspeyres, paasche)
 
         # Invariant Assertion
-        assert laspeyres >= fisher >= paasche, f"Invariant violated: {laspeyres} >= {fisher} >= {paasche}"
-        assert laspeyres > paasche, "Under substitution, Laspeyres must be strictly greater than Paasche"
+        assert (
+            laspeyres >= fisher >= paasche
+        ), f"Invariant violated: {laspeyres} >= {fisher} >= {paasche}"
+        assert (
+            laspeyres > paasche
+        ), "Under substitution, Laspeyres must be strictly greater than Paasche"
 
     def test_substitution_bias_points_and_percentage(self):
         """Substitution bias Delta = I_L - I_F >= 0 and bias_pct >= 0."""
@@ -663,14 +733,15 @@ class TestSubstitutionBiasInvariants:
         f_strong = calc_fisher(laspeyres, p_strong)
         bias_strong = calc_substitution_bias(laspeyres, f_strong)["bias_points"]
 
-        assert bias_strong > bias_mild, (
-            f"Stronger substitution should produce larger bias: {bias_strong} vs {bias_mild}"
-        )
+        assert (
+            bias_strong > bias_mild
+        ), f"Stronger substitution should produce larger bias: {bias_strong} vs {bias_mild}"
 
 
 # ---------------------------------------------------------------------------
 # 3. Lead-time Price Elasticity Dynamics Test Suite
 # ---------------------------------------------------------------------------
+
 
 class TestLeadTimeElasticityDynamics:
     """Verifies price elasticity across booking horizon windows (T+1, T+7, T+15, T+30)."""
@@ -690,14 +761,18 @@ class TestLeadTimeElasticityDynamics:
         e_t15 = abs(el["T+15"])
         e_t30 = abs(el["T+30"])
 
-        assert e_t1 < e_t7 <= e_t15 < e_t30, f"Elasticity gradient violated: {e_t1} < {e_t7} <= {e_t15} < {e_t30}"
+        assert (
+            e_t1 < e_t7 <= e_t15 < e_t30
+        ), f"Elasticity gradient violated: {e_t1} < {e_t7} <= {e_t15} < {e_t30}"
 
     def test_last_minute_inelasticity_at_t1(self):
         """Last-minute travel (T+1) must exhibit inelastic demand (|E_d| < 0.50)."""
         window_fares = {"T+1": 14000.0, "T+7": 8500.0, "T+15": 6800.0, "T+30": 5400.0}
         res = calc_elasticity(window_fares)
         el = res["window_elasticities"]
-        assert abs(el["T+1"]) < 0.50, f"Expected T+1 inelastic (|E| < 0.50), got {abs(el['T+1'])}"
+        assert (
+            abs(el["T+1"]) < 0.50
+        ), f"Expected T+1 inelastic (|E| < 0.50), got {abs(el['T+1'])}"
         assert res.get("is_t1_inelastic", True) is True
 
     def test_advance_purchase_elasticity_at_t30(self):
@@ -705,7 +780,9 @@ class TestLeadTimeElasticityDynamics:
         window_fares = {"T+1": 13000.0, "T+7": 8200.0, "T+15": 6400.0, "T+30": 4900.0}
         res = calc_elasticity(window_fares)
         el = res["window_elasticities"]
-        assert abs(el["T+30"]) > 1.00, f"Expected T+30 elastic (|E| > 1.00), got {abs(el['T+30'])}"
+        assert (
+            abs(el["T+30"]) > 1.00
+        ), f"Expected T+30 elastic (|E| > 1.00), got {abs(el['T+30'])}"
         assert res.get("is_t30_elastic", True) is True
 
     def test_lead_time_price_decay_curve(self):
@@ -713,12 +790,18 @@ class TestLeadTimeElasticityDynamics:
         P(T+1) > P(T+7) > P(T+15) > P(T+30).
         """
         window_fares = {"T+1": 12800.0, "T+7": 8400.0, "T+15": 6700.0, "T+30": 5500.0}
-        assert window_fares["T+1"] > window_fares["T+7"] > window_fares["T+15"] > window_fares["T+30"]
+        assert (
+            window_fares["T+1"]
+            > window_fares["T+7"]
+            > window_fares["T+15"]
+            > window_fares["T+30"]
+        )
 
 
 # ---------------------------------------------------------------------------
 # 4. MoSPI CPI Divergence & Leading Indicator Tracking Test Suite
 # ---------------------------------------------------------------------------
+
 
 class TestMospiCpiDivergenceTracking:
     """Verifies tracking of the gap between real-time APIx index and monthly MoSPI CPI Transport Sub-Index."""
@@ -746,9 +829,15 @@ class TestMospiCpiDivergenceTracking:
     def test_volatility_capture_ratio(self):
         """APIx real-time streaming index captures intra-month volatility dampened by MoSPI (sigma_APIx > sigma_MoSPI)."""
         # APIx has dynamic swings: 105 -> 128 -> 110 -> 135 -> 118
-        apix_series = [{"date": f"2026-08-{i:02d}", "value": v} for i, v in enumerate([105.0, 128.0, 110.0, 135.0, 118.0], 1)]
+        apix_series = [
+            {"date": f"2026-08-{i:02d}", "value": v}
+            for i, v in enumerate([105.0, 128.0, 110.0, 135.0, 118.0], 1)
+        ]
         # MoSPI smoothed monthly series: 108 -> 109 -> 109.5 -> 110 -> 110.5
-        mospi_series = [{"date": f"2026-08-{i:02d}", "value": v} for i, v in enumerate([108.0, 109.0, 109.5, 110.0, 110.5], 1)]
+        mospi_series = [
+            {"date": f"2026-08-{i:02d}", "value": v}
+            for i, v in enumerate([108.0, 109.0, 109.5, 110.0, 110.5], 1)
+        ]
 
         res = calc_divergence(apix_series, mospi_series)
         assert res["apix_volatility"] > res["mospi_volatility"]
@@ -756,16 +845,24 @@ class TestMospiCpiDivergenceTracking:
 
     def test_positive_correlation_macro_alignment(self):
         """Underlying long-run trend between APIx and MoSPI shows strong positive correlation (r >= 0.60)."""
-        apix_series = [{"date": f"2026-{m:02d}-01", "value": 100.0 + m * 3.5 + (m % 2) * 1.5} for m in range(1, 10)]
-        mospi_series = [{"date": f"2026-{m:02d}-01", "value": 100.0 + m * 2.0} for m in range(1, 10)]
+        apix_series = [
+            {"date": f"2026-{m:02d}-01", "value": 100.0 + m * 3.5 + (m % 2) * 1.5}
+            for m in range(1, 10)
+        ]
+        mospi_series = [
+            {"date": f"2026-{m:02d}-01", "value": 100.0 + m * 2.0} for m in range(1, 10)
+        ]
 
         res = calc_divergence(apix_series, mospi_series)
-        assert res["correlation"] >= 0.60, f"Expected correlation >= 0.60, got {res['correlation']}"
+        assert (
+            res["correlation"] >= 0.60
+        ), f"Expected correlation >= 0.60, got {res['correlation']}"
 
 
 # ---------------------------------------------------------------------------
 # 5. DGCA Statutory Violation Audits & ML Anomaly Detection Test Suite
 # ---------------------------------------------------------------------------
+
 
 class TestDgcaRegulatoryViolationSurveillance:
     """Verifies DGCA statutory violation triggers (3-sigma surge, DoD >= 40%, predatory multiples)."""
@@ -871,10 +968,13 @@ class TestDgcaRegulatoryViolationSurveillance:
 # 6. Database ORM Models & Repository Integration Test Suite
 # ---------------------------------------------------------------------------
 
+
 class TestEconometricDatabaseModels:
     """Verifies schema definition, constraints, and CRUD operations on Cycle 4 tables."""
 
-    def test_econometric_index_model_crud_and_constraints(self, test_db_session: Session):
+    def test_econometric_index_model_crud_and_constraints(
+        self, test_db_session: Session
+    ):
         """Verify EconometricIndex persistence and unique constraint on (date, route_code, calculation_method)."""
         idx = EconometricIndexTest(
             date=date(2026, 9, 24),
@@ -889,9 +989,11 @@ class TestEconometricDatabaseModels:
         test_db_session.commit()
 
         # Query back
-        stored = test_db_session.query(EconometricIndexTest).filter_by(
-            date=date(2026, 9, 24), route_code="DEL-BOM"
-        ).first()
+        stored = (
+            test_db_session.query(EconometricIndexTest)
+            .filter_by(date=date(2026, 9, 24), route_code="DEL-BOM")
+            .first()
+        )
         assert stored is not None
         assert stored.fisher_ideal_index == 115.31
         assert stored.substitution_bias == 3.19
@@ -923,7 +1025,11 @@ class TestEconometricDatabaseModels:
         test_db_session.add(m_row)
         test_db_session.commit()
 
-        queried = test_db_session.query(MospiCpiSeriesTest).filter_by(year_month="2026-08").first()
+        queried = (
+            test_db_session.query(MospiCpiSeriesTest)
+            .filter_by(year_month="2026-08")
+            .first()
+        )
         assert queried is not None
         assert queried.cpi_transport_index == 112.4
 
@@ -954,12 +1060,18 @@ class TestEconometricDatabaseModels:
         test_db_session.add(el)
         test_db_session.commit()
 
-        res = test_db_session.query(RouteElasticityTest).filter_by(route_code="BOM-BLR").first()
+        res = (
+            test_db_session.query(RouteElasticityTest)
+            .filter_by(route_code="BOM-BLR")
+            .first()
+        )
         assert res is not None
         assert res.t1_t7_elasticity == -0.35
         assert res.t15_t30_elasticity == -1.45
 
-    def test_dgca_violation_model_and_severity_filtering(self, test_db_session: Session):
+    def test_dgca_violation_model_and_severity_filtering(
+        self, test_db_session: Session
+    ):
         """Verify DgcaViolation creation and filtering by severity ('CRITICAL', 'WARNING')."""
         v1 = DgcaViolationTest(
             route_code="DEL-BOM",
@@ -988,11 +1100,17 @@ class TestEconometricDatabaseModels:
         test_db_session.add_all([v1, v2])
         test_db_session.commit()
 
-        criticals = test_db_session.query(DgcaViolationTest).filter_by(severity="CRITICAL").all()
+        criticals = (
+            test_db_session.query(DgcaViolationTest)
+            .filter_by(severity="CRITICAL")
+            .all()
+        )
         assert len(criticals) == 1
         assert criticals[0].flight_number == "6E-204"
 
-        warnings = test_db_session.query(DgcaViolationTest).filter_by(severity="WARNING").all()
+        warnings = (
+            test_db_session.query(DgcaViolationTest).filter_by(severity="WARNING").all()
+        )
         assert len(warnings) == 1
         assert warnings[0].flight_number == "AI-502"
 
@@ -1000,6 +1118,7 @@ class TestEconometricDatabaseModels:
 # ---------------------------------------------------------------------------
 # 7. Cycle 4 FastAPI Endpoints Integration Test Suite
 # ---------------------------------------------------------------------------
+
 
 class TestCycle4FastApiEndpoints:
     """The live econometrics routes answer. They do not invent a docket."""

@@ -37,7 +37,13 @@ if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
 from ingestion.base import RawFareRecord, ScrapeResult
-from ingestion.config import BOOKING_WINDOWS, DEFAULT_ROUTES, BookingWindow, IngestionConfig, Route
+from ingestion.config import (
+    BOOKING_WINDOWS,
+    DEFAULT_ROUTES,
+    BookingWindow,
+    IngestionConfig,
+    Route,
+)
 from ingestion.crawlers.synthetic import SyntheticFlightGenerator
 from ingestion.orchestrator import IngestionOrchestrator
 from ingestion.proxy_pool import (
@@ -85,12 +91,17 @@ def test_proxy_pool_management() -> None:
 
     pool = ProxyPoolManager(proxies=test_proxies, config=cfg, auto_seed=False)
     assert len(pool) == 5, f"Expected 5 proxies in pool, got {len(pool)}"
-    logger.info("✓ Proxy pool successfully initialized with %d diverse proxy definitions", len(pool))
+    logger.info(
+        "✓ Proxy pool successfully initialized with %d diverse proxy definitions",
+        len(pool),
+    )
 
     # 1. Serialization tests
     blr_proxy = next(p for p in pool._proxies.values() if "proxy-blr" in p.ip)
     safe_dict = blr_proxy.to_dict_safe()
-    assert safe_dict.get("password") == "***", "Password was not redacted in to_dict_safe()"
+    assert (
+        safe_dict.get("password") == "***"
+    ), "Password was not redacted in to_dict_safe()"
     assert "secret123" not in safe_dict["url"], "Password leaked in safe URL"
     pw_proxy = blr_proxy.to_playwright_proxy()
     assert pw_proxy["server"] == "http://proxy-blr.internal:3128"
@@ -102,11 +113,15 @@ def test_proxy_pool_management() -> None:
     # Lowest latency / best score
     best_p = pool.get_proxy(strategy="best_score")
     assert best_p is not None
-    assert best_p.ip == "10.0.0.2", f"Expected lowest score proxy 10.0.0.2, got {best_p.ip}"
+    assert (
+        best_p.ip == "10.0.0.2"
+    ), f"Expected lowest score proxy 10.0.0.2, got {best_p.ip}"
 
     # Round Robin
     rr_ips = [pool.get_proxy(strategy="round_robin").ip for _ in range(5)]
-    assert len(set(rr_ips)) > 1, "Round robin failed to distribute across multiple proxies"
+    assert (
+        len(set(rr_ips)) > 1
+    ), "Round robin failed to distribute across multiple proxies"
     logger.info("✓ Proxy selection strategies (best_score, round_robin) validated")
 
     # 3. Latency scoring & EWMA update
@@ -117,12 +132,20 @@ def test_proxy_pool_management() -> None:
     assert target.consecutive_failures == 0
     # EWMA check: score_new = 0.3 * 40 + 0.7 * orig_score
     expected_score = (0.3 * 40.0) + (0.7 * orig_score)
-    assert abs(target.score - expected_score) < 0.01, f"EWMA mismatch: {target.score} vs {expected_score}"
-    logger.info("✓ EWMA latency scoring formula verified (Score: %.2f -> %.2f)", orig_score, target.score)
+    assert (
+        abs(target.score - expected_score) < 0.01
+    ), f"EWMA mismatch: {target.score} vs {expected_score}"
+    logger.info(
+        "✓ EWMA latency scoring formula verified (Score: %.2f -> %.2f)",
+        orig_score,
+        target.score,
+    )
 
     # 4. Status degradation
     pool.report_success(target, latency_ms=650.0)
-    assert target.status == "degraded", f"Expected degraded status for 650ms latency, got {target.status}"
+    assert (
+        target.status == "degraded"
+    ), f"Expected degraded status for 650ms latency, got {target.status}"
     logger.info("✓ Status degradation verified when latency exceeds threshold")
 
     # 5. Consecutive failure & auto-blacklisting
@@ -136,33 +159,47 @@ def test_proxy_pool_management() -> None:
     pool.report_failure(victim, error="HTTP 429 Too Many Requests", status_code=429)
     assert victim.consecutive_failures == 2
 
-    pool.report_failure(victim, error="HTTP 403 Forbidden Cloudflare Bot", status_code=403)
+    pool.report_failure(
+        victim, error="HTTP 403 Forbidden Cloudflare Bot", status_code=403
+    )
     assert victim.consecutive_failures == 3
-    assert victim.status == "blacklisted", f"Expected blacklisted status, got {victim.status}"
+    assert (
+        victim.status == "blacklisted"
+    ), f"Expected blacklisted status, got {victim.status}"
     assert victim.blacklisted_until is not None
     logger.info("✓ Auto-blacklisting confirmed after 3 consecutive failures")
 
     # Verify blacklisted proxy is excluded from rotation
     for _ in range(10):
         p = pool.get_proxy(strategy="round_robin")
-        assert p.ip != "proxy-del.internal", "Blacklisted proxy was returned by get_proxy()"
+        assert (
+            p.ip != "proxy-del.internal"
+        ), "Blacklisted proxy was returned by get_proxy()"
     logger.info("✓ Blacklisted proxy successfully isolated from routing selection")
 
     # 6. Cooldown expiration and recovery
     time.sleep(2.1)  # Exceed cooldown_seconds = 2.0s
     recovered = pool.check_cooldowns()
-    assert any(p.ip == "proxy-del.internal" for p in recovered), "Cooldown recovery failed"
+    assert any(
+        p.ip == "proxy-del.internal" for p in recovered
+    ), "Cooldown recovery failed"
     assert victim.status == "testing"
     assert victim.consecutive_failures == 0
     logger.info("✓ Cooldown expiration and automatic quarantine recovery verified")
 
     # 7. Emergency recovery under total blackout
     for p in pool._proxies.values():
-        pool.blacklist_proxy(p, reason="Simulated cluster blackout", cooldown_seconds=600.0)
-    assert sum(1 for p in pool._proxies.values() if p.status == "blacklisted") == len(pool)
+        pool.blacklist_proxy(
+            p, reason="Simulated cluster blackout", cooldown_seconds=600.0
+        )
+    assert sum(1 for p in pool._proxies.values() if p.status == "blacklisted") == len(
+        pool
+    )
 
     emergency_p = pool.get_proxy(strategy="best_score")
-    assert emergency_p is not None, "Emergency recovery failed to provide a fallback proxy"
+    assert (
+        emergency_p is not None
+    ), "Emergency recovery failed to provide a fallback proxy"
     assert emergency_p.status == "testing"
     logger.info("✓ Emergency unblacklisting fallback prevented total pool starvation")
 
@@ -199,7 +236,9 @@ async def test_scheduler_orchestration() -> None:
     assert r_obj.origin == "DEL" and r_obj.destination == "BOM"
     r_tuple = normalize_route(("BLR", "DEL"))
     assert r_tuple.origin == "BLR" and r_tuple.destination == "DEL"
-    logger.info("✓ Window alias and route normalizations verified across all horizon representations")
+    logger.info(
+        "✓ Window alias and route normalizations verified across all horizon representations"
+    )
 
     # 2. Instantiate synthetic orchestrator for fast deterministic verification
     synth_config = IngestionConfig(ingestion_mode="synthetic")
@@ -226,17 +265,22 @@ async def test_scheduler_orchestration() -> None:
     status = scheduler.get_job_status()
     total_registered = status["total_registered_jobs"]
     expected_slots = len(DEFAULT_ROUTES) * len(BOOKING_WINDOWS)  # 10 * 4 = 40
-    assert total_registered == expected_slots, (
-        f"Expected {expected_slots} registered slot jobs, got {total_registered}"
+    assert (
+        total_registered == expected_slots
+    ), f"Expected {expected_slots} registered slot jobs, got {total_registered}"
+    logger.info(
+        "✓ APScheduler successfully registered all %d discrete slot jobs",
+        total_registered,
     )
-    logger.info("✓ APScheduler successfully registered all %d discrete slot jobs", total_registered)
 
     # Verify job naming and IDs
     sample_job = next(j for j in status["jobs"] if j["id"] == "slot_DEL_BOM_T+1")
     assert sample_job["route"] == "DEL-BOM"
     assert sample_job["booking_window"] == "T+1"
     assert "interval" in sample_job["trigger"].lower()
-    logger.info("✓ Slot job metadata and trigger structure confirmed (ID: %s)", sample_job["id"])
+    logger.info(
+        "✓ Slot job metadata and trigger structure confirmed (ID: %s)", sample_job["id"]
+    )
 
     # 4. Job lifecycle management: pause, resume, remove
     job_to_pause = "slot_DEL_BOM_T+1"
@@ -254,8 +298,12 @@ async def test_scheduler_orchestration() -> None:
         apply_jitter=True,
     )
 
-    assert exec_record["success"] is True, f"Slot execution failed: {exec_record.get('error')}"
-    assert exec_record["records_count"] > 0, "No fares were extracted from synthetic orchestrator"
+    assert (
+        exec_record["success"] is True
+    ), f"Slot execution failed: {exec_record.get('error')}"
+    assert (
+        exec_record["records_count"] > 0
+    ), "No fares were extracted from synthetic orchestrator"
     assert exec_record["booking_window"] == "T+1"
     assert exec_record["route"] == "DEL-BOM"
     assert exec_record["proxy_url"] is not None
@@ -275,8 +323,12 @@ async def test_scheduler_orchestration() -> None:
         routes=[normalize_route("BOM-BLR")],
         windows=BOOKING_WINDOWS,
     )
-    sweep_results = await sweep_scheduler.trigger_all(stagger_seconds=0.01, apply_jitter=False)
-    assert len(sweep_results) == 4, f"Expected 4 sweep results, got {len(sweep_results)}"
+    sweep_results = await sweep_scheduler.trigger_all(
+        stagger_seconds=0.01, apply_jitter=False
+    )
+    assert (
+        len(sweep_results) == 4
+    ), f"Expected 4 sweep results, got {len(sweep_results)}"
     assert all(r["success"] is True for r in sweep_results)
     logger.info("✓ Multi-slot sweep successfully executed with 100% success rate")
 

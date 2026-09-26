@@ -33,7 +33,9 @@ def test_orm_declares_every_ps_column() -> None:
     assert EXPECTED_PS_COLUMNS <= columns, sorted(EXPECTED_PS_COLUMNS - columns)
 
 
-def test_migration_chain_reaches_a_schema_matching_the_orm(tmp_path, monkeypatch) -> None:
+def test_migration_chain_reaches_a_schema_matching_the_orm(
+    tmp_path, monkeypatch
+) -> None:
     """alembic upgrade head must produce exactly the schema the ORM expects."""
     from alembic import command
     from alembic.config import Config

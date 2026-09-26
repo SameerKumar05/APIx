@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -53,7 +53,7 @@ def _fare(
         taxes_and_fees=0.0,
         total_fare=total,
         source_platform="verification",
-        scraped_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+        scraped_at=datetime(2026, 9, 1, tzinfo=UTC),
         hash_id=hash_id,
         is_synthetic=False,
     )
@@ -64,7 +64,9 @@ def test_lead_time_curve_is_empty_when_no_fares_are_stored(tmp_path: Path) -> No
     app.dependency_overrides[get_db] = lambda: session
     try:
         with TestClient(app) as client:
-            response = client.get("/api/v1/analytics/lead-time-curve", params={"route_code": "DEL-BOM"})
+            response = client.get(
+                "/api/v1/analytics/lead-time-curve", params={"route_code": "DEL-BOM"}
+            )
         assert response.status_code == 200, response.text
         body = response.json()
         assert body["curve_points"] == []
@@ -80,19 +82,63 @@ def test_lead_time_curve_returns_stored_window_fares(tmp_path: Path) -> None:
     session, engine = _open_session(tmp_path, "lead-seeded.db")
     session.add_all(
         [
-            _fare(origin="DEL", destination="BOM", window="T+30", total=4000.0, flight_date=date(2026, 10, 1), hash_id="a" * 64),
-            _fare(origin="DEL", destination="BOM", window="T+30", total=5000.0, flight_date=date(2026, 10, 2), hash_id="b" * 64),
-            _fare(origin="DEL", destination="BOM", window="T+30", total=6000.0, flight_date=date(2026, 10, 3), hash_id="c" * 64),
-            _fare(origin="DEL", destination="BOM", window="T+7", total=8000.0, flight_date=date(2026, 9, 8), hash_id="d" * 64),
-            _fare(origin="DEL", destination="BOM", window="T+7", total=9000.0, flight_date=date(2026, 9, 9), hash_id="e" * 64),
-            _fare(origin="BOM", destination="DEL", window="T+7", total=20000.0, flight_date=date(2026, 9, 9), hash_id="f" * 64),
+            _fare(
+                origin="DEL",
+                destination="BOM",
+                window="T+30",
+                total=4000.0,
+                flight_date=date(2026, 10, 1),
+                hash_id="a" * 64,
+            ),
+            _fare(
+                origin="DEL",
+                destination="BOM",
+                window="T+30",
+                total=5000.0,
+                flight_date=date(2026, 10, 2),
+                hash_id="b" * 64,
+            ),
+            _fare(
+                origin="DEL",
+                destination="BOM",
+                window="T+30",
+                total=6000.0,
+                flight_date=date(2026, 10, 3),
+                hash_id="c" * 64,
+            ),
+            _fare(
+                origin="DEL",
+                destination="BOM",
+                window="T+7",
+                total=8000.0,
+                flight_date=date(2026, 9, 8),
+                hash_id="d" * 64,
+            ),
+            _fare(
+                origin="DEL",
+                destination="BOM",
+                window="T+7",
+                total=9000.0,
+                flight_date=date(2026, 9, 9),
+                hash_id="e" * 64,
+            ),
+            _fare(
+                origin="BOM",
+                destination="DEL",
+                window="T+7",
+                total=20000.0,
+                flight_date=date(2026, 9, 9),
+                hash_id="f" * 64,
+            ),
         ]
     )
     session.commit()
     app.dependency_overrides[get_db] = lambda: session
     try:
         with TestClient(app) as client:
-            response = client.get("/api/v1/analytics/lead-time-curve", params={"route_code": "DEL-BOM"})
+            response = client.get(
+                "/api/v1/analytics/lead-time-curve", params={"route_code": "DEL-BOM"}
+            )
         assert response.status_code == 200, response.text
         points = response.json()["curve_points"]
         assert response.json()["data_available"] is True
@@ -177,7 +223,9 @@ def test_heatmap_returns_observed_departure_slots(tmp_path: Path) -> None:
     app.dependency_overrides[get_db] = lambda: session
     try:
         with TestClient(app) as client:
-            response = client.get("/api/v1/analytics/heatmap", params={"route_code": "DEL-BOM"})
+            response = client.get(
+                "/api/v1/analytics/heatmap", params={"route_code": "DEL-BOM"}
+            )
         assert response.status_code == 200, response.text
         body = response.json()
         assert body["data_available"] is True
@@ -200,7 +248,9 @@ def test_heatmap_returns_observed_departure_slots(tmp_path: Path) -> None:
         engine.dispose()
 
 
-def test_dgca_validation_is_not_evaluated_when_the_ledger_is_empty(tmp_path: Path) -> None:
+def test_dgca_validation_is_not_evaluated_when_the_ledger_is_empty(
+    tmp_path: Path,
+) -> None:
     session, engine = _open_session(tmp_path, "dgca-empty.db")
     app.dependency_overrides[get_db] = lambda: session
     try:
@@ -290,7 +340,10 @@ def test_dgca_validation_reports_only_stored_violation_rows(tmp_path: Path) -> N
         assert body["evaluation_status"] == "evaluated"
         assert body["total_violations"] == 3
         assert body["total_routes_evaluated"] == 2
-        assert [item["route_code"] for item in body["violations"]] == ["BOM-GOI", "DEL-BOM"]
+        assert [item["route_code"] for item in body["violations"]] == [
+            "BOM-GOI",
+            "DEL-BOM",
+        ]
         goi, bom = body["violations"]
         assert goi["observed_max_fare_inr"] == 9000.0
         assert goi["statutory_band_cap_inr"] == 8000.0
@@ -310,7 +363,9 @@ def test_dgca_validation_reports_only_stored_violation_rows(tmp_path: Path) -> N
 
 def test_routes_overview_omits_a_route_with_no_index(tmp_path: Path) -> None:
     session, engine = _open_session(tmp_path, "routes-empty.db")
-    session.add(Route(origin="DEL", destination="BOM", distance_km=1148.0, is_active=True))
+    session.add(
+        Route(origin="DEL", destination="BOM", distance_km=1148.0, is_active=True)
+    )
     session.commit()
     app.dependency_overrides[get_db] = lambda: session
     try:
@@ -400,7 +455,9 @@ def test_route_history_is_empty_when_no_index_is_stored(tmp_path: Path) -> None:
         engine.dispose()
 
 
-def test_route_history_returns_stored_points_and_a_real_week_change(tmp_path: Path) -> None:
+def test_route_history_returns_stored_points_and_a_real_week_change(
+    tmp_path: Path,
+) -> None:
     session, engine = _open_session(tmp_path, "history-seeded.db")
     session.add_all(
         [
@@ -426,7 +483,9 @@ def test_route_history_returns_stored_points_and_a_real_week_change(tmp_path: Pa
     app.dependency_overrides[get_db] = lambda: session
     try:
         with TestClient(app) as client:
-            response = client.get("/api/v1/indices/routes/DEL-BOM/history", params={"days": 30})
+            response = client.get(
+                "/api/v1/indices/routes/DEL-BOM/history", params={"days": 30}
+            )
         assert response.status_code == 200, response.text
         points = response.json()["points"]
         assert response.json()["data_available"] is True
@@ -445,7 +504,9 @@ def test_route_history_returns_stored_points_and_a_real_week_change(tmp_path: Pa
         engine.dispose()
 
 
-def test_national_latest_omits_interval_and_week_change_it_cannot_compute(tmp_path: Path) -> None:
+def test_national_latest_omits_interval_and_week_change_it_cannot_compute(
+    tmp_path: Path,
+) -> None:
     session, engine = _open_session(tmp_path, "latest-no-prior.db")
     session.add(
         NationalDailyIndex(
@@ -476,7 +537,9 @@ def test_national_latest_omits_interval_and_week_change_it_cannot_compute(tmp_pa
         engine.dispose()
 
 
-def test_national_latest_week_change_uses_the_index_seven_days_earlier(tmp_path: Path) -> None:
+def test_national_latest_week_change_uses_the_index_seven_days_earlier(
+    tmp_path: Path,
+) -> None:
     session, engine = _open_session(tmp_path, "latest-prior.db")
     session.add_all(
         [

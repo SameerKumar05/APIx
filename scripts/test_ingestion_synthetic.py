@@ -72,7 +72,9 @@ def run_verification() -> None:
 
     # --- Assertion 2: Zero null or invalid fares ---
     null_fares = [r for r in all_records if r.fare_inr is None]
-    non_positive_fares = [r for r in all_records if r.fare_inr is not None and r.fare_inr <= 0]
+    non_positive_fares = [
+        r for r in all_records if r.fare_inr is not None and r.fare_inr <= 0
+    ]
     print(f"      Null fares found: {len(null_fares)}")
     print(f"      Non-positive fares found: {len(non_positive_fares)}")
     assert (
@@ -91,21 +93,29 @@ def run_verification() -> None:
         if r.destination not in VALID_IATA_CODES:
             invalid_iatas.append((r.flight_number, "destination", r.destination))
         if r.origin == r.destination:
-            invalid_iatas.append((r.flight_number, "loop", f"{r.origin}->{r.destination}"))
+            invalid_iatas.append(
+                (r.flight_number, "loop", f"{r.origin}->{r.destination}")
+            )
 
     print(f"      Invalid IATA occurrences: {len(invalid_iatas)}")
     assert (
         len(invalid_iatas) == 0
     ), f"Assertion failed: Invalid IATAs detected: {invalid_iatas[:5]}"
-    print(f"      ✓ Assertion Passed: 100% valid 3-letter IATA codes ({', '.join(sorted(VALID_IATA_CODES))}).")
+    print(
+        f"      ✓ Assertion Passed: 100% valid 3-letter IATA codes ({', '.join(sorted(VALID_IATA_CODES))})."
+    )
 
     # --- Assertion 4: Valid Airline codes & Flight numbers ---
-    invalid_airlines = [r for r in all_records if r.airline_code not in VALID_AIRLINE_CODES]
+    invalid_airlines = [
+        r for r in all_records if r.airline_code not in VALID_AIRLINE_CODES
+    ]
     print(f"      Invalid airline codes: {len(invalid_airlines)}")
     assert (
         len(invalid_airlines) == 0
     ), f"Assertion failed: Invalid airlines detected: {invalid_airlines[:5]}"
-    print(f"      ✓ Assertion Passed: 100% valid airline codes ({', '.join(sorted(VALID_AIRLINE_CODES))}).")
+    print(
+        f"      ✓ Assertion Passed: 100% valid airline codes ({', '.join(sorted(VALID_AIRLINE_CODES))})."
+    )
 
     # --- Assertion 5: Schema conformity & Chronological validation ---
     schema_errors = []
@@ -125,13 +135,21 @@ def run_verification() -> None:
 
         # Check to_dict() and hash_id generation
         d = r.to_dict()
-        if not d.get("hash_id") or not d.get("origin_iata") or not d.get("destination_iata"):
-            schema_errors.append(f"{r.flight_number}: missing hash_id or iata aliases in dict")
+        if (
+            not d.get("hash_id")
+            or not d.get("origin_iata")
+            or not d.get("destination_iata")
+        ):
+            schema_errors.append(
+                f"{r.flight_number}: missing hash_id or iata aliases in dict"
+            )
 
     assert (
         len(schema_errors) == 0
     ), f"Assertion failed: Schema validation errors: {schema_errors[:5]}"
-    print("      ✓ Assertion Passed: Output schema conforms strictly with valid timestamps and dedup hashes.")
+    print(
+        "      ✓ Assertion Passed: Output schema conforms strictly with valid timestamps and dedup hashes."
+    )
 
     # --- Dynamic Pricing Curve Analysis ---
     print("\n[3/5] Calibrated Dynamic Pricing Curve Breakdown by Booking Window:")
@@ -140,19 +158,31 @@ def run_verification() -> None:
         window_fares[r.booking_window].append(r.fare_inr)
 
     avg_fares = {}
-    print(f"      {'Window':<8} | {'Flights':<8} | {'Min Fare (₹)':<14} | {'Avg Fare (₹)':<14} | {'Max Fare (₹)':<14}")
+    print(
+        f"      {'Window':<8} | {'Flights':<8} | {'Min Fare (₹)':<14} | {'Avg Fare (₹)':<14} | {'Max Fare (₹)':<14}"
+    )
     print("      " + "-" * 66)
     for win in ["T+1", "T+7", "T+15", "T+30", "T+45"]:
         fares = window_fares[win]
         avg = sum(fares) / len(fares)
         avg_fares[win] = avg
-        print(f"      {win:<8} | {len(fares):<8} | {min(fares):<14.2f} | {avg:<14.2f} | {max(fares):<14.2f}")
+        print(
+            f"      {win:<8} | {len(fares):<8} | {min(fares):<14.2f} | {avg:<14.2f} | {max(fares):<14.2f}"
+        )
 
     # Verify monotonic relationship T+1 > T+7 > T+15 > T+30
-    assert avg_fares["T+1"] > avg_fares["T+7"], "Pricing error: T+1 avg fare should exceed T+7"
-    assert avg_fares["T+7"] > avg_fares["T+15"], "Pricing error: T+7 avg fare should exceed T+15"
-    assert avg_fares["T+15"] > avg_fares["T+30"], "Pricing error: T+15 avg fare should exceed T+30"
-    print("      ✓ Assertion Passed: Calibrated surge pricing curve verified: T+1 > T+7 > T+15 > T+30.")
+    assert (
+        avg_fares["T+1"] > avg_fares["T+7"]
+    ), "Pricing error: T+1 avg fare should exceed T+7"
+    assert (
+        avg_fares["T+7"] > avg_fares["T+15"]
+    ), "Pricing error: T+7 avg fare should exceed T+15"
+    assert (
+        avg_fares["T+15"] > avg_fares["T+30"]
+    ), "Pricing error: T+15 avg fare should exceed T+30"
+    print(
+        "      ✓ Assertion Passed: Calibrated surge pricing curve verified: T+1 > T+7 > T+15 > T+30."
+    )
 
     # --- Route-level Breakdown ---
     print("\n[4/5] Route Summary (10 Route Pairs x 4 Windows = 40 Slots):")
@@ -171,7 +201,9 @@ def run_verification() -> None:
         print(f"      {k}: {v}")
 
     print("\n" + "=" * 80)
-    print("PREMIER VERIFICATION CONFIRMED: 40/40 SLOTS, 0 NULL FARES, VALID IATA CODES.")
+    print(
+        "PREMIER VERIFICATION CONFIRMED: 40/40 SLOTS, 0 NULL FARES, VALID IATA CODES."
+    )
     print("=" * 80)
 
 
@@ -185,5 +217,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n❌ UNEXPECTED ERROR: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         sys.exit(2)

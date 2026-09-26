@@ -6,19 +6,19 @@ live fare has been read. produces_live_fares stays false until that happens.
 
 from __future__ import annotations
 
-from typing import Dict, List, TypedDict
+from typing import TypedDict
 
 
 class SourceContract(TypedDict):
-    supported_sources: List[str]
-    source_types: Dict[str, str]
+    supported_sources: list[str]
+    source_types: dict[str, str]
     ps_named_sources_total: int
     ps_named_sources_implemented: int
-    live_verified_sources: List[str]
+    live_verified_sources: list[str]
     produces_live_fares: bool
 
 
-PS_SOURCE_TYPES: Dict[str, str] = {
+PS_SOURCE_TYPES: dict[str, str] = {
     "makemytrip": "ota",
     "easemytrip": "ota",
     "spicejet": "airline_direct",

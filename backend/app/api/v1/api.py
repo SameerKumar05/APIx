@@ -84,7 +84,9 @@ api_router.include_router(arbitrage_router, prefix="/arbitrage", tags=["Arbitrag
 
 
 # Econometrics, CPI Gap Analytics, and DGCA Surveillance endpoints
-api_router.include_router(econometrics_router, prefix="/econometrics", tags=["Econometrics"])
+api_router.include_router(
+    econometrics_router, prefix="/econometrics", tags=["Econometrics"]
+)
 api_router.include_router(econometrics_router, prefix="/anomalies", tags=["Anomalies"])
 # Real-time Streaming WebSocket and diagnostics endpoints
 api_router.include_router(stream_router, prefix="/stream", tags=["Streaming"])

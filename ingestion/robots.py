@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 from ingestion.config import IngestionConfig
@@ -42,9 +42,9 @@ class _Rule:
 
 @dataclass
 class _Group:
-    agents: List[str] = field(default_factory=list)
-    rules: List[_Rule] = field(default_factory=list)
-    crawl_delay: Optional[float] = None
+    agents: list[str] = field(default_factory=list)
+    rules: list[_Rule] = field(default_factory=list)
+    crawl_delay: float | None = None
 
 
 class RobotsPolicy:
@@ -53,8 +53,8 @@ class RobotsPolicy:
     def __init__(
         self,
         robots_url: str,
-        groups: List[_Group],
-        sitemaps: List[str],
+        groups: list[_Group],
+        sitemaps: list[str],
         denied: bool = False,
         reason: str = "",
         user_agent: str = DEFAULT_USER_AGENT,
@@ -79,10 +79,10 @@ class RobotsPolicy:
         return self._reason
 
     @classmethod
-    def deny_all(cls, robots_url: str, reason: str) -> "RobotsPolicy":
+    def deny_all(cls, robots_url: str, reason: str) -> RobotsPolicy:
         return cls(robots_url, [], [], denied=True, reason=reason)
 
-    def _agent_groups(self, user_agent: str) -> List[_Group]:
+    def _agent_groups(self, user_agent: str) -> list[_Group]:
         """Rules from a specifically named group and from the wildcard group are merged.
 
         RFC 9309 lets a crawler pick the single most specific group. For a
@@ -93,13 +93,15 @@ class RobotsPolicy:
         reachable through this code.
         """
         agent = user_agent.split("/")[0].strip().lower()
-        groups: List[_Group] = []
-        named = [g for g in self._groups if any(a != "*" and a in agent for a in g.agents)]
+        groups: list[_Group] = []
+        named = [
+            g for g in self._groups if any(a != "*" and a in agent for a in g.agents)
+        ]
         groups.extend(named)
         groups.extend(g for g in self._groups if "*" in g.agents)
         return groups
 
-    def can_fetch(self, url: str, user_agent: Optional[str] = None) -> bool:
+    def can_fetch(self, url: str, user_agent: str | None = None) -> bool:
         if user_agent is None:
             user_agent = self.user_agent
         if self.is_deny_all:
@@ -114,20 +116,22 @@ class RobotsPolicy:
         path = parsed.path or "/"
         if parsed.query:
             path = f"{path}?{parsed.query}"
-        best: Optional[_Rule] = None
+        best: _Rule | None = None
         best_len = -1
         for group in groups:
             for rule in group.rules:
                 if not rule.matches(path):
                     continue
                 length = len(rule.pattern.rstrip("*").rstrip("$"))
-                if length > best_len or (length == best_len and rule.allow and not (best and best.allow)):
+                if length > best_len or (
+                    length == best_len and rule.allow and not (best and best.allow)
+                ):
                     best, best_len = rule, length
         if best is None:
             return True
         return best.allow
 
-    def crawl_delay(self, user_agent: Optional[str] = None) -> Optional[float]:
+    def crawl_delay(self, user_agent: str | None = None) -> float | None:
         if user_agent is None:
             user_agent = self.user_agent
         for group in self._agent_groups(user_agent):
@@ -135,7 +139,9 @@ class RobotsPolicy:
                 return group.crawl_delay
         return None
 
-    def effective_delay(self, config: IngestionConfig, user_agent: Optional[str] = None) -> float:
+    def effective_delay(
+        self, config: IngestionConfig, user_agent: str | None = None
+    ) -> float:
         """Crawl delay with the configured floor applied, so a permissive or absent
         directive still cannot drive a crawl faster than our own ethics baseline."""
         if user_agent is None:
@@ -145,14 +151,16 @@ class RobotsPolicy:
             return config.robots_min_delay_seconds
         return max(float(published), config.robots_min_delay_seconds)
 
-    def sitemaps(self) -> List[str]:
+    def sitemaps(self) -> list[str]:
         return list(self._sitemaps)
 
 
-def parse_robots_txt(robots_url: str, text: str, user_agent: str = DEFAULT_USER_AGENT) -> RobotsPolicy:
-    groups: List[_Group] = []
-    sitemaps: List[str] = []
-    current: Optional[_Group] = None
+def parse_robots_txt(
+    robots_url: str, text: str, user_agent: str = DEFAULT_USER_AGENT
+) -> RobotsPolicy:
+    groups: list[_Group] = []
+    sitemaps: list[str] = []
+    current: _Group | None = None
     expecting_agent = False
 
     for raw in (text or "").splitlines():
@@ -188,7 +196,9 @@ def parse_robots_txt(robots_url: str, text: str, user_agent: str = DEFAULT_USER_
         elif key == "sitemap":
             sitemaps.append(value)
 
-    return RobotsPolicy(robots_url, [g for g in groups if g.agents], sitemaps, user_agent=user_agent)
+    return RobotsPolicy(
+        robots_url, [g for g in groups if g.agents], sitemaps, user_agent=user_agent
+    )
 
 
 def robots_url_for(base_url: str) -> str:
@@ -200,7 +210,7 @@ def load_policy(
     base_url: str,
     config: IngestionConfig,
     user_agent: str = DEFAULT_USER_AGENT,
-    fetcher: Optional[Any] = None,
+    fetcher: Any | None = None,
 ) -> RobotsPolicy:
     """Fetch and parse the origin's robots.txt.
 
@@ -228,10 +238,12 @@ def load_policy(
         return RobotsPolicy.deny_all(url, f"{type(exc).__name__}: {exc}")
 
 
-_POLICY_CACHE: Dict[str, RobotsPolicy] = {}
+_POLICY_CACHE: dict[str, RobotsPolicy] = {}
 
 
-def cached_policy(base_url: str, config: IngestionConfig, user_agent: str = DEFAULT_USER_AGENT) -> RobotsPolicy:
+def cached_policy(
+    base_url: str, config: IngestionConfig, user_agent: str = DEFAULT_USER_AGENT
+) -> RobotsPolicy:
     key = f"{base_url}|{user_agent}|{config.respect_robots_txt}"
     if key not in _POLICY_CACHE:
         _POLICY_CACHE[key] = load_policy(base_url, config, user_agent)

@@ -30,6 +30,7 @@ logger = logging.getLogger("backend.app.db.econometrics_repo")
 # Helpers
 # ============================================================================
 
+
 def _parse_date(val: date | datetime | str | None) -> date | None:
     """Parse date or ISO string to standard date object."""
     if val is None:
@@ -62,6 +63,7 @@ def _parse_datetime(val: datetime | date | str | None) -> datetime | None:
 # ============================================================================
 # 1. Econometric Index Repository Operations
 # ============================================================================
+
 
 def upsert_econometric_index(
     db: Session,
@@ -235,20 +237,17 @@ def get_index_comparison_summary(
     clean_route = route_code.strip().upper()
     cutoff_date = date.today() - timedelta(days=days)
 
-    stmt = (
-        select(
-            func.count(EconometricIndex.id).label("total_records"),
-            func.avg(EconometricIndex.laspeyres_index).label("avg_laspeyres"),
-            func.avg(EconometricIndex.paasche_index).label("avg_paasche"),
-            func.avg(EconometricIndex.fisher_ideal_index).label("avg_fisher"),
-            func.avg(EconometricIndex.substitution_bias).label("avg_substitution_bias"),
-            func.max(EconometricIndex.substitution_bias).label("max_substitution_bias"),
-            func.min(EconometricIndex.substitution_bias).label("min_substitution_bias"),
-        )
-        .where(
-            EconometricIndex.route_code == clean_route,
-            EconometricIndex.date >= cutoff_date,
-        )
+    stmt = select(
+        func.count(EconometricIndex.id).label("total_records"),
+        func.avg(EconometricIndex.laspeyres_index).label("avg_laspeyres"),
+        func.avg(EconometricIndex.paasche_index).label("avg_paasche"),
+        func.avg(EconometricIndex.fisher_ideal_index).label("avg_fisher"),
+        func.avg(EconometricIndex.substitution_bias).label("avg_substitution_bias"),
+        func.max(EconometricIndex.substitution_bias).label("max_substitution_bias"),
+        func.min(EconometricIndex.substitution_bias).label("min_substitution_bias"),
+    ).where(
+        EconometricIndex.route_code == clean_route,
+        EconometricIndex.date >= cutoff_date,
     )
     res = db.execute(stmt).one()
 
@@ -256,8 +255,12 @@ def get_index_comparison_summary(
         "route_code": clean_route,
         "days": days,
         "total_records": res.total_records or 0,
-        "avg_laspeyres": round(res.avg_laspeyres, 4) if res.avg_laspeyres is not None else None,
-        "avg_paasche": round(res.avg_paasche, 4) if res.avg_paasche is not None else None,
+        "avg_laspeyres": (
+            round(res.avg_laspeyres, 4) if res.avg_laspeyres is not None else None
+        ),
+        "avg_paasche": (
+            round(res.avg_paasche, 4) if res.avg_paasche is not None else None
+        ),
         "avg_fisher": round(res.avg_fisher, 4) if res.avg_fisher is not None else None,
         "avg_substitution_bias": (
             round(res.avg_substitution_bias, 4)
@@ -280,6 +283,7 @@ def get_index_comparison_summary(
 # ============================================================================
 # 2. MoSPI CPI Series Repository Operations
 # ============================================================================
+
 
 def upsert_mospi_cpi_series(
     db: Session,
@@ -424,7 +428,9 @@ def get_cpi_divergence_analysis(
         agg = db.execute(stmt).one()
 
         apix_fisher = round(agg.avg_fisher, 2) if agg.avg_fisher is not None else None
-        apix_laspeyres = round(agg.avg_laspeyres, 2) if agg.avg_laspeyres is not None else None
+        apix_laspeyres = (
+            round(agg.avg_laspeyres, 2) if agg.avg_laspeyres is not None else None
+        )
 
         gap_airfare_pct = None
         if apix_fisher is not None and m.airfare_sub_index > 0:
@@ -435,22 +441,25 @@ def get_cpi_divergence_analysis(
         gap_transport_pct = None
         if apix_fisher is not None and m.cpi_transport_index > 0:
             gap_transport_pct = round(
-                ((apix_fisher - m.cpi_transport_index) / m.cpi_transport_index) * 100.0, 2
+                ((apix_fisher - m.cpi_transport_index) / m.cpi_transport_index) * 100.0,
+                2,
             )
 
-        results.append({
-            "year_month": m.year_month,
-            "mospi_headline_cpi": m.headline_cpi,
-            "mospi_transport_cpi": m.cpi_transport_index,
-            "mospi_airfare_sub_index": m.airfare_sub_index,
-            "apix_national_fisher": apix_fisher,
-            "apix_national_laspeyres": apix_laspeyres,
-            "sample_days": agg.sample_days or 0,
-            "divergence_airfare_pct": gap_airfare_pct,
-            "divergence_transport_pct": gap_transport_pct,
-            "published_at": m.published_at.isoformat() if m.published_at else None,
-            "source": m.source,
-        })
+        results.append(
+            {
+                "year_month": m.year_month,
+                "mospi_headline_cpi": m.headline_cpi,
+                "mospi_transport_cpi": m.cpi_transport_index,
+                "mospi_airfare_sub_index": m.airfare_sub_index,
+                "apix_national_fisher": apix_fisher,
+                "apix_national_laspeyres": apix_laspeyres,
+                "sample_days": agg.sample_days or 0,
+                "divergence_airfare_pct": gap_airfare_pct,
+                "divergence_transport_pct": gap_transport_pct,
+                "published_at": m.published_at.isoformat() if m.published_at else None,
+                "source": m.source,
+            }
+        )
 
     return results
 
@@ -458,6 +467,7 @@ def get_cpi_divergence_analysis(
 # ============================================================================
 # 3. Route Elasticity Repository Operations
 # ============================================================================
+
 
 def upsert_route_elasticity(
     db: Session,
@@ -610,19 +620,28 @@ def get_network_elasticity_summary(
     return {
         "target_date": t_date.isoformat() if t_date else None,
         "corridors_analyzed": res.corridors_analyzed or 0,
-        "avg_t1_t7_elasticity": round(res.avg_t1_t7, 4) if res.avg_t1_t7 is not None else None,
-        "avg_t7_t15_elasticity": round(res.avg_t7_t15, 4) if res.avg_t7_t15 is not None else None,
+        "avg_t1_t7_elasticity": (
+            round(res.avg_t1_t7, 4) if res.avg_t1_t7 is not None else None
+        ),
+        "avg_t7_t15_elasticity": (
+            round(res.avg_t7_t15, 4) if res.avg_t7_t15 is not None else None
+        ),
         "avg_t15_t30_elasticity": (
             round(res.avg_t15_t30, 4) if res.avg_t15_t30 is not None else None
         ),
-        "avg_decay_rate": round(res.avg_decay, 6) if res.avg_decay is not None else None,
-        "avg_confidence": round(res.avg_confidence, 4) if res.avg_confidence is not None else None,
+        "avg_decay_rate": (
+            round(res.avg_decay, 6) if res.avg_decay is not None else None
+        ),
+        "avg_confidence": (
+            round(res.avg_confidence, 4) if res.avg_confidence is not None else None
+        ),
     }
 
 
 # ============================================================================
 # 4. DGCA Tariff Violation Audit Repository Operations
 # ============================================================================
+
 
 def record_dgca_violation(
     db: Session,
@@ -650,7 +669,11 @@ def record_dgca_violation(
     calc_surge = (
         surge_multiple
         if surge_multiple is not None
-        else (round(fare_inr / median_baseline_fare, 2) if median_baseline_fare > 0 else 1.0)
+        else (
+            round(fare_inr / median_baseline_fare, 2)
+            if median_baseline_fare > 0
+            else 1.0
+        )
     )
 
     record = DgcaViolation(
@@ -843,6 +866,7 @@ def get_dgca_violations_summary(
 # 5. DGCA Historical Traffic Weights & Route Sync Operations
 # ============================================================================
 
+
 def upsert_dgca_traffic_weight(
     db: Session,
     route_code: str,
@@ -972,11 +996,10 @@ def update_active_route_weights_from_dgca(
     return updated_count
 
 
-
-
 # ============================================================================
 # 6. Object-Oriented Econometrics Repository Wrapper
 # ============================================================================
+
 
 class EconometricsRepo:
     """Object-oriented repository wrapper for econometrics, CPI divergence,
@@ -994,7 +1017,9 @@ class EconometricsRepo:
         """Upsert an econometric price index record."""
         return upsert_econometric_index(self.db, **kwargs)
 
-    def bulk_upsert_indices(self, records: list[dict[str, Any] | EconometricIndex], commit: bool = True) -> int:
+    def bulk_upsert_indices(
+        self, records: list[dict[str, Any] | EconometricIndex], commit: bool = True
+    ) -> int:
         """Bulk upsert econometric price index records."""
         return bulk_upsert_econometric_indices(self.db, records=records, commit=commit)
 
@@ -1015,7 +1040,9 @@ class EconometricsRepo:
         """Upsert a MoSPI CPI benchmark record."""
         return upsert_mospi_cpi_series(self.db, **kwargs)
 
-    def bulk_upsert_mospi_cpi(self, records: list[dict[str, Any]], commit: bool = True) -> int:
+    def bulk_upsert_mospi_cpi(
+        self, records: list[dict[str, Any]], commit: bool = True
+    ) -> int:
         """Bulk upsert MoSPI CPI benchmark records."""
         return bulk_upsert_mospi_cpi(self.db, records=records, commit=commit)
 
@@ -1036,7 +1063,9 @@ class EconometricsRepo:
         """Upsert a route elasticity curve record."""
         return upsert_route_elasticity(self.db, **kwargs)
 
-    def bulk_upsert_elasticities(self, records: list[dict[str, Any]], commit: bool = True) -> int:
+    def bulk_upsert_elasticities(
+        self, records: list[dict[str, Any]], commit: bool = True
+    ) -> int:
         """Bulk upsert route elasticity curve records."""
         return bulk_upsert_route_elasticities(self.db, records=records, commit=commit)
 
@@ -1057,7 +1086,9 @@ class EconometricsRepo:
         """Record a DGCA tariff violation audit event."""
         return record_dgca_violation(self.db, **kwargs)
 
-    def bulk_record_violations(self, records: list[dict[str, Any]], commit: bool = True) -> int:
+    def bulk_record_violations(
+        self, records: list[dict[str, Any]], commit: bool = True
+    ) -> int:
         """Bulk record DGCA tariff violation audit events."""
         return bulk_record_dgca_violations(self.db, records=records, commit=commit)
 
@@ -1065,9 +1096,13 @@ class EconometricsRepo:
         """Query DGCA tariff violation audit records."""
         return get_dgca_violations(self.db, **kwargs)
 
-    def update_violation_status(self, violation_id: int, status: str, commit: bool = True) -> DgcaViolation | None:
+    def update_violation_status(
+        self, violation_id: int, status: str, commit: bool = True
+    ) -> DgcaViolation | None:
         """Update review status of a violation."""
-        return update_dgca_violation_status(self.db, violation_id=violation_id, status=status, commit=commit)
+        return update_dgca_violation_status(
+            self.db, violation_id=violation_id, status=status, commit=commit
+        )
 
     def get_violations_summary(self, **kwargs: Any) -> dict[str, Any]:
         """Retrieve DGCA violation audit summary."""
@@ -1078,7 +1113,9 @@ class EconometricsRepo:
         """Upsert a monthly DGCA corridor traffic weight."""
         return upsert_dgca_traffic_weight(self.db, **kwargs)
 
-    def bulk_upsert_traffic_weights(self, records: list[dict[str, Any]], commit: bool = True) -> int:
+    def bulk_upsert_traffic_weights(
+        self, records: list[dict[str, Any]], commit: bool = True
+    ) -> int:
         """Bulk upsert monthly DGCA corridor traffic weights."""
         return bulk_upsert_dgca_traffic_weights(self.db, records=records, commit=commit)
 
@@ -1088,4 +1125,6 @@ class EconometricsRepo:
 
     def sync_route_weights_from_dgca(self, year_month: str, commit: bool = True) -> int:
         """Synchronize active Route table weights from DGCA traffic."""
-        return update_active_route_weights_from_dgca(self.db, year_month=year_month, commit=commit)
+        return update_active_route_weights_from_dgca(
+            self.db, year_month=year_month, commit=commit
+        )

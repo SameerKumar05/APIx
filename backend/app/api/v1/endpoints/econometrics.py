@@ -32,7 +32,6 @@ from backend.app.db.econometrics_repo import (
 from backend.app.db.session import get_db
 from backend.app.models.econometrics import DgcaViolation, RouteElasticity
 from backend.app.models.raw_fare import RawFare
-from backend.app.services.mospi_provenance import source_cites_press_note
 from backend.app.schemas.econometrics import (
     CarrierViolationDistribution,
     CpiDivergencePoint,
@@ -52,6 +51,7 @@ from backend.app.schemas.econometrics import (
     ElasticitySegments,
 )
 from backend.app.services.econometric_engine import EconometricEngine
+from backend.app.services.mospi_provenance import source_cites_press_note
 
 router = APIRouter()
 
@@ -79,7 +79,11 @@ def configured_api_keys() -> frozenset[str]:
     Compiled-in admin tokens are never accepted. Outside development, the
     published ingestion default is not treated as a configured key.
     """
-    keys = {part.strip() for part in os.environ.get("APIX_API_KEYS", "").split(",") if part.strip()}
+    keys = {
+        part.strip()
+        for part in os.environ.get("APIX_API_KEYS", "").split(",")
+        if part.strip()
+    }
     ingestion = os.environ.get("INGESTION_API_KEY", "").strip()
     environment = os.environ.get("ENVIRONMENT", settings.ENVIRONMENT).strip().lower()
     if environment == "development":
@@ -150,7 +154,9 @@ def _pearson(left: list[float], right: list[float]) -> float | None:
         return None
     mean_left = sum(left) / count
     mean_right = sum(right) / count
-    covariance = sum((x - mean_left) * (y - mean_right) for x, y in zip(left, right, strict=True))
+    covariance = sum(
+        (x - mean_left) * (y - mean_right) for x, y in zip(left, right, strict=True)
+    )
     variance_left = sum((x - mean_left) ** 2 for x in left)
     variance_right = sum((y - mean_right) ** 2 for y in right)
     if variance_left <= 0 or variance_right <= 0:
@@ -240,7 +246,9 @@ def _indices_from_raw_fares(db: Session, route_code: str) -> _ComputedIndex:
         fare = float(row.total_fare)
         if fare <= 0:
             continue
-        observed = row.scraped_at.date() if row.scraped_at is not None else row.flight_date
+        observed = (
+            row.scraped_at.date() if row.scraped_at is not None else row.flight_date
+        )
         by_route_date.setdefault((code, observed), []).append(fare)
     if not by_route_date:
         raise ValueError("no raw fares available to compute an index")
@@ -261,7 +269,9 @@ def _indices_from_raw_fares(db: Session, route_code: str) -> _ComputedIndex:
         base_weights[code] = float(len(base_vals))
         current_weights[code] = float(len(current_vals))
     if not current_fares:
-        raise ValueError("raw fares do not cover a common route on the base and current dates")
+        raise ValueError(
+            "raw fares do not cover a common route on the base and current dates"
+        )
 
     result = EconometricEngine(
         base_fares=base_fares,
@@ -312,10 +322,14 @@ def _empty_indices() -> EconometricIndicesResponse:
     summary="Get axiomatic econometric price indices",
 )
 def get_econometric_indices_endpoint(
-    route_code: str | None = Query(None, description="Optional route corridor (e.g. DEL-BOM) or 'NATIONAL'"),
+    route_code: str | None = Query(
+        None, description="Optional route corridor (e.g. DEL-BOM) or 'NATIONAL'"
+    ),
     start_date: str | None = Query(None, description="Start date filter (YYYY-MM-DD)"),
     end_date: str | None = Query(None, description="End date filter (YYYY-MM-DD)"),
-    calculation_method: str | None = Query(None, description="Methodology filter (e.g. 'chain_weighted')"),
+    calculation_method: str | None = Query(
+        None, description="Methodology filter (e.g. 'chain_weighted')"
+    ),
     limit: int = Query(100, ge=1, le=1000, description="Max observations to return"),
     db: Session = Depends(get_db),
     _: str | None = Depends(verify_optional_auth),
@@ -335,7 +349,11 @@ def get_econometric_indices_endpoint(
     transport_cpi = _latest_transport_cpi(db)
     series_points = [
         EconometricIndexPoint(
-            date=rec.date.isoformat() if hasattr(rec.date, "isoformat") else str(rec.date),
+            date=(
+                rec.date.isoformat()
+                if hasattr(rec.date, "isoformat")
+                else str(rec.date)
+            ),
             laspeyres=rec.laspeyres_index,
             paasche=rec.paasche_index,
             fisher=rec.fisher_ideal_index,
@@ -347,12 +365,18 @@ def get_econometric_indices_endpoint(
         for rec in reversed(records)
     ]
     latest = series_points[-1]
-    biases = [point.substitution_bias for point in series_points if point.substitution_bias is not None]
+    biases = [
+        point.substitution_bias
+        for point in series_points
+        if point.substitution_bias is not None
+    ]
     summary = EconometricIndicesSummary(
         current_fisher=latest.fisher,
         current_laspeyres=latest.laspeyres,
         current_paasche=latest.paasche,
-        avg_substitution_bias=sum(biases) / len(biases) if biases else latest.laspeyres - latest.fisher,
+        avg_substitution_bias=(
+            sum(biases) / len(biases) if biases else latest.laspeyres - latest.fisher
+        ),
         max_substitution_bias=max(biases) if biases else None,
         total_observations=len(series_points),
     )
@@ -361,7 +385,11 @@ def get_econometric_indices_endpoint(
         laspeyres_index=latest.laspeyres,
         paasche_index=latest.paasche,
         fisher_index=latest.fisher,
-        substitution_bias=latest.substitution_bias if latest.substitution_bias is not None else latest.laspeyres - latest.fisher,
+        substitution_bias=(
+            latest.substitution_bias
+            if latest.substitution_bias is not None
+            else latest.laspeyres - latest.fisher
+        ),
         series=series_points,
         items=series_points,
         total=len(series_points),
@@ -415,10 +443,14 @@ def _cpi_response(
     summary="Alias for /cpi-divergence",
 )
 def get_cpi_divergence_endpoint(
-    start_month: str | None = Query(None, description="Starting month in format YYYY-MM"),
+    start_month: str | None = Query(
+        None, description="Starting month in format YYYY-MM"
+    ),
     end_month: str | None = Query(None, description="Ending month in format YYYY-MM"),
     months: int = Query(12, ge=1, le=60, description="Lookback window in months"),
-    lag_days: int = Query(38, ge=0, le=180, description="Maximum lead window to search, in days"),
+    lag_days: int = Query(
+        38, ge=0, le=180, description="Maximum lead window to search, in days"
+    ),
     db: Session = Depends(get_db),
     _: str | None = Depends(verify_optional_auth),
 ) -> CpiDivergenceResponse:
@@ -466,7 +498,9 @@ def get_cpi_divergence_endpoint(
     mospi = [point.mospi_cpi for point in points]
     correlation = _pearson(apix, mospi)
     if correlation is None:
-        return _cpi_response(points, None, None, "overlapping observations have zero variance")
+        return _cpi_response(
+            points, None, None, "overlapping observations have zero variance"
+        )
     lead_days, lead_reason = _optimal_lead_days(
         [point.date for point in points],
         apix,
@@ -485,7 +519,9 @@ def _window_medians(db: Session, route_code: str) -> dict[str, float]:
     for row in db.execute(stmt).scalars():
         if row.total_fare is None or float(row.total_fare) <= 0:
             continue
-        grouped.setdefault(row.booking_window.strip().upper(), []).append(float(row.total_fare))
+        grouped.setdefault(row.booking_window.strip().upper(), []).append(
+            float(row.total_fare)
+        )
     return {window: _median(values) for window, values in grouped.items()}
 
 
@@ -523,8 +559,12 @@ def _gradient_from_fares(
     summary="Get advance booking price elasticity curves",
 )
 def get_elasticity_endpoint(
-    route_code: str = Query("NATIONAL", description="Route corridor code (e.g. DEL-BOM) or 'NATIONAL'"),
-    as_of_date: str | None = Query(None, description="Target evaluation date (YYYY-MM-DD)"),
+    route_code: str = Query(
+        "NATIONAL", description="Route corridor code (e.g. DEL-BOM) or 'NATIONAL'"
+    ),
+    as_of_date: str | None = Query(
+        None, description="Target evaluation date (YYYY-MM-DD)"
+    ),
     db: Session = Depends(get_db),
     _: str | None = Depends(verify_optional_auth),
 ) -> ElasticityResponse:
@@ -547,7 +587,11 @@ def get_elasticity_endpoint(
         avg_lead_time_decay=elasticity.avg_lead_time_decay,
         confidence_score=elasticity.confidence_score,
     )
-    evaluated = elasticity.calculation_date.isoformat() if elasticity.calculation_date else as_of_date
+    evaluated = (
+        elasticity.calculation_date.isoformat()
+        if elasticity.calculation_date
+        else as_of_date
+    )
     return ElasticityResponse(
         route_code=clean_route,
         as_of_date=evaluated,
@@ -560,8 +604,16 @@ def get_elasticity_endpoint(
 
 def _violation_item(row: DgcaViolation) -> DgcaViolationItem:
     carrier = row.airline_code
-    flight_date = row.flight_date.isoformat() if hasattr(row.flight_date, "isoformat") else str(row.flight_date)
-    detected = row.detected_at.isoformat() if hasattr(row.detected_at, "isoformat") else str(row.detected_at)
+    flight_date = (
+        row.flight_date.isoformat()
+        if hasattr(row.flight_date, "isoformat")
+        else str(row.flight_date)
+    )
+    detected = (
+        row.detected_at.isoformat()
+        if hasattr(row.detected_at, "isoformat")
+        else str(row.detected_at)
+    )
     return DgcaViolationItem(
         id=str(row.id),
         route_code=row.route_code,
@@ -574,7 +626,9 @@ def _violation_item(row: DgcaViolation) -> DgcaViolationItem:
         statutory_band_cap_inr=row.median_baseline_fare,
         surge_multiplier=row.surge_multiple,
         severity=row.severity,
-        compliance_status="BREACH" if row.severity in ("CRITICAL", "SEVERE") else "WARNING",
+        compliance_status=(
+            "BREACH" if row.severity in ("CRITICAL", "SEVERE") else "WARNING"
+        ),
         violation_code=row.violation_code,
         detected_at=detected,
         description=f"{row.violation_code} on {row.route_code}",
@@ -606,7 +660,9 @@ def _matching_violations(
     return list(db.execute(stmt).scalars().all())
 
 
-def _carrier_distribution(rows: list[DgcaViolation]) -> list[CarrierViolationDistribution]:
+def _carrier_distribution(
+    rows: list[DgcaViolation],
+) -> list[CarrierViolationDistribution]:
     grouped: dict[str, list[DgcaViolation]] = {}
     for row in rows:
         grouped.setdefault(row.airline_code, []).append(row)
@@ -614,7 +670,8 @@ def _carrier_distribution(rows: list[DgcaViolation]) -> list[CarrierViolationDis
         CarrierViolationDistribution(
             carrier_code=code,
             carrier_name=AIRLINE_NAMES.get(code, code),
-            avg_surge_multiplier=sum(float(item.surge_multiple) for item in group) / len(group),
+            avg_surge_multiplier=sum(float(item.surge_multiple) for item in group)
+            / len(group),
             violations_count=len(group),
             compliance_rate=None,
         )
@@ -630,10 +687,18 @@ def _carrier_distribution(rows: list[DgcaViolation]) -> list[CarrierViolationDis
     summary="Get DGCA statutory tariff violation audit feed",
 )
 def get_dgca_violations_endpoint(
-    severity: str | None = Query(None, description="Filter by severity: 'WARNING', 'CRITICAL', 'SEVERE'"),
-    airline_code: str | None = Query(None, description="Filter by operating airline code (e.g. 6E, AI)"),
-    route_code: str | None = Query(None, description="Filter by flight route corridor (e.g. DEL-BOM)"),
-    status_filter: str | None = Query(None, alias="status", description="Filter by audit status"),
+    severity: str | None = Query(
+        None, description="Filter by severity: 'WARNING', 'CRITICAL', 'SEVERE'"
+    ),
+    airline_code: str | None = Query(
+        None, description="Filter by operating airline code (e.g. 6E, AI)"
+    ),
+    route_code: str | None = Query(
+        None, description="Filter by flight route corridor (e.g. DEL-BOM)"
+    ),
+    status_filter: str | None = Query(
+        None, alias="status", description="Filter by audit status"
+    ),
     limit: int = Query(50, ge=1, le=500, description="Max violations to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     db: Session = Depends(get_db),
@@ -733,7 +798,9 @@ def update_violation_status(
     except ValueError:
         numeric_id = None
     if numeric_id is not None:
-        db_rec = update_dgca_violation_status(db=db, violation_id=numeric_id, status=new_status)
+        db_rec = update_dgca_violation_status(
+            db=db, violation_id=numeric_id, status=new_status
+        )
         updated = db_rec is not None
 
     return {
@@ -756,7 +823,9 @@ def acknowledge_violation(
 ) -> dict[str, Any]:
     return update_violation_status(
         violation_id=violation_id,
-        payload=DgcaViolationStatusUpdateRequest(status="UNDER_REVIEW", notes="Auditor review acknowledged"),
+        payload=DgcaViolationStatusUpdateRequest(
+            status="UNDER_REVIEW", notes="Auditor review acknowledged"
+        ),
         db=db,
         _=_,
     )

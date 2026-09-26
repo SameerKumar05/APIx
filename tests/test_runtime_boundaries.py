@@ -2,20 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
-from datetime import UTC, datetime, timedelta
 import tempfile
+from collections.abc import Generator
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from datetime import date, timedelta
-
 from sqlalchemy import create_engine, func, inspect, select
 from sqlalchemy.orm import Session
-
-from backend.app.models.index import NationalDailyIndex
 
 import backend.app.models  # noqa: F401
 from backend.app.core.config import Settings, settings
@@ -24,6 +20,7 @@ from backend.app.db.ingestion_repo import IngestionRepo, cleanup_old_raw_fares
 from backend.app.db.session import Base, get_db
 from backend.app.main import app
 from backend.app.models.crawler_job import CrawlerJob
+from backend.app.models.index import NationalDailyIndex
 from backend.app.models.raw_fare import RawFare
 from backend.app.models.route import Route
 from backend.app.models.telemetry import ScraperTelemetry
@@ -87,7 +84,9 @@ _QUEUE_TABLES = frozenset({"crawler_jobs", "worker_heartbeats"})
 
 
 @pytest.fixture
-def domain_complete_queue_missing_session(tmp_path: Path) -> Generator[Session, None, None]:
+def domain_complete_queue_missing_session(
+    tmp_path: Path,
+) -> Generator[Session, None, None]:
     """Reachable schema with every domain table, and neither queue table."""
     engine = create_engine(
         f"sqlite:///{tmp_path / 'domain-complete.db'}",
@@ -200,7 +199,10 @@ def test_cors_allows_only_configured_origins(db_session: Session) -> None:
                 headers={"Origin": "https://evil.example"},
             )
 
-            assert approved.headers["access-control-allow-origin"] == "http://localhost:3000"
+            assert (
+                approved.headers["access-control-allow-origin"]
+                == "http://localhost:3000"
+            )
             assert approved.headers["access-control-allow-credentials"] == "true"
             assert "access-control-allow-origin" not in unapproved.headers
     finally:
@@ -218,9 +220,7 @@ def test_crawler_trigger_requires_authentication(db_session: Session) -> None:
             )
 
             assert unauthorized.status_code == 401
-            telemetry_count = db_session.scalar(
-                select(func.count(ScraperTelemetry.id))
-            )
+            telemetry_count = db_session.scalar(select(func.count(ScraperTelemetry.id)))
             assert telemetry_count == 0
 
             register_worker_heartbeat(
@@ -375,7 +375,9 @@ def test_routes_overview_reports_no_coverage_instead_of_seeded_corroridors(
         engine.dispose()
 
 
-def test_ingestion_defaults_to_synthetic_when_provenance_is_absent(tmp_path: Path) -> None:
+def test_ingestion_defaults_to_synthetic_when_provenance_is_absent(
+    tmp_path: Path,
+) -> None:
     """Omitting is_synthetic must fail closed, so a forgetful writer cannot produce real-looking rows."""
     engine = create_engine(
         f"sqlite:///{tmp_path / 'provenance.db'}",
@@ -394,9 +396,16 @@ def test_ingestion_defaults_to_synthetic_when_provenance_is_absent(tmp_path: Pat
             "total_fare": 5000.0,
             "source_platform": "makemytrip",
         }
-        assert IngestionRepo(session).bulk_insert([unlabelled], batch_id="absent")["inserted"] == 1
+        assert (
+            IngestionRepo(session).bulk_insert([unlabelled], batch_id="absent")[
+                "inserted"
+            ]
+            == 1
+        )
         session.commit()
-        stored = session.scalars(select(RawFare).where(RawFare.flight_number == "ZZ-9999")).one()
+        stored = session.scalars(
+            select(RawFare).where(RawFare.flight_number == "ZZ-9999")
+        ).one()
         assert stored.is_synthetic is True
 
         declared = {
@@ -405,9 +414,16 @@ def test_ingestion_defaults_to_synthetic_when_provenance_is_absent(tmp_path: Pat
             "flight_date": "2026-12-12",
             "is_synthetic": False,
         }
-        assert IngestionRepo(session).bulk_insert([declared], batch_id="explicit")["inserted"] == 1
+        assert (
+            IngestionRepo(session).bulk_insert([declared], batch_id="explicit")[
+                "inserted"
+            ]
+            == 1
+        )
         session.commit()
-        trusted = session.scalars(select(RawFare).where(RawFare.flight_number == "ZZ-8888")).one()
+        trusted = session.scalars(
+            select(RawFare).where(RawFare.flight_number == "ZZ-8888")
+        ).one()
         assert trusted.is_synthetic is False
     finally:
         session.close()
@@ -432,7 +448,9 @@ def test_fabrication_endpoints_fail_closed_on_unavailable_database(
             ):
                 response = client.get(path)
 
-                assert response.status_code == 503, f"{path} -> {response.status_code} {response.text[:120]}"
+                assert (
+                    response.status_code == 503
+                ), f"{path} -> {response.status_code} {response.text[:120]}"
                 assert response.json()["detail"] == "Database unavailable", path
     finally:
         app.dependency_overrides.clear()
@@ -477,7 +495,8 @@ def test_index_history_reports_missing_data_instead_of_inventing_it(
     of 45000+ per point, which the dashboard could not distinguish from a real one.
     """
     engine = create_engine(
-        f"sqlite:///{tmp_path / 'unseeded.db'}", connect_args={"check_same_thread": False}
+        f"sqlite:///{tmp_path / 'unseeded.db'}",
+        connect_args={"check_same_thread": False},
     )
     Base.metadata.create_all(bind=engine)
     session = Session(engine)
@@ -522,9 +541,15 @@ def test_index_history_aggregates_daily_weekly_and_monthly(
     app.dependency_overrides[get_db] = lambda: seeded_index_session
     try:
         with TestClient(app) as client:
-            daily = client.get("/api/v1/indices/national/history", params={"frequency": "daily"})
-            weekly = client.get("/api/v1/indices/national/history", params={"frequency": "weekly"})
-            monthly = client.get("/api/v1/indices/national/history", params={"frequency": "monthly"})
+            daily = client.get(
+                "/api/v1/indices/national/history", params={"frequency": "daily"}
+            )
+            weekly = client.get(
+                "/api/v1/indices/national/history", params={"frequency": "weekly"}
+            )
+            monthly = client.get(
+                "/api/v1/indices/national/history", params={"frequency": "monthly"}
+            )
 
         assert daily.status_code == weekly.status_code == monthly.status_code == 200
 

@@ -95,7 +95,9 @@ def take_challenge() -> CaptchaVerdict | None:
     _local.verdict = None
     if noted is None:
         return None
-    return CaptchaVerdict(outcome=BLOCKED_BY_CAPTCHA, marker=noted.marker, origin=noted.origin)
+    return CaptchaVerdict(
+        outcome=BLOCKED_BY_CAPTCHA, marker=noted.marker, origin=noted.origin
+    )
 
 
 def block_result(result: ScrapeResult, marker: str) -> ScrapeResult:

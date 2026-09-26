@@ -425,7 +425,9 @@ def _execute_daily_pipeline(
     else:
         calc_date = calculation_date
 
-    logger.info("Executing daily airfare index pipeline for calculation_date=%s", calc_date)
+    logger.info(
+        "Executing daily airfare index pipeline for calculation_date=%s", calc_date
+    )
 
     # 2. Load routes and baseline configurations
     routes_map = get_active_routes(db)
@@ -435,7 +437,9 @@ def _execute_daily_pipeline(
     # 3. Step 1: Load raw fares for calculation_date across all routes and windows
     raw_fares = load_raw_fares_for_date(db, calc_date)
     total_raw_fares = len(raw_fares)
-    logger.info("Loaded %d raw fares for calculation date %s", total_raw_fares, calc_date)
+    logger.info(
+        "Loaded %d raw fares for calculation date %s", total_raw_fares, calc_date
+    )
     # Step 1b: Run real-time streaming deduplication & cross-platform arbitrage detection
     streaming_engine, arbitrage_opportunities = run_streaming_dedup_and_arbitrage(
         raw_fares,
@@ -518,7 +522,9 @@ def _execute_daily_pipeline(
                 trimmed_quotes = deduped_quotes
 
             # Step 3: Weighted median representative fare using airline market shares
-            rep_fare = calculate_weighted_median(trimmed_quotes, DEFAULT_AIRLINE_MARKET_SHARES)
+            rep_fare = calculate_weighted_median(
+                trimmed_quotes, DEFAULT_AIRLINE_MARKET_SHARES
+            )
             window_rep_fares[win] = rep_fare
 
             # Distribution statistics
@@ -532,7 +538,11 @@ def _execute_daily_pipeline(
             max_fare = fare_values[-1]
             p25 = _compute_percentile_linear(fare_values, 0.25)
             p75 = _compute_percentile_linear(fare_values, 0.75)
-            variance = sum((x - mean_fare) ** 2 for x in fare_values) / (sample_size - 1) if sample_size > 1 else 0.0
+            variance = (
+                sum((x - mean_fare) ** 2 for x in fare_values) / (sample_size - 1)
+                if sample_size > 1
+                else 0.0
+            )
             std_dev = math.sqrt(variance)
 
             # Window-specific index value relative to base fare (Base 100.0)
@@ -651,10 +661,10 @@ def _execute_daily_pipeline(
 
         # DGCA passenger-weighted mean fare across routes
         total_pax_weight = sum(route_weights.get(r, 0.1) for r in route_composite_fares)
-        weighted_national_mean = (
-            sum(route_composite_fares[r] * route_weights.get(r, 0.1) for r in route_composite_fares)
-            / (total_pax_weight if total_pax_weight > 0 else 1.0)
-        )
+        weighted_national_mean = sum(
+            route_composite_fares[r] * route_weights.get(r, 0.1)
+            for r in route_composite_fares
+        ) / (total_pax_weight if total_pax_weight > 0 else 1.0)
     else:
         # Fallback if no valid quotes on this date
         national_index_val = 100.0
@@ -670,7 +680,9 @@ def _execute_daily_pipeline(
     inflation_dod_pct = 0.0
     if prev_nat and prev_nat.index_value > 0:
         inflation_dod_pct = round(
-            ((national_index_val - prev_nat.index_value) / prev_nat.index_value) * 100.0, 4
+            ((national_index_val - prev_nat.index_value) / prev_nat.index_value)
+            * 100.0,
+            4,
         )
 
     mom_nat_stmt = select(NationalDailyIndex).where(
@@ -682,7 +694,8 @@ def _execute_daily_pipeline(
     inflation_mom_pct = 0.0
     if mom_nat and mom_nat.index_value > 0:
         inflation_mom_pct = round(
-            ((national_index_val - mom_nat.index_value) / mom_nat.index_value) * 100.0, 4
+            ((national_index_val - mom_nat.index_value) / mom_nat.index_value) * 100.0,
+            4,
         )
 
     # 5b. Econometric Price Indices: Paasche, Fisher Ideal Index, Substitution Bias
@@ -730,7 +743,9 @@ def _execute_daily_pipeline(
 
     # 5d. MoSPI CPI Transport Sub-Index Divergence Analytics
     cpi_divergence = calculate_mospi_cpi_divergence(
-        apix_index_series=[{"date": calc_date.isoformat(), "index_value": national_index_val}],
+        apix_index_series=[
+            {"date": calc_date.isoformat(), "index_value": national_index_val}
+        ],
     )
 
     # Construct NationalDailyIndex records for all 3 superlative index formulations
@@ -788,6 +803,7 @@ def _execute_daily_pipeline(
     # Forward-compatible persistence into EconometricIndex if model is present (idempotent upsert)
     try:
         from backend.app.models.econometrics import EconometricIndex
+
         existing_econ = (
             db.query(EconometricIndex)
             .filter(
@@ -860,7 +876,9 @@ def _execute_daily_pipeline(
         "anomalies": anomalies_to_persist,
         "streaming_dedup_stats": streaming_stats,
         "arbitrage_count": len(arbitrage_opportunities),
-        "arbitrage_opportunities": [opp.to_dict() for opp in arbitrage_opportunities[:50]],
+        "arbitrage_opportunities": [
+            opp.to_dict() for opp in arbitrage_opportunities[:50]
+        ],
     }
 
 

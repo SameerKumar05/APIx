@@ -47,7 +47,10 @@ def test_booking_window_weights_cover_every_configured_window() -> None:
 
 
 def test_booking_window_weights_match_the_canonical_lead_time_shares() -> None:
-    canonical = {code.replace("+", ""): share for code, share in DEFAULT_LEAD_TIME_PAX_SHARES.items()}
+    canonical = {
+        code.replace("+", ""): share
+        for code, share in DEFAULT_LEAD_TIME_PAX_SHARES.items()
+    }
     assert DEFAULT_BOOKING_WINDOW_WEIGHTS == pytest.approx(canonical)
 
 

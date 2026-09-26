@@ -11,9 +11,9 @@ from __future__ import annotations
 import hashlib
 import logging
 from collections import defaultdict
-from collections.abc import Callable
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from collections.abc import Callable, Sequence
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
@@ -38,7 +38,7 @@ from backend.app.models.scraping import ScrapingRun
 logger = logging.getLogger("backend.app.db.ingestion_repo")
 
 
-def _optional_component(data: Dict[str, Any], key: str) -> Optional[float]:
+def _optional_component(data: dict[str, Any], key: str) -> float | None:
     """Read a fare component. Missing and blank stay None; 0 is a real value."""
     if key not in data:
         return None
@@ -68,8 +68,8 @@ def _optional_minutes(value: Any) -> int | None:
 
 def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _peer_fares(
@@ -136,10 +136,10 @@ def _assign_exclusions(db: Session, records: list[dict[str, Any]]) -> None:
 
 
 def _optional_token(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     key: str,
     canonical: Callable[[str | None], str | None],
-) -> Optional[str]:
+) -> str | None:
     """Read a string field and canonicalise it. Non-strings are treated as absent."""
     if key not in data:
         return None
@@ -156,9 +156,9 @@ def compute_dedup_hash(
     flight_number: str,
     origin: str,
     destination: str,
-    departure_time: Union[datetime, str, None],
+    departure_time: datetime | str | None,
     booking_window: str,
-    flight_date: Union[date, str, None] = None,
+    flight_date: date | str | None = None,
 ) -> str:
     """Generate deterministic SHA-256 hash for raw fare deduplication.
 
@@ -181,10 +181,10 @@ def compute_dedup_hash(
 
 
 def _normalize_fare_record(
-    raw: Union[Dict[str, Any], Any],
+    raw: dict[str, Any] | Any,
     default_batch_id: str,
     now_utc: datetime,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Normalize dictionary, Pydantic model, or dataclass into a clean RawFare dictionary."""
     if hasattr(raw, "model_dump"):
         data = raw.model_dump()
@@ -199,7 +199,11 @@ def _normalize_fare_record(
     # Extract or fallback identifiers
     batch_id = data.get("batch_id") or default_batch_id
     origin = str(data.get("origin") or data.get("origin_iata") or "").strip().upper()
-    destination = str(data.get("destination") or data.get("destination_iata") or "").strip().upper()
+    destination = (
+        str(data.get("destination") or data.get("destination_iata") or "")
+        .strip()
+        .upper()
+    )
     airline_code = str(data.get("airline_code") or "").strip().upper()
     flight_number = str(data.get("flight_number") or "").strip().upper()
     raw_bw = data.get("booking_window")
@@ -235,7 +239,7 @@ def _normalize_fare_record(
         or now_utc
     )
 
-    dep_dt: Optional[datetime] = None
+    dep_dt: datetime | None = None
     if isinstance(departure_val, datetime):
         dep_dt = departure_val
     elif isinstance(departure_val, str) and departure_val:
@@ -244,7 +248,7 @@ def _normalize_fare_record(
         except ValueError:
             dep_dt = None
 
-    arr_dt: Optional[datetime] = None
+    arr_dt: datetime | None = None
     if isinstance(arrival_val, datetime):
         arr_dt = arrival_val
     elif isinstance(arrival_val, str) and arrival_val:
@@ -304,11 +308,15 @@ def _normalize_fare_record(
     flight_status = _optional_token(data, "flight_status", canonical_flight_status)
 
     stops = int(data.get("stops") or 0)
-    fare_class = str(data.get("fare_class") or data.get("cabin_class") or "Economy").strip()
+    fare_class = str(
+        data.get("fare_class") or data.get("cabin_class") or "Economy"
+    ).strip()
     source_platform = str(
         data.get("source_platform") or data.get("source") or "synthetic"
     ).strip()
-    is_synthetic = source_platform.lower() == "synthetic" or bool(data.get("is_synthetic", True))
+    is_synthetic = source_platform.lower() == "synthetic" or bool(
+        data.get("is_synthetic", True)
+    )
 
     # Hash dedup
     hash_id = str(data.get("hash_id") or data.get("dedup_hash") or "").strip()
@@ -360,11 +368,11 @@ def _normalize_fare_record(
 
 def bulk_insert_raw_fares(
     db: Session,
-    records: Sequence[Union[Dict[str, Any], Any]],
-    batch_id: Optional[str] = None,
+    records: Sequence[dict[str, Any] | Any],
+    batch_id: str | None = None,
     batch_size: int = 500,
     commit: bool = True,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """Bulk insert raw flight fare records with idempotent deduplication.
 
     Executes `INSERT ... ON CONFLICT (hash_id) DO NOTHING` across batches
@@ -389,11 +397,11 @@ def bulk_insert_raw_fares(
     if total_received == 0:
         return {"received": 0, "inserted": 0, "duplicates": 0}
 
-    now_utc = datetime.now(timezone.utc)
+    now_utc = datetime.now(UTC)
     effective_batch_id = batch_id or f"batch-{int(now_utc.timestamp())}"
 
     # Normalize records and eliminate in-batch duplicates early for accuracy
-    normalized_records: List[Dict[str, Any]] = []
+    normalized_records: list[dict[str, Any]] = []
     seen_hashes: set[str] = set()
     in_batch_duplicates = 0
 
@@ -463,8 +471,8 @@ def create_scraping_run(
     routes_succeeded: int = 0,
     fares_collected: int = 0,
     fares_deduplicated: int = 0,
-    error_message: Optional[str] = None,
-    started_at: Optional[datetime] = None,
+    error_message: str | None = None,
+    started_at: datetime | None = None,
     commit: bool = True,
 ) -> ScrapingRun:
     """Create a new ScrapingRun telemetry record."""
@@ -477,7 +485,7 @@ def create_scraping_run(
         fares_collected=fares_collected,
         fares_deduplicated=fares_deduplicated,
         error_message=error_message,
-        started_at=started_at or datetime.now(timezone.utc),
+        started_at=started_at or datetime.now(UTC),
     )
     db.add(run)
     if commit:
@@ -489,16 +497,16 @@ def create_scraping_run(
 def update_scraping_run(
     db: Session,
     batch_id: str,
-    status: Optional[str] = None,
-    routes_attempted: Optional[int] = None,
-    routes_succeeded: Optional[int] = None,
-    fares_collected: Optional[int] = None,
-    fares_deduplicated: Optional[int] = None,
-    error_message: Optional[str] = None,
-    completed_at: Optional[datetime] = None,
-    duration_seconds: Optional[float] = None,
+    status: str | None = None,
+    routes_attempted: int | None = None,
+    routes_succeeded: int | None = None,
+    fares_collected: int | None = None,
+    fares_deduplicated: int | None = None,
+    error_message: str | None = None,
+    completed_at: datetime | None = None,
+    duration_seconds: float | None = None,
     commit: bool = True,
-) -> Optional[ScrapingRun]:
+) -> ScrapingRun | None:
     """Update execution metrics and status for an existing ScrapingRun."""
     stmt = select(ScrapingRun).where(ScrapingRun.batch_id == batch_id)
     run = db.scalars(stmt).first()
@@ -520,7 +528,7 @@ def update_scraping_run(
     if completed_at is not None:
         run.completed_at = completed_at
     elif status in ("COMPLETED", "FAILED") and run.completed_at is None:
-        run.completed_at = datetime.now(timezone.utc)
+        run.completed_at = datetime.now(UTC)
 
     if duration_seconds is not None:
         run.duration_seconds = duration_seconds
@@ -528,9 +536,9 @@ def update_scraping_run(
         c_at = run.completed_at
         s_at = run.started_at
         if c_at.tzinfo is not None and s_at.tzinfo is None:
-            s_at = s_at.replace(tzinfo=timezone.utc)
+            s_at = s_at.replace(tzinfo=UTC)
         elif c_at.tzinfo is None and s_at.tzinfo is not None:
-            c_at = c_at.replace(tzinfo=timezone.utc)
+            c_at = c_at.replace(tzinfo=UTC)
         run.duration_seconds = max(0.0, (c_at - s_at).total_seconds())
     return run
 
@@ -544,9 +552,9 @@ def record_scraping_run(
     routes_succeeded: int = 0,
     fares_collected: int = 0,
     fares_deduplicated: int = 0,
-    error_message: Optional[str] = None,
-    started_at: Optional[datetime] = None,
-    completed_at: Optional[datetime] = None,
+    error_message: str | None = None,
+    started_at: datetime | None = None,
+    completed_at: datetime | None = None,
     commit: bool = True,
 ) -> ScrapingRun:
     """Upsert scraping run metadata."""
@@ -582,7 +590,7 @@ def record_scraping_run(
     )
 
 
-def get_scraping_run(db: Session, batch_id: str) -> Optional[ScrapingRun]:
+def get_scraping_run(db: Session, batch_id: str) -> ScrapingRun | None:
     """Retrieve ScrapingRun telemetry by batch_id."""
     stmt = select(ScrapingRun).where(ScrapingRun.batch_id == batch_id)
     return db.scalars(stmt).first()
@@ -592,9 +600,9 @@ def list_scraping_runs(
     db: Session,
     limit: int = 50,
     offset: int = 0,
-    status: Optional[str] = None,
-    source_platform: Optional[str] = None,
-) -> List[ScrapingRun]:
+    status: str | None = None,
+    source_platform: str | None = None,
+) -> list[ScrapingRun]:
     """Query scraping runs ordered newest first."""
     stmt = select(ScrapingRun)
     if status:
@@ -608,7 +616,7 @@ def list_scraping_runs(
 def cleanup_old_raw_fares(
     db: Session,
     days: int = 90,
-    cutoff_datetime: Optional[datetime] = None,
+    cutoff_datetime: datetime | None = None,
     commit: bool = True,
 ) -> int:
     """Automated retention pruning: remove raw fare records older than N days.
@@ -627,7 +635,7 @@ def cleanup_old_raw_fares(
         Number of raw fare rows successfully pruned.
     """
     if cutoff_datetime is None:
-        cutoff_datetime = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff_datetime = datetime.now(UTC) - timedelta(days=days)
     cutoff_date = cutoff_datetime.date()
 
     # Records are pruned if their capture time or flight departure precedes the retention threshold
@@ -654,17 +662,17 @@ def cleanup_old_raw_fares(
 
 def get_raw_fares(
     db: Session,
-    origin: Optional[str] = None,
-    destination: Optional[str] = None,
-    booking_window: Optional[str] = None,
-    flight_date: Optional[Union[date, str]] = None,
-    start_date: Optional[Union[date, str]] = None,
-    end_date: Optional[Union[date, str]] = None,
-    airline_code: Optional[str] = None,
-    source_platform: Optional[str] = None,
-    limit: Optional[int] = None,
+    origin: str | None = None,
+    destination: str | None = None,
+    booking_window: str | None = None,
+    flight_date: date | str | None = None,
+    start_date: date | str | None = None,
+    end_date: date | str | None = None,
+    airline_code: str | None = None,
+    source_platform: str | None = None,
+    limit: int | None = None,
     offset: int = 0,
-) -> List[RawFare]:
+) -> list[RawFare]:
     """Query raw fare observations by route, booking window, date range, and carrier."""
     stmt = select(RawFare)
 
@@ -718,9 +726,9 @@ def get_raw_fares_for_calculation(
     origin: str,
     destination: str,
     booking_window: str,
-    calculation_date: Union[date, str, datetime],
-    limit: Optional[int] = None,
-) -> List[RawFare]:
+    calculation_date: date | str | datetime,
+    limit: int | None = None,
+) -> list[RawFare]:
     """Fetch raw fares for a corridor, booking window, and calculation/flight date.
 
     Utilizes the composite index `ix_raw_fares_route_window_date` for sub-millisecond
@@ -757,10 +765,10 @@ def get_raw_fares_for_calculation(
 
 def count_raw_fares(
     db: Session,
-    origin: Optional[str] = None,
-    destination: Optional[str] = None,
-    booking_window: Optional[str] = None,
-    flight_date: Optional[Union[date, str]] = None,
+    origin: str | None = None,
+    destination: str | None = None,
+    booking_window: str | None = None,
+    flight_date: date | str | None = None,
 ) -> int:
     """Return count of matching raw fares."""
     stmt = select(func.count(RawFare.id))
@@ -789,11 +797,11 @@ class IngestionRepo:
 
     def bulk_insert(
         self,
-        records: Sequence[Union[Dict[str, Any], Any]],
-        batch_id: Optional[str] = None,
+        records: Sequence[dict[str, Any] | Any],
+        batch_id: str | None = None,
         batch_size: int = 500,
         commit: bool = True,
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         return bulk_insert_raw_fares(
             self.db,
             records=records,
@@ -817,7 +825,7 @@ class IngestionRepo:
             **kwargs,
         )
 
-    def update_run(self, batch_id: str, **kwargs: Any) -> Optional[ScrapingRun]:
+    def update_run(self, batch_id: str, **kwargs: Any) -> ScrapingRun | None:
         return update_scraping_run(self.db, batch_id=batch_id, **kwargs)
 
     def record_run(
@@ -835,13 +843,13 @@ class IngestionRepo:
             **kwargs,
         )
 
-    def get_run(self, batch_id: str) -> Optional[ScrapingRun]:
+    def get_run(self, batch_id: str) -> ScrapingRun | None:
         return get_scraping_run(self.db, batch_id=batch_id)
 
     def cleanup_old_fares(
         self,
         days: int = 90,
-        cutoff_datetime: Optional[datetime] = None,
+        cutoff_datetime: datetime | None = None,
         commit: bool = True,
     ) -> int:
         return cleanup_old_raw_fares(
@@ -856,9 +864,9 @@ class IngestionRepo:
         origin: str,
         destination: str,
         booking_window: str,
-        calculation_date: Union[date, str, datetime],
-        limit: Optional[int] = None,
-    ) -> List[RawFare]:
+        calculation_date: date | str | datetime,
+        limit: int | None = None,
+    ) -> list[RawFare]:
         return get_raw_fares_for_calculation(
             self.db,
             origin=origin,
@@ -868,7 +876,7 @@ class IngestionRepo:
             limit=limit,
         )
 
-    def query_fares(self, **kwargs: Any) -> List[RawFare]:
+    def query_fares(self, **kwargs: Any) -> list[RawFare]:
         return get_raw_fares(self.db, **kwargs)
 
     def count(self, **kwargs: Any) -> int:

@@ -14,7 +14,7 @@ Covers:
 from __future__ import annotations
 
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -67,62 +67,70 @@ class TestStreamingDedupEngine:
         engine = StreamingDedupEngine(window_seconds=300.0)
 
         # First quote from MMT
-        r1 = engine.ingest({
-            "airline_code": "SG",
-            "flight_number": "SG-8169",
-            "origin": "DEL",
-            "destination": "BOM",
-            "flight_date": "2026-10-20",
-            "departure_time": "14:30",
-            "fare": 5400.0,
-            "source_portal": "makemytrip",
-        })
+        r1 = engine.ingest(
+            {
+                "airline_code": "SG",
+                "flight_number": "SG-8169",
+                "origin": "DEL",
+                "destination": "BOM",
+                "flight_date": "2026-10-20",
+                "departure_time": "14:30",
+                "fare": 5400.0,
+                "source_portal": "makemytrip",
+            }
+        )
         assert r1.is_new_flight is True
         assert r1.is_new_minimum is True
         assert r1.min_fare == 5400.0
 
         # Cheaper quote from EaseMyTrip
-        r2 = engine.ingest({
-            "airline_code": "SG",
-            "flight_number": "SG-8169",
-            "origin": "DEL",
-            "destination": "BOM",
-            "flight_date": "2026-10-20",
-            "departure_time": "14:30",
-            "fare": 5150.0,
-            "source_portal": "easemytrip",
-        })
+        r2 = engine.ingest(
+            {
+                "airline_code": "SG",
+                "flight_number": "SG-8169",
+                "origin": "DEL",
+                "destination": "BOM",
+                "flight_date": "2026-10-20",
+                "departure_time": "14:30",
+                "fare": 5150.0,
+                "source_portal": "easemytrip",
+            }
+        )
         assert r2.is_new_flight is False
         assert r2.is_new_minimum is True
         assert r2.min_fare == 5150.0
         assert r2.previous_min_fare == 5400.0
 
         # Even cheaper from airline direct
-        r3 = engine.ingest({
-            "airline_code": "SG",
-            "flight_number": "SG-8169",
-            "origin": "DEL",
-            "destination": "BOM",
-            "flight_date": "2026-10-20",
-            "departure_time": "14:30",
-            "fare": 4800.0,
-            "source_portal": "spicejet",
-        })
+        r3 = engine.ingest(
+            {
+                "airline_code": "SG",
+                "flight_number": "SG-8169",
+                "origin": "DEL",
+                "destination": "BOM",
+                "flight_date": "2026-10-20",
+                "departure_time": "14:30",
+                "fare": 4800.0,
+                "source_portal": "spicejet",
+            }
+        )
         assert r3.is_new_minimum is True
         assert r3.min_fare == 4800.0
         assert r3.best_quote.source_portal == "spicejet"
 
         # Higher price quote from Yatra should NOT update min_fare
-        r4 = engine.ingest({
-            "airline_code": "SG",
-            "flight_number": "SG-8169",
-            "origin": "DEL",
-            "destination": "BOM",
-            "flight_date": "2026-10-20",
-            "departure_time": "14:30",
-            "fare": 5600.0,
-            "source_portal": "yatra",
-        })
+        r4 = engine.ingest(
+            {
+                "airline_code": "SG",
+                "flight_number": "SG-8169",
+                "origin": "DEL",
+                "destination": "BOM",
+                "flight_date": "2026-10-20",
+                "departure_time": "14:30",
+                "fare": 5600.0,
+                "source_portal": "yatra",
+            }
+        )
         assert r4.is_new_minimum is False
         assert r4.min_fare == 4800.0
         assert r4.portal_count == 4
@@ -163,7 +171,7 @@ class TestStreamingDedupEngine:
 
     def test_sliding_window_out_of_order_and_pruning(self) -> None:
         engine = StreamingDedupEngine(window_seconds=60.0)
-        base_time = datetime(2026, 9, 24, 10, 0, 0, tzinfo=timezone.utc)
+        base_time = datetime(2026, 9, 24, 10, 0, 0, tzinfo=UTC)
 
         # Ingest quote at T = +30s
         engine.ingest(
@@ -214,16 +222,18 @@ class TestStreamingDedupEngine:
         engine = StreamingDedupEngine(max_buffer_size=max_buf)
 
         for i in range(100):
-            engine.ingest({
-                "airline_code": "6E",
-                "flight_number": f"6E-{i}",
-                "origin": "DEL",
-                "destination": "BOM",
-                "flight_date": "2026-10-01",
-                "departure_time": "08:00",
-                "fare": 5000.0 + i,
-                "source_portal": "makemytrip",
-            })
+            engine.ingest(
+                {
+                    "airline_code": "6E",
+                    "flight_number": f"6E-{i}",
+                    "origin": "DEL",
+                    "destination": "BOM",
+                    "flight_date": "2026-10-01",
+                    "departure_time": "08:00",
+                    "fare": 5000.0 + i,
+                    "source_portal": "makemytrip",
+                }
+            )
 
         stats = engine.stats()
         assert len(engine._buffer) == max_buf
@@ -233,21 +243,27 @@ class TestStreamingDedupEngine:
 class TestArbitrageDetector:
     def test_calculate_spread_positive_and_negative(self) -> None:
         # Positive spread: direct cheaper, OTA higher
-        spread_inr, spread_pct, direction, is_neg = calculate_spread(direct_fare=4500.0, ota_fare=5000.0)
+        spread_inr, spread_pct, direction, is_neg = calculate_spread(
+            direct_fare=4500.0, ota_fare=5000.0
+        )
         assert spread_inr == 500.0
         assert spread_pct == round((500.0 / 4500.0) * 100.0, 4)
         assert direction == "direct_cheaper"
         assert is_neg is False
 
         # Negative spread: OTA cheaper than direct
-        spread_inr, spread_pct, direction, is_neg = calculate_spread(direct_fare=6000.0, ota_fare=5400.0)
+        spread_inr, spread_pct, direction, is_neg = calculate_spread(
+            direct_fare=6000.0, ota_fare=5400.0
+        )
         assert spread_inr == -600.0
         assert spread_pct == round((-600.0 / 6000.0) * 100.0, 4)
         assert direction == "ota_cheaper"
         assert is_neg is True
 
         # Neutral spread: identical prices
-        spread_inr, spread_pct, direction, is_neg = calculate_spread(direct_fare=5000.0, ota_fare=5000.0)
+        spread_inr, spread_pct, direction, is_neg = calculate_spread(
+            direct_fare=5000.0, ota_fare=5000.0
+        )
         assert spread_inr == 0.0
         assert spread_pct == 0.0
         assert direction == "neutral"
@@ -331,11 +347,15 @@ class TestArbitrageDetector:
         assert detector.detect_flight_arbitrage([]) is None
 
         # Zero or negative fare
-        spread_inr, spread_pct, direction, is_neg = calculate_spread(direct_fare=0.0, ota_fare=5000.0)
+        spread_inr, spread_pct, direction, is_neg = calculate_spread(
+            direct_fare=0.0, ota_fare=5000.0
+        )
         assert spread_pct == 0.0
         assert direction == "invalid"
 
-        spread_inr, spread_pct, direction, is_neg = calculate_spread(direct_fare=-50.0, ota_fare=5000.0)
+        spread_inr, spread_pct, direction, is_neg = calculate_spread(
+            direct_fare=-50.0, ota_fare=5000.0
+        )
         assert spread_pct == 0.0
         assert direction == "invalid"
 

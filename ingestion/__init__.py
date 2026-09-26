@@ -27,6 +27,7 @@ from ingestion.loaders import (
     MospiCpiLoader,
     MospiCpiRecord,
 )
+
 __all__ = [
     # Configuration & domain entities
     "Route",

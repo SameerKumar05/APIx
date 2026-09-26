@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, Float, Index, Integer, String, UniqueConstraint, select
+from sqlalchemy import DateTime, Float, Integer, String, UniqueConstraint, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from backend.app.db.session import Base, SessionLocal
@@ -39,16 +39,76 @@ logger = logging.getLogger("ingestion.loaders.dgca_traffic")
 # ============================================================================
 
 TRUNK_CORRIDORS: list[dict[str, Any]] = [
-    {"origin": "DEL", "destination": "BOM", "distance_km": 1148.0, "base_pax": 437500, "base_weight": 0.175},
-    {"origin": "BOM", "destination": "DEL", "distance_km": 1148.0, "base_pax": 437500, "base_weight": 0.175},
-    {"origin": "DEL", "destination": "BLR", "distance_km": 1740.0, "base_pax": 312500, "base_weight": 0.125},
-    {"origin": "BLR", "destination": "DEL", "distance_km": 1740.0, "base_pax": 312500, "base_weight": 0.125},
-    {"origin": "BOM", "destination": "BLR", "distance_km": 842.0, "base_pax": 225000, "base_weight": 0.090},
-    {"origin": "BLR", "destination": "BOM", "distance_km": 842.0, "base_pax": 225000, "base_weight": 0.090},
-    {"origin": "DEL", "destination": "CCU", "distance_km": 1305.0, "base_pax": 162500, "base_weight": 0.065},
-    {"origin": "CCU", "destination": "DEL", "distance_km": 1305.0, "base_pax": 162500, "base_weight": 0.065},
-    {"origin": "DEL", "destination": "HYD", "distance_km": 1253.0, "base_pax": 112500, "base_weight": 0.045},
-    {"origin": "HYD", "destination": "DEL", "distance_km": 1253.0, "base_pax": 112500, "base_weight": 0.045},
+    {
+        "origin": "DEL",
+        "destination": "BOM",
+        "distance_km": 1148.0,
+        "base_pax": 437500,
+        "base_weight": 0.175,
+    },
+    {
+        "origin": "BOM",
+        "destination": "DEL",
+        "distance_km": 1148.0,
+        "base_pax": 437500,
+        "base_weight": 0.175,
+    },
+    {
+        "origin": "DEL",
+        "destination": "BLR",
+        "distance_km": 1740.0,
+        "base_pax": 312500,
+        "base_weight": 0.125,
+    },
+    {
+        "origin": "BLR",
+        "destination": "DEL",
+        "distance_km": 1740.0,
+        "base_pax": 312500,
+        "base_weight": 0.125,
+    },
+    {
+        "origin": "BOM",
+        "destination": "BLR",
+        "distance_km": 842.0,
+        "base_pax": 225000,
+        "base_weight": 0.090,
+    },
+    {
+        "origin": "BLR",
+        "destination": "BOM",
+        "distance_km": 842.0,
+        "base_pax": 225000,
+        "base_weight": 0.090,
+    },
+    {
+        "origin": "DEL",
+        "destination": "CCU",
+        "distance_km": 1305.0,
+        "base_pax": 162500,
+        "base_weight": 0.065,
+    },
+    {
+        "origin": "CCU",
+        "destination": "DEL",
+        "distance_km": 1305.0,
+        "base_pax": 162500,
+        "base_weight": 0.065,
+    },
+    {
+        "origin": "DEL",
+        "destination": "HYD",
+        "distance_km": 1253.0,
+        "base_pax": 112500,
+        "base_weight": 0.045,
+    },
+    {
+        "origin": "HYD",
+        "destination": "DEL",
+        "distance_km": 1253.0,
+        "base_pax": 112500,
+        "base_weight": 0.045,
+    },
 ]
 
 CORRIDOR_DISTANCE_MAP: dict[str, float] = {
@@ -69,17 +129,30 @@ class DgcaTrafficRecord(BaseModel):
         pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
         description="DGCA reporting month in format YYYY-MM (e.g. 2026-03)",
     )
-    origin: str = Field(..., min_length=3, max_length=3, description="Origin airport IATA code")
-    destination: str = Field(..., min_length=3, max_length=3, description="Destination airport IATA code")
-    pax_volume: int = Field(..., ge=0, description="Monthly passenger traffic volume recorded by DGCA")
+    origin: str = Field(
+        ..., min_length=3, max_length=3, description="Origin airport IATA code"
+    )
+    destination: str = Field(
+        ..., min_length=3, max_length=3, description="Destination airport IATA code"
+    )
+    pax_volume: int = Field(
+        ..., ge=0, description="Monthly passenger traffic volume recorded by DGCA"
+    )
     share_weight: float = Field(
         ...,
         ge=0.0,
         le=1.0,
         description="Corridor normalized share weight of national monitored basket (sums to 1.0)",
     )
-    distance_km: float = Field(..., gt=0, description="Great-circle flight distance in kilometers")
-    period_rank: int | None = Field(default=None, ge=1, le=50, description="Volume ranking within month (1 = highest)")
+    distance_km: float = Field(
+        ..., gt=0, description="Great-circle flight distance in kilometers"
+    )
+    period_rank: int | None = Field(
+        default=None,
+        ge=1,
+        le=50,
+        description="Volume ranking within month (1 = highest)",
+    )
     route_code: str = Field(default="", description="IATA corridor code e.g. DEL-BOM")
     is_synthetic: bool = Field(
         default=True,
@@ -147,15 +220,15 @@ class DgcaTrafficRecord(BaseModel):
 
 # Monthly seasonality multipliers for Indian domestic civil aviation
 MONTHLY_SEASONAL_FACTORS: dict[int, float] = {
-    1: 1.01,   # January: winter holidays / corporate travel restart
-    2: 0.96,   # February: shorter month (28/29 days)
-    3: 1.02,   # March: Q4 financial year-end corporate travel
-    4: 1.04,   # April: onset of summer vacation
-    5: 1.10,   # May: peak domestic summer holiday rush
-    6: 1.07,   # June: summer vacation return travel
-    7: 0.91,   # July: monsoon low season
-    8: 0.93,   # August: monsoon low, Independence Day long weekend
-    9: 0.96,   # September: pre-festive preparation
+    1: 1.01,  # January: winter holidays / corporate travel restart
+    2: 0.96,  # February: shorter month (28/29 days)
+    3: 1.02,  # March: Q4 financial year-end corporate travel
+    4: 1.04,  # April: onset of summer vacation
+    5: 1.10,  # May: peak domestic summer holiday rush
+    6: 1.07,  # June: summer vacation return travel
+    7: 0.91,  # July: monsoon low season
+    8: 0.93,  # August: monsoon low, Independence Day long weekend
+    9: 0.96,  # September: pre-festive preparation
     10: 1.12,  # October: Durga Puja, Dussehra, Diwali rush
     11: 1.09,  # November: Diwali peak, wedding season
     12: 1.14,  # December: winter vacation, Christmas/New Year peak
@@ -215,14 +288,23 @@ def _generate_builtin_dgca_series() -> list[DgcaTrafficRecord]:
                 route_season_adj = 1.04
 
             # Base volume scaled
-            raw_pax = int(round(c["base_pax"] * secular_multiplier * season_multiplier * route_season_adj))
-            period_corridors.append({
-                "origin": origin,
-                "destination": dest,
-                "route_code": route_code,
-                "distance_km": c["distance_km"],
-                "pax_volume": raw_pax,
-            })
+            raw_pax = int(
+                round(
+                    c["base_pax"]
+                    * secular_multiplier
+                    * season_multiplier
+                    * route_season_adj
+                )
+            )
+            period_corridors.append(
+                {
+                    "origin": origin,
+                    "destination": dest,
+                    "route_code": route_code,
+                    "distance_km": c["distance_km"],
+                    "pax_volume": raw_pax,
+                }
+            )
 
         # Calculate exact total monthly passenger volume
         total_pax = sum(item["pax_volume"] for item in period_corridors)
@@ -233,14 +315,18 @@ def _generate_builtin_dgca_series() -> list[DgcaTrafficRecord]:
         # Sort by pax descending
         period_corridors.sort(key=lambda x: x["pax_volume"], reverse=True)
 
-        raw_weights: list[float] = [round(item["pax_volume"] / total_pax, 6) for item in period_corridors]
+        raw_weights: list[float] = [
+            round(item["pax_volume"] / total_pax, 6) for item in period_corridors
+        ]
         diff = round(1.0 - sum(raw_weights), 6)
         if diff != 0.0:
             # Adjust the highest volume route (index 0) to ensure exact 1.000000 sum
             raw_weights[0] = round(raw_weights[0] + diff, 6)
 
         # Build DgcaTrafficRecord items
-        for rank_idx, (item, weight) in enumerate(zip(period_corridors, raw_weights, strict=False), start=1):
+        for rank_idx, (item, weight) in enumerate(
+            zip(period_corridors, raw_weights, strict=False), start=1
+        ):
             record = DgcaTrafficRecord(
                 year_month=ym,
                 origin=item["origin"],
@@ -336,7 +422,9 @@ class DgcaTrafficLoader:
     # Parsers
     # ------------------------------------------------------------------------
 
-    def parse_csv(self, csv_source: str | Path | io.StringIO) -> list[DgcaTrafficRecord]:
+    def parse_csv(
+        self, csv_source: str | Path | io.StringIO
+    ) -> list[DgcaTrafficRecord]:
         """Parse DGCA traffic records from CSV file path, string content, or StringIO buffer.
 
         Automatically computes normalized share weights if missing or not summing to 1.0.
@@ -349,7 +437,11 @@ class DgcaTrafficLoader:
         - Distance: distance_km, distance, dist_km
         - Weight: share_weight, weight, basket_weight
         """
-        if isinstance(csv_source, Path) or (isinstance(csv_source, str) and "\n" not in csv_source and Path(csv_source).exists()):
+        if isinstance(csv_source, Path) or (
+            isinstance(csv_source, str)
+            and "\n" not in csv_source
+            and Path(csv_source).exists()
+        ):
             with open(csv_source, encoding="utf-8") as f:
                 content = f.read()
         elif isinstance(csv_source, io.StringIO):
@@ -368,15 +460,35 @@ class DgcaTrafficLoader:
             row = {k.strip().lower(): v.strip() for k, v in raw_row.items() if k}
 
             # 1. Period
-            ym = row.get("year_month") or row.get("period") or row.get("month") or row.get("date", "")[:7]
+            ym = (
+                row.get("year_month")
+                or row.get("period")
+                or row.get("month")
+                or row.get("date", "")[:7]
+            )
             if not ym or len(ym) < 7:
                 continue
             ym = ym[:7]
 
             # 2. Origin & Destination
-            route_code = row.get("route_code") or row.get("route") or row.get("corridor") or row.get("city_pair")
-            origin = row.get("origin") or row.get("source") or row.get("from") or row.get("origin_iata")
-            dest = row.get("destination") or row.get("dest") or row.get("to") or row.get("dest_iata")
+            route_code = (
+                row.get("route_code")
+                or row.get("route")
+                or row.get("corridor")
+                or row.get("city_pair")
+            )
+            origin = (
+                row.get("origin")
+                or row.get("source")
+                or row.get("from")
+                or row.get("origin_iata")
+            )
+            dest = (
+                row.get("destination")
+                or row.get("dest")
+                or row.get("to")
+                or row.get("dest_iata")
+            )
 
             if not origin or not dest:
                 if route_code and "-" in route_code:
@@ -403,25 +515,37 @@ class DgcaTrafficLoader:
             pax = int(float(pax_str))
 
             # 4. Distance
-            dist_str = row.get("distance_km") or row.get("distance") or row.get("dist_km")
-            distance = float(dist_str) if dist_str else CORRIDOR_DISTANCE_MAP.get(route_code, 1000.0)
+            dist_str = (
+                row.get("distance_km") or row.get("distance") or row.get("dist_km")
+            )
+            distance = (
+                float(dist_str)
+                if dist_str
+                else CORRIDOR_DISTANCE_MAP.get(route_code, 1000.0)
+            )
 
             # 5. Share weight (optional)
-            w_str = row.get("share_weight") or row.get("weight") or row.get("basket_weight")
+            w_str = (
+                row.get("share_weight") or row.get("weight") or row.get("basket_weight")
+            )
             share_weight = float(w_str) if w_str else None
 
-            token = declared_token(row.get("provenance"), row.get("is_synthetic"), file_declared)
+            token = declared_token(
+                row.get("provenance"), row.get("is_synthetic"), file_declared
+            )
             prov = resolve_traffic_provenance(token)
-            raw_rows_by_period.setdefault(ym, []).append({
-                "origin": origin,
-                "destination": dest,
-                "route_code": route_code,
-                "pax_volume": pax,
-                "distance_km": distance,
-                "share_weight": share_weight,
-                "is_synthetic": prov.is_synthetic,
-                "provenance": prov.label,
-            })
+            raw_rows_by_period.setdefault(ym, []).append(
+                {
+                    "origin": origin,
+                    "destination": dest,
+                    "route_code": route_code,
+                    "pax_volume": pax,
+                    "distance_km": distance,
+                    "share_weight": share_weight,
+                    "is_synthetic": prov.is_synthetic,
+                    "provenance": prov.label,
+                }
+            )
 
         # Process and normalize each period
         records: list[DgcaTrafficRecord] = []
@@ -443,7 +567,9 @@ class DgcaTrafficLoader:
             else:
                 weights = [x["share_weight"] for x in items]  # type: ignore[misc]
 
-            for rank, (item, weight) in enumerate(zip(items, weights, strict=False), start=1):
+            for rank, (item, weight) in enumerate(
+                zip(items, weights, strict=False), start=1
+            ):
                 rec = DgcaTrafficRecord(
                     year_month=ym,
                     origin=item["origin"],
@@ -466,9 +592,15 @@ class DgcaTrafficLoader:
             return f"MODELLED {provenance} file: {self.data_path}. Not a DGCA release."
         return f"DGCA city-pair traffic file: {self.data_path}"
 
-    def parse_json(self, json_source: str | Path | list[dict[str, Any]] | dict[str, Any]) -> list[DgcaTrafficRecord]:
+    def parse_json(
+        self, json_source: str | Path | list[dict[str, Any]] | dict[str, Any]
+    ) -> list[DgcaTrafficRecord]:
         """Parse DGCA traffic records from JSON file path, string, or Python list/dict."""
-        if isinstance(json_source, Path) or (isinstance(json_source, str) and "\n" not in json_source and Path(json_source).exists()):
+        if isinstance(json_source, Path) or (
+            isinstance(json_source, str)
+            and "\n" not in json_source
+            and Path(json_source).exists()
+        ):
             with open(json_source, encoding="utf-8") as f:
                 data = json.load(f)
         elif isinstance(json_source, str):
@@ -477,14 +609,20 @@ class DgcaTrafficLoader:
             data = json_source
 
         file_declared = data.get("provenance") if isinstance(data, dict) else None
-        raw_list = data if isinstance(data, list) else data.get("records", data.get("data", []))
+        raw_list = (
+            data
+            if isinstance(data, list)
+            else data.get("records", data.get("data", []))
+        )
         if not isinstance(raw_list, list):
             raise ValueError("Expected JSON array of traffic records")
 
         # Reuse parse_csv normalization logic by converting to dict entries
         raw_rows_by_period: dict[str, list[dict[str, Any]]] = {}
         for item in raw_list:
-            ym = item.get("year_month") or item.get("period") or item.get("date", "")[:7]
+            ym = (
+                item.get("year_month") or item.get("period") or item.get("date", "")[:7]
+            )
             if not ym or len(ym) < 7:
                 continue
             ym = ym[:7]
@@ -502,26 +640,34 @@ class DgcaTrafficLoader:
             dest = dest.strip().upper()
             route_code = f"{origin}-{dest}"
             pax = int(item.get("pax_volume") or item.get("pax", 0))
-            dist = float(item.get("distance_km") or CORRIDOR_DISTANCE_MAP.get(route_code, 1000.0))
+            dist = float(
+                item.get("distance_km") or CORRIDOR_DISTANCE_MAP.get(route_code, 1000.0)
+            )
             w = item.get("share_weight") or item.get("weight")
             share_weight = float(w) if w is not None else None
 
             token = declared_token(
                 None if item.get("provenance") is None else str(item.get("provenance")),
-                None if item.get("is_synthetic") is None else str(item.get("is_synthetic")),
+                (
+                    None
+                    if item.get("is_synthetic") is None
+                    else str(item.get("is_synthetic"))
+                ),
                 None if file_declared is None else str(file_declared),
             )
             prov = resolve_traffic_provenance(token)
-            raw_rows_by_period.setdefault(ym, []).append({
-                "origin": origin,
-                "destination": dest,
-                "route_code": route_code,
-                "pax_volume": pax,
-                "distance_km": dist,
-                "share_weight": share_weight,
-                "is_synthetic": prov.is_synthetic,
-                "provenance": prov.label,
-            })
+            raw_rows_by_period.setdefault(ym, []).append(
+                {
+                    "origin": origin,
+                    "destination": dest,
+                    "route_code": route_code,
+                    "pax_volume": pax,
+                    "distance_km": dist,
+                    "share_weight": share_weight,
+                    "is_synthetic": prov.is_synthetic,
+                    "provenance": prov.label,
+                }
+            )
 
         records: list[DgcaTrafficRecord] = []
         for ym, items in sorted(raw_rows_by_period.items()):
@@ -537,7 +683,9 @@ class DgcaTrafficLoader:
             else:
                 weights = [x["share_weight"] for x in items]  # type: ignore[misc]
 
-            for rank, (item, weight) in enumerate(zip(items, weights, strict=False), start=1):
+            for rank, (item, weight) in enumerate(
+                zip(items, weights, strict=False), start=1
+            ):
                 rec = DgcaTrafficRecord(
                     year_month=ym,
                     origin=item["origin"],
@@ -585,7 +733,9 @@ class DgcaTrafficLoader:
             weights = self._weights_by_period.get(target_ym, {})
         return dict(weights)
 
-    def get_tuple_route_weights(self, period: str | None = None) -> dict[tuple[str, str], float]:
+    def get_tuple_route_weights(
+        self, period: str | None = None
+    ) -> dict[tuple[str, str], float]:
         """Retrieve weights keyed by (origin, destination) airport IATA tuple.
 
         Format: {("DEL", "BOM"): 0.174825, ...}
@@ -607,17 +757,25 @@ class DgcaTrafficLoader:
         """Return nested dictionary of weights for all available periods: {period: {route_code: weight}}."""
         return {ym: dict(weights) for ym, weights in self._weights_by_period.items()}
 
-    def get_corridor_growth_rate(self, route_code: str, period_from: str, period_to: str) -> float:
+    def get_corridor_growth_rate(
+        self, route_code: str, period_from: str, period_to: str
+    ) -> float:
         """Calculate percentage growth in passenger traffic volume for a corridor between two periods."""
         r_clean = route_code.strip().upper()
-        p_from_recs = {r.route_code: r.pax_volume for r in self.get_period_traffic(period_from)}
-        p_to_recs = {r.route_code: r.pax_volume for r in self.get_period_traffic(period_to)}
+        p_from_recs = {
+            r.route_code: r.pax_volume for r in self.get_period_traffic(period_from)
+        }
+        p_to_recs = {
+            r.route_code: r.pax_volume for r in self.get_period_traffic(period_to)
+        }
 
         v_from = p_from_recs.get(r_clean)
         v_to = p_to_recs.get(r_clean)
 
         if v_from is None or v_to is None or v_from <= 0:
-            raise ValueError(f"Insufficient traffic data for corridor '{route_code}' between {period_from} and {period_to}")
+            raise ValueError(
+                f"Insufficient traffic data for corridor '{route_code}' between {period_from} and {period_to}"
+            )
 
         return ((v_to - v_from) / v_from) * 100.0
 
@@ -672,7 +830,9 @@ class DgcaTrafficLoader:
             for r in self._records:
                 writer.writerow(r.to_dict())
 
-        logger.info("Exported %d DGCA traffic records to CSV at %s", len(self._records), path)
+        logger.info(
+            "Exported %d DGCA traffic records to CSV at %s", len(self._records), path
+        )
         return path
 
     def export_json(self, dest_path: str | Path) -> Path:
@@ -684,7 +844,9 @@ class DgcaTrafficLoader:
         with open(path, mode="w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
-        logger.info("Exported %d DGCA traffic records to JSON at %s", len(self._records), path)
+        logger.info(
+            "Exported %d DGCA traffic records to JSON at %s", len(self._records), path
+        )
         return path
 
     # ------------------------------------------------------------------------
@@ -733,7 +895,10 @@ class DgcaTrafficLoader:
                     records=records_data,
                     commit=True,
                 )
-                logger.info("Seeded %d DGCA traffic weights via econometrics_repo", weights_upserted)
+                logger.info(
+                    "Seeded %d DGCA traffic weights via econometrics_repo",
+                    weights_upserted,
+                )
 
                 if update_active_routes:
                     latest_ym = self.get_latest_period()
@@ -742,7 +907,11 @@ class DgcaTrafficLoader:
                         year_month=latest_ym,
                         commit=True,
                     )
-                    logger.info("Synchronized %d active routes with period %s", routes_updated, latest_ym)
+                    logger.info(
+                        "Synchronized %d active routes with period %s",
+                        routes_updated,
+                        latest_ym,
+                    )
 
                 return {
                     "weights_upserted": weights_upserted,
@@ -751,7 +920,9 @@ class DgcaTrafficLoader:
 
             except (ImportError, AttributeError):
                 # 2. Fallback: Direct table creation and update via SQLAlchemy
-                logger.info("econometrics_repo not in branch; executing standalone DGCA seeding fallback")
+                logger.info(
+                    "econometrics_repo not in branch; executing standalone DGCA seeding fallback"
+                )
                 return self._seed_database_fallback(session, update_active_routes)
 
         finally:
@@ -767,19 +938,38 @@ class DgcaTrafficLoader:
         try:
             from backend.app.models.econometrics import DgcaTrafficWeight
         except (ImportError, ModuleNotFoundError):
+
             class StandaloneDgcaTrafficWeight(Base):
                 __tablename__ = "dgca_traffic_weights"
                 __table_args__ = (
-                    UniqueConstraint("route_code", "year_month", name="uq_dgca_traffic_weights_route_period"),
+                    UniqueConstraint(
+                        "route_code",
+                        "year_month",
+                        name="uq_dgca_traffic_weights_route_period",
+                    ),
                     {"extend_existing": True},
                 )
 
-                id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-                route_code: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
-                year_month: Mapped[str] = mapped_column(String(7), nullable=False, index=True)
-                pax_volume: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-                share_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-                created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+                id: Mapped[int] = mapped_column(
+                    Integer, primary_key=True, autoincrement=True
+                )
+                route_code: Mapped[str] = mapped_column(
+                    String(20), nullable=False, index=True
+                )
+                year_month: Mapped[str] = mapped_column(
+                    String(7), nullable=False, index=True
+                )
+                pax_volume: Mapped[int] = mapped_column(
+                    Integer, nullable=False, default=0
+                )
+                share_weight: Mapped[float] = mapped_column(
+                    Float, nullable=False, default=0.0
+                )
+                created_at: Mapped[datetime] = mapped_column(
+                    DateTime(timezone=True),
+                    nullable=False,
+                    default=lambda: datetime.now(UTC),
+                )
 
             DgcaTrafficWeight = StandaloneDgcaTrafficWeight
 
@@ -825,7 +1015,11 @@ class DgcaTrafficLoader:
                     routes_count += 1
             session.commit()
 
-        logger.info("Directly seeded %d traffic weights and updated %d routes", weights_count, routes_count)
+        logger.info(
+            "Directly seeded %d traffic weights and updated %d routes",
+            weights_count,
+            routes_count,
+        )
         return {
             "weights_upserted": weights_count,
             "routes_updated": routes_count,

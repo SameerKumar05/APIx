@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import unittest
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
+
 from backend.app.db.ingestion_repo import (
     IngestionRepo,
     bulk_insert_raw_fares,
@@ -38,8 +39,12 @@ class TestIngestionRepo(unittest.TestCase):
         Base.metadata.drop_all(bind=self.engine)
 
     def test_compute_dedup_hash(self):
-        h1 = compute_dedup_hash("6E", "6E-205", "DEL", "BOM", "2026-10-01T06:00:00", "T+7")
-        h2 = compute_dedup_hash("6e", "6E-205", "del", "bom", "2026-10-01T06:00:00", "T+7")
+        h1 = compute_dedup_hash(
+            "6E", "6E-205", "DEL", "BOM", "2026-10-01T06:00:00", "T+7"
+        )
+        h2 = compute_dedup_hash(
+            "6e", "6E-205", "del", "bom", "2026-10-01T06:00:00", "T+7"
+        )
         self.assertEqual(h1, h2)
         self.assertEqual(len(h1), 64)
 
@@ -107,32 +112,40 @@ class TestIngestionRepo(unittest.TestCase):
         self.assertIsNotNone(updated.duration_seconds)
 
     def test_cleanup_retention_and_index_preservation(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         today = date.today()
 
         # Add recent record
-        self.repo.bulk_insert([{
-            "origin": "DEL",
-            "destination": "BOM",
-            "flight_date": today,
-            "booking_window": "T+1",
-            "airline_code": "6E",
-            "flight_number": "6E-500",
-            "total_fare": 4000.0,
-            "scraped_at": now,
-        }])
+        self.repo.bulk_insert(
+            [
+                {
+                    "origin": "DEL",
+                    "destination": "BOM",
+                    "flight_date": today,
+                    "booking_window": "T+1",
+                    "airline_code": "6E",
+                    "flight_number": "6E-500",
+                    "total_fare": 4000.0,
+                    "scraped_at": now,
+                }
+            ]
+        )
 
         # Add old record (120 days old)
-        self.repo.bulk_insert([{
-            "origin": "DEL",
-            "destination": "BOM",
-            "flight_date": today - timedelta(days=120),
-            "booking_window": "T+1",
-            "airline_code": "6E",
-            "flight_number": "6E-501",
-            "total_fare": 4200.0,
-            "scraped_at": now - timedelta(days=120),
-        }])
+        self.repo.bulk_insert(
+            [
+                {
+                    "origin": "DEL",
+                    "destination": "BOM",
+                    "flight_date": today - timedelta(days=120),
+                    "booking_window": "T+1",
+                    "airline_code": "6E",
+                    "flight_number": "6E-501",
+                    "total_fare": 4200.0,
+                    "scraped_at": now - timedelta(days=120),
+                }
+            ]
+        )
 
         # Add route daily index
         route_idx = RouteDailyIndex(

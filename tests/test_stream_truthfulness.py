@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from starlette.testclient import WebSocketTestSession
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from starlette.testclient import WebSocketTestSession
 
 from backend.app.api.v1.endpoints import stream as stream_mod
 from backend.app.core.config import settings
@@ -71,7 +71,9 @@ def _persist_quote(
 
 
 @pytest.fixture
-def idle_stream_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Session]:
+def idle_stream_db(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[Session]:
     """Disposable SQLite bound to the stream poller, isolated from apix.db."""
     engine: Engine = create_engine(
         f"sqlite:///{tmp_path / 'websocket-idle-8014.db'}",
@@ -257,7 +259,9 @@ def _noop_index_pipeline() -> None:
     """Keep the ingest request from running the daily index job during stream checks."""
 
 
-def _quote_payload(flight_number: str, fare_inr: float) -> dict[str, str | int | float | None]:
+def _quote_payload(
+    flight_number: str, fare_inr: float
+) -> dict[str, str | int | float | None]:
     record = RawFareRecord(
         airline_code="6E",
         flight_number=flight_number,
@@ -330,10 +334,16 @@ def test_ingested_batch_emits_each_persisted_fare_once(
         "backend.app.api.v1.endpoints.ingestion.run_daily_index_pipeline",
         _noop_index_pipeline,
     )
-    records = [_quote_payload(flight_number, fare_inr) for flight_number, fare_inr in INGESTED_QUOTES]
+    records = [
+        _quote_payload(flight_number, fare_inr)
+        for flight_number, fare_inr in INGESTED_QUOTES
+    ]
     monkeypatch.setattr(stream_mod, "manager", stream_mod.ConnectionManager())
 
-    with TestClient(app) as client, client.websocket_connect("/api/v1/stream/fares") as websocket:
+    with (
+        TestClient(app) as client,
+        client.websocket_connect("/api/v1/stream/fares") as websocket,
+    ):
         assert websocket.receive_json()["type"] == "connected"
         initial = websocket.receive_json()
         body = _post_batch(client, records)
@@ -345,7 +355,9 @@ def test_ingested_batch_emits_each_persisted_fare_once(
     assert body["duplicate_count"] == 0
     live_fares = [packet for packet in observed if packet.get("type") == "fare_update"]
     assert len(live_fares) == 3
-    assert [packet.get("fare_id") for packet in live_fares] == _persisted_fare_ids(idle_stream_db)
+    assert [packet.get("fare_id") for packet in live_fares] == _persisted_fare_ids(
+        idle_stream_db
+    )
     assert [packet.get("flight_number") for packet in live_fares] == [
         flight_number for flight_number, _fare_inr in INGESTED_QUOTES
     ]
@@ -374,7 +386,10 @@ def test_reposted_duplicate_emits_no_fare_update(
         "backend.app.api.v1.endpoints.ingestion.run_daily_index_pipeline",
         _noop_index_pipeline,
     )
-    records = [_quote_payload(flight_number, fare_inr) for flight_number, fare_inr in INGESTED_QUOTES]
+    records = [
+        _quote_payload(flight_number, fare_inr)
+        for flight_number, fare_inr in INGESTED_QUOTES
+    ]
     duplicate = _quote_payload(DUPLICATE_FLIGHT, 4101.0)
 
     with TestClient(app) as client:
@@ -389,7 +404,9 @@ def test_reposted_duplicate_emits_no_fare_update(
             observed = _receive_until_idle(websocket, limit=INGEST_STREAM_LIMIT)
 
     assert initial["type"] == "initial_buffer"
-    assert sorted(fare["fare_id"] for fare in initial["fares"]) == _persisted_fare_ids(idle_stream_db)
+    assert sorted(fare["fare_id"] for fare in initial["fares"]) == _persisted_fare_ids(
+        idle_stream_db
+    )
     assert replay["inserted_count"] == 0
     assert replay["duplicate_count"] == 1
     live_fares = [packet for packet in observed if packet.get("type") == "fare_update"]

@@ -58,20 +58,30 @@ class TestMospiCpiLoader(unittest.TestCase):
         import json
 
         root = Path(__file__).resolve().parents[1]
-        csv_text = (root / "data" / "mospi_cpi_historical_2024_2026.csv").read_text(encoding="utf-8")
+        csv_text = (root / "data" / "mospi_cpi_historical_2024_2026.csv").read_text(
+            encoding="utf-8"
+        )
         self.assertNotIn("174.5", csv_text)
         self.assertNotIn("185.2", csv_text)
         self.assertNotIn("195.8", csv_text)
         self.assertNotIn("196.4", csv_text)
-        payload = json.loads((root / "data" / "mospi_cpi_historical_2024_2026.json").read_text(encoding="utf-8"))
+        payload = json.loads(
+            (root / "data" / "mospi_cpi_historical_2024_2026.json").read_text(
+                encoding="utf-8"
+            )
+        )
         self.assertEqual(payload["official"], False)
         self.assertEqual(payload["status"], "withdrawn")
         self.assertEqual(payload["records"], [])
 
     def test_default_divergence_does_not_invent_a_mospi_level(self) -> None:
-        from backend.app.services.econometric_engine import calculate_mospi_cpi_divergence
+        from backend.app.services.econometric_engine import (
+            calculate_mospi_cpi_divergence,
+        )
 
-        result = calculate_mospi_cpi_divergence([{"date": "2026-01-01", "index_value": 110.0}])
+        result = calculate_mospi_cpi_divergence(
+            [{"date": "2026-01-01", "index_value": 110.0}]
+        )
         self.assertEqual(result.metadata["benchmark_sound"], False)
         self.assertEqual(result.aligned_series, [])
         self.assertEqual(result.latest_mospi_cpi, 0.0)
@@ -123,7 +133,9 @@ class TestDgcaTrafficLoader(unittest.TestCase):
             self.loader.export_csv(csv_path)
             from_csv = DgcaTrafficLoader(data_path=csv_path)
             self.assertEqual(len(from_csv.get_route_weights()), 10)
-            self.assertAlmostEqual(sum(from_csv.get_route_weights().values()), 1.0, places=5)
+            self.assertAlmostEqual(
+                sum(from_csv.get_route_weights().values()), 1.0, places=5
+            )
 
             json_path = Path(tmpdir) / "dgca.json"
             self.loader.export_json(json_path)
@@ -148,7 +160,9 @@ class TestBenchmarkDatabaseSeeding(unittest.TestCase):
                 seed_all(session)
 
                 del_bom_before = session.execute(
-                    select(Route).where(Route.origin == "DEL", Route.destination == "BOM")
+                    select(Route).where(
+                        Route.origin == "DEL", Route.destination == "BOM"
+                    )
                 ).scalar_one()
                 pax_before = del_bom_before.dgca_monthly_pax
 
@@ -157,12 +171,16 @@ class TestBenchmarkDatabaseSeeding(unittest.TestCase):
                 self.assertEqual(m_count, 0)
 
                 # Seed DGCA
-                d_res = DgcaTrafficLoader().seed_database(db=session, update_active_routes=True)
+                d_res = DgcaTrafficLoader().seed_database(
+                    db=session, update_active_routes=True
+                )
                 self.assertEqual(d_res["weights_upserted"], 270)
                 self.assertEqual(d_res["routes_updated"], 10)
 
                 del_bom_after = session.execute(
-                    select(Route).where(Route.origin == "DEL", Route.destination == "BOM")
+                    select(Route).where(
+                        Route.origin == "DEL", Route.destination == "BOM"
+                    )
                 ).scalar_one()
                 self.assertGreater(del_bom_after.dgca_monthly_pax, pax_before)
 
@@ -292,10 +310,16 @@ class TestDgcaWeightProvenance:
     def test_committed_weights_file_declares_itself_generated(self) -> None:
         from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
 
-        csv = Path(__file__).resolve().parents[1] / "data" / "dgca_passenger_traffic_weights.csv"
+        csv = (
+            Path(__file__).resolve().parents[1]
+            / "data"
+            / "dgca_passenger_traffic_weights.csv"
+        )
         loader = DgcaTrafficLoader(data_path=csv)
         january = next(
-            rec for rec in loader._records if rec.year_month == "2024-01" and rec.route_code == "DEL-BOM"
+            rec
+            for rec in loader._records
+            if rec.year_month == "2024-01" and rec.route_code == "DEL-BOM"
         )
         assert january.pax_volume == 441875
         assert january.is_synthetic is True

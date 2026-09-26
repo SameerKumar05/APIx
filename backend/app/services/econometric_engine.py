@@ -29,8 +29,8 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 DEFAULT_LEAD_TIME_PAX_SHARES: dict[str, float] = {
-    "T+1": 0.20,   # 1-day advance (urgent / business / emergency)
-    "T+7": 0.32,   # 7-day advance (short-lead standard)
+    "T+1": 0.20,  # 1-day advance (urgent / business / emergency)
+    "T+7": 0.32,  # 7-day advance (short-lead standard)
     "T+15": 0.26,  # 15-day advance (planned leisure)
     "T+30": 0.14,  # 30-day advance (early bird / holiday)
     "T+45": 0.08,  # 45-day advance (far-planned / corporate travel policy)
@@ -54,7 +54,6 @@ CANONICAL_WINDOW_DAYS: dict[str, int] = {
 # (January 2026 combined general is 104.46 on base 2024=100, not a 2012=100 continuation).
 # Pass a caller-supplied series. Do not restore numbers here.
 BENCHMARK_MOSPI_CPI_SERIES: list[dict[str, Any]] = []
-
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +88,9 @@ class SubstitutionBias(float):
         val.bias_pct = round(float(bias_pct), 4)
         val.laspeyres_index = round(float(laspeyres_index), 4)
         val.fisher_index = round(float(fisher_index), 4)
-        val.paasche_index = round(float(paasche_index), 4) if paasche_index is not None else None
+        val.paasche_index = (
+            round(float(paasche_index), 4) if paasche_index is not None else None
+        )
         val.is_positive = bias_points >= 0.0
         return val
 
@@ -193,7 +194,9 @@ def calculate_paasche_index(
                     non-positive base fares, or denominator evaluates to zero.
     """
     if not current_fares or not base_fares or not current_weights:
-        raise ValueError("current_fares, base_fares, and current_weights must all be non-empty")
+        raise ValueError(
+            "current_fares, base_fares, and current_weights must all be non-empty"
+        )
 
     common_routes = [
         r
@@ -202,14 +205,20 @@ def calculate_paasche_index(
     ]
     if not common_routes:
         # Check if current_weights has keys without negative weights
-        common_routes = [r for r in current_fares if r in base_fares and r in current_weights]
+        common_routes = [
+            r for r in current_fares if r in base_fares and r in current_weights
+        ]
         if not common_routes:
-            raise ValueError("No common routes between current fares, base fares, and current weights")
+            raise ValueError(
+                "No common routes between current fares, base fares, and current weights"
+            )
 
     # Fast path: check for exact base period match
     all_base_match = True
     for r in common_routes:
-        if not math.isclose(current_fares[r], base_fares[r], rel_tol=1e-12, abs_tol=1e-12):
+        if not math.isclose(
+            current_fares[r], base_fares[r], rel_tol=1e-12, abs_tol=1e-12
+        ):
             all_base_match = False
             break
     if all_base_match:
@@ -219,14 +228,18 @@ def calculate_paasche_index(
     first_r = common_routes[0]
     base_0 = base_fares[first_r]
     if base_0 <= 0:
-        raise ValueError(f"Base fare for route '{first_r}' must be positive, got {base_0}")
+        raise ValueError(
+            f"Base fare for route '{first_r}' must be positive, got {base_0}"
+        )
     ratio_0 = current_fares[first_r] / base_0
     uniform_scaling = True
     for r in common_routes:
         b = base_fares[r]
         if b <= 0:
             raise ValueError(f"Base fare for route '{r}' must be positive, got {b}")
-        if not math.isclose(current_fares[r] / b, ratio_0, rel_tol=1e-12, abs_tol=1e-12):
+        if not math.isclose(
+            current_fares[r] / b, ratio_0, rel_tol=1e-12, abs_tol=1e-12
+        ):
             uniform_scaling = False
             break
     if uniform_scaling:
@@ -241,7 +254,9 @@ def calculate_paasche_index(
         q_t = float(current_weights[r])
 
         if p_0 <= 0:
-            raise ValueError(f"Base fare for route '{r}' must be strictly positive, got {p_0}")
+            raise ValueError(
+                f"Base fare for route '{r}' must be strictly positive, got {p_0}"
+            )
         if q_t < 0:
             raise ValueError(f"Weight for route '{r}' cannot be negative, got {q_t}")
 
@@ -397,7 +412,11 @@ def calculate_lead_time_elasticity(
         raise ValueError("No valid positive fares provided in window_fares")
 
     norm_pax: dict[str, float] = {}
-    source_pax = window_pax_shares if window_pax_shares is not None else DEFAULT_LEAD_TIME_PAX_SHARES
+    source_pax = (
+        window_pax_shares
+        if window_pax_shares is not None
+        else DEFAULT_LEAD_TIME_PAX_SHARES
+    )
     for k, v in source_pax.items():
         if v is not None and v > 0:
             norm_pax[_normalize_window_key(k)] = float(v)
@@ -411,7 +430,9 @@ def calculate_lead_time_elasticity(
         single_w = active_windows[0] if active_windows else list(norm_fares.keys())[0]
         f_val = norm_fares.get(single_w, 5000.0)
         return LeadTimeElasticityResult(
-            curves={single_w: {"fare": f_val, "pax_share": norm_pax.get(single_w, 0.25)}},
+            curves={
+                single_w: {"fare": f_val, "pax_share": norm_pax.get(single_w, 0.25)}
+            },
             arc_elasticities={},
             overall_elasticity=-1.0,
             lead_time_premium_pct=0.0,
@@ -470,7 +491,10 @@ def calculate_lead_time_elasticity(
     if len(log_p) >= 2:
         mean_lp = sum(log_p) / len(log_p)
         mean_lq = sum(log_q) / len(log_q)
-        cov = sum((lp - mean_lp) * (lq - mean_lq) for lp, lq in zip(log_p, log_q, strict=False))
+        cov = sum(
+            (lp - mean_lp) * (lq - mean_lq)
+            for lp, lq in zip(log_p, log_q, strict=False)
+        )
         var_p = sum((lp - mean_lp) ** 2 for lp in log_p)
         overall_elasticity = round(float(cov / var_p), 4) if var_p > 1e-9 else -1.0
     else:
@@ -482,7 +506,9 @@ def calculate_lead_time_elasticity(
     p_early = norm_fares[first_window]
     p_late = norm_fares[last_window]
 
-    lead_time_premium_pct = round(((p_late - p_early) / p_early) * 100.0, 2) if p_early > 0 else 0.0
+    lead_time_premium_pct = (
+        round(((p_late - p_early) / p_early) * 100.0, 2) if p_early > 0 else 0.0
+    )
     urgency_multiplier = round(p_late / p_early, 2) if p_early > 0 else 1.0
 
     interpretation = (
@@ -530,7 +556,14 @@ def _extract_period_str(entry: Mapping[str, Any]) -> str:
 
 def _extract_cpi_val(entry: Mapping[str, Any]) -> float:
     """Extract CPI value from diverse field naming conventions."""
-    for k in ("cpi_transport", "cpi", "cpi_value", "cpi_index", "transport_cpi", "index_value"):
+    for k in (
+        "cpi_transport",
+        "cpi",
+        "cpi_value",
+        "cpi_index",
+        "transport_cpi",
+        "index_value",
+    ):
         if k in entry and entry[k] is not None:
             try:
                 return float(entry[k])
@@ -541,7 +574,14 @@ def _extract_cpi_val(entry: Mapping[str, Any]) -> float:
 
 def _extract_apix_val(entry: Mapping[str, Any]) -> float:
     """Extract APIx airfare index value from diverse field naming conventions."""
-    for k in ("index_value", "apix_index", "airfare_index", "fare_index", "laspeyres_index", "fisher_index"):
+    for k in (
+        "index_value",
+        "apix_index",
+        "airfare_index",
+        "fare_index",
+        "laspeyres_index",
+        "fisher_index",
+    ):
         if k in entry and entry[k] is not None:
             try:
                 return float(entry[k])
@@ -647,7 +687,9 @@ def calculate_mospi_cpi_divergence(
                 "apix_index": round(apix_avg, 2),
                 "mospi_cpi": round(mospi_val, 2),
                 "divergence_gap": round(gap, 2),
-                "divergence_pct": round((gap / mospi_val) * 100.0, 2) if mospi_val > 0 else 0.0,
+                "divergence_pct": (
+                    round((gap / mospi_val) * 100.0, 2) if mospi_val > 0 else 0.0
+                ),
             }
         )
 
@@ -658,7 +700,7 @@ def calculate_mospi_cpi_divergence(
 
     # Tracking error RMSE
     if len(gaps) > 0:
-        rmse = math.sqrt(sum(g ** 2 for g in gaps) / len(gaps))
+        rmse = math.sqrt(sum(g**2 for g in gaps) / len(gaps))
     else:
         rmse = 0.0
     tracking_error = round(rmse, 2)
@@ -668,7 +710,10 @@ def calculate_mospi_cpi_divergence(
     if n >= 2:
         mean_a = sum(apix_vector) / n
         mean_m = sum(mospi_vector) / n
-        cov_am = sum((a - mean_a) * (m - mean_m) for a, m in zip(apix_vector, mospi_vector, strict=False))
+        cov_am = sum(
+            (a - mean_a) * (m - mean_m)
+            for a, m in zip(apix_vector, mospi_vector, strict=False)
+        )
         std_a = math.sqrt(sum((a - mean_a) ** 2 for a in apix_vector))
         std_m = math.sqrt(sum((m - mean_m) ** 2 for m in mospi_vector))
         if std_a > 1e-9 and std_m > 1e-9:
@@ -700,7 +745,9 @@ def calculate_mospi_cpi_divergence(
         if len(a_slice) >= 2:
             m_a = sum(a_slice) / len(a_slice)
             m_m = sum(m_slice) / len(m_slice)
-            num = sum((a - m_a) * (m - m_m) for a, m in zip(a_slice, m_slice, strict=False))
+            num = sum(
+                (a - m_a) * (m - m_m) for a, m in zip(a_slice, m_slice, strict=False)
+            )
             den = math.sqrt(sum((a - m_a) ** 2 for a in a_slice)) * math.sqrt(
                 sum((m - m_m) ** 2 for m in m_slice)
             )
@@ -781,7 +828,9 @@ class EconometricEngine:
 
         b_fares = dict(base_fares) if base_fares is not None else self.base_fares
         if not b_fares:
-            raise ValueError("Base fares must be provided either in constructor or method call")
+            raise ValueError(
+                "Base fares must be provided either in constructor or method call"
+            )
 
         # Laspeyres index (fixed base-period weights)
         laspeyres_val = calculate_laspeyres_index(
@@ -792,7 +841,9 @@ class EconometricEngine:
         )
 
         # Paasche index (current-period weights)
-        p_weights = paasche_weights if paasche_weights is not None else laspeyres_weights
+        p_weights = (
+            paasche_weights if paasche_weights is not None else laspeyres_weights
+        )
         if p_weights is None:
             p_weights = {r: 1.0 for r in current_fares if r in b_fares}
 

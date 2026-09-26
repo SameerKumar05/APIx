@@ -102,7 +102,10 @@ def test_mospi_cpi_loader() -> None:
     assert jan_2026 is not None
     jan_2025 = loader.get_cpi_for_period("2025-01")
     assert jan_2025 is not None
-    expected_yoy = ((jan_2026.cpi_transport_index - jan_2025.cpi_transport_index) / jan_2025.cpi_transport_index) * 100.0
+    expected_yoy = (
+        (jan_2026.cpi_transport_index - jan_2025.cpi_transport_index)
+        / jan_2025.cpi_transport_index
+    ) * 100.0
 
     assert jan_2026.inflation_yoy is not None
     yoy_diff = abs(jan_2026.inflation_yoy - expected_yoy)
@@ -121,7 +124,8 @@ def test_mospi_cpi_loader() -> None:
 
     log_test(
         "MoSPI divergence calculation",
-        div["divergence_points"] == expected_transport_pts and div["airfare_divergence_points"] == expected_airfare_pts,
+        div["divergence_points"] == expected_transport_pts
+        and div["airfare_divergence_points"] == expected_airfare_pts,
         f"Transport gap: {div['divergence_points']} pts, Airfare gap: {div['airfare_divergence_points']} pts",
     )
 
@@ -133,7 +137,8 @@ def test_mospi_cpi_loader() -> None:
         reparsed_series = reparsed_loader.get_cpi_series()
         log_test(
             "MoSPI CSV round-trip fidelity",
-            len(reparsed_series) == 27 and reparsed_series[-1].cpi_transport_index == latest.cpi_transport_index,
+            len(reparsed_series) == 27
+            and reparsed_series[-1].cpi_transport_index == latest.cpi_transport_index,
             f"Reparsed {len(reparsed_series)} records from CSV",
         )
 
@@ -145,7 +150,8 @@ def test_mospi_cpi_loader() -> None:
         reparsed_json_series = reparsed_json_loader.get_cpi_series()
         log_test(
             "MoSPI JSON round-trip fidelity",
-            len(reparsed_json_series) == 27 and reparsed_json_series[0].year_month == "2024-01",
+            len(reparsed_json_series) == 27
+            and reparsed_json_series[0].year_month == "2024-01",
             f"Reparsed {len(reparsed_json_series)} records from JSON",
         )
 
@@ -453,8 +459,11 @@ def main() -> int:
         return 0
 
     except Exception as exc:
-        print(f"\n[ERROR] Verification suite encountered an error: {exc}", file=sys.stderr)
+        print(
+            f"\n[ERROR] Verification suite encountered an error: {exc}", file=sys.stderr
+        )
         import traceback
+
         traceback.print_exc()
         return 1
 

@@ -1,7 +1,5 @@
-from typing import Any, List, Union
-from pydantic import AnyHttpUrl, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 INSECURE_DEFAULT_INGESTION_KEY = "apix-ingestion-secret-key-2026"
 
@@ -32,7 +30,7 @@ class Settings(BaseSettings):
     INGESTION_HEADER_NAME: str = "X-Ingestion-Key"
 
     # CORS Configuration
-    BACKEND_CORS_ORIGINS: List[str] = [
+    BACKEND_CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://localhost:5173",
         "http://127.0.0.1:3000",
@@ -72,13 +70,15 @@ class Settings(BaseSettings):
         falling back to it would mean a deployment that forgets to set the variable
         accepts ingestion from anyone who has seen this file.
         """
-        if self.INGESTION_API_KEY == INSECURE_DEFAULT_INGESTION_KEY and self.ENVIRONMENT != "development":
+        if (
+            self.INGESTION_API_KEY == INSECURE_DEFAULT_INGESTION_KEY
+            and self.ENVIRONMENT != "development"
+        ):
             raise ValueError(
                 "INGESTION_API_KEY is still the published default. Set a unique value "
                 "before running outside development."
             )
         return self
-
 
 
 settings = Settings()

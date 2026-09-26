@@ -43,7 +43,9 @@ def _shares(values: dict[str, float]) -> dict[str, float]:
     return {k: v / total for k, v in values.items()}
 
 
-def _laspeyres(x0: dict[str, float], xt: dict[str, float], w0: dict[str, float]) -> float:
+def _laspeyres(
+    x0: dict[str, float], xt: dict[str, float], w0: dict[str, float]
+) -> float:
     """Textbook Laspeyres for variable X under base-period weights W0."""
     keys = x0.keys()
     return sum(xt[r] * w0[r] for r in keys) / sum(x0[r] * w0[r] for r in keys)
@@ -101,7 +103,9 @@ def test_engine_laspeyres_is_a_relative_mean_not_a_true_laspeyres() -> None:
     assert engine != pytest.approx(true_laspeyres, rel=1e-9)
 
 
-def test_engine_laspeyres_matches_true_laspeyres_only_when_relatives_are_uniform() -> None:
+def test_engine_laspeyres_matches_true_laspeyres_only_when_relatives_are_uniform() -> (
+    None
+):
     """Why the deviation hides: identical relatives make the two formulas coincide."""
     uniform = {r: v * 1.2 for r, v in BASE_PRICES.items()}
     engine = calculate_laspeyres_index(uniform, BASE_PRICES, _shares(BASE_QUANTITIES))
@@ -112,14 +116,20 @@ def test_engine_laspeyres_matches_true_laspeyres_only_when_relatives_are_uniform
 def test_engine_fisher_pair_does_not_satisfy_factor_reversal() -> None:
     """The claim in the master specification is false, and this is the counterexample."""
     price_fisher = calculate_fisher_index(
-        calculate_laspeyres_index(CURRENT_PRICES, BASE_PRICES, _shares(BASE_QUANTITIES)),
-        calculate_paasche_index(CURRENT_PRICES, BASE_PRICES, _shares(CURRENT_QUANTITIES)),
+        calculate_laspeyres_index(
+            CURRENT_PRICES, BASE_PRICES, _shares(BASE_QUANTITIES)
+        ),
+        calculate_paasche_index(
+            CURRENT_PRICES, BASE_PRICES, _shares(CURRENT_QUANTITIES)
+        ),
     )
     quantity_fisher = calculate_fisher_index(
         calculate_laspeyres_index(
             CURRENT_QUANTITIES, BASE_QUANTITIES, _shares(BASE_PRICES)
         ),
-        calculate_paasche_index(CURRENT_QUANTITIES, BASE_QUANTITIES, _shares(CURRENT_PRICES)),
+        calculate_paasche_index(
+            CURRENT_QUANTITIES, BASE_QUANTITIES, _shares(CURRENT_PRICES)
+        ),
     )
     product = (price_fisher / 100.0) * (quantity_fisher / 100.0)
     assert product != pytest.approx(_value_ratio(), rel=1e-6)

@@ -33,10 +33,11 @@ import json
 import math
 import sqlite3
 import sys
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 REQUIRED_WINDOW_DAYS = 30
 
@@ -80,23 +81,23 @@ class BacktestResult:
     reason: str
     required_window_days: int
     apix_observations: int = 0
-    apix_first: Optional[str] = None
-    apix_last: Optional[str] = None
+    apix_first: str | None = None
+    apix_last: str | None = None
     mospi_observations: int = 0
     overlapping_months: int = 0
-    apix_mom_pct: Dict[str, float] = field(default_factory=dict)
-    mospi_mom_pct: Dict[str, float] = field(default_factory=dict)
-    pearson_r: Optional[float] = None
-    r_squared: Optional[float] = None
-    mean_abs_error_pct: Optional[float] = None
-    best_lag_months: Optional[int] = None
-    correlation_at_best_lag: Optional[float] = None
-    direction_agreement_pct: Optional[float] = None
-    dgca: Dict[str, Any] = field(default_factory=lambda: DGCA_POSITION)
+    apix_mom_pct: dict[str, float] = field(default_factory=dict)
+    mospi_mom_pct: dict[str, float] = field(default_factory=dict)
+    pearson_r: float | None = None
+    r_squared: float | None = None
+    mean_abs_error_pct: float | None = None
+    best_lag_months: int | None = None
+    correlation_at_best_lag: float | None = None
+    direction_agreement_pct: float | None = None
+    dgca: dict[str, Any] = field(default_factory=lambda: DGCA_POSITION)
     mospi_source_note: str = MOSPI_SOURCE_NOTE
 
 
-def pearson(xs: Sequence[float], ys: Sequence[float]) -> Optional[float]:
+def pearson(xs: Sequence[float], ys: Sequence[float]) -> float | None:
     n = len(xs)
     if n < 3 or n != len(ys):
         return None
@@ -120,22 +121,22 @@ def month_distance(start: str, end: str) -> int:
     return (ey - sy) * 12 + (em - sm)
 
 
-def pct_change(series: Dict[str, float]) -> Dict[str, float]:
+def pct_change(series: dict[str, float]) -> dict[str, float]:
     keys = sorted(series)
-    out: Dict[str, float] = {}
+    out: dict[str, float] = {}
     for prev, cur in zip(keys, keys[1:]):
         if series[prev]:
             out[cur] = (series[cur] - series[prev]) / series[prev] * 100.0
     return out
 
 
-def load_apix(conn: sqlite3.Connection) -> Dict[str, float]:
+def load_apix(conn: sqlite3.Connection) -> dict[str, float]:
     """Monthly mean of the Fisher national index, keyed by YYYY-MM."""
     rows = conn.execute(
         "SELECT index_date, index_value FROM national_daily_indices "
         "WHERE lower(coalesce(index_type,'')) = 'fisher'"
     ).fetchall()
-    by_month: Dict[str, List[float]] = {}
+    by_month: dict[str, list[float]] = {}
     for index_date, value in rows:
         if value is None:
             continue
@@ -147,14 +148,17 @@ def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})")}
 
 
-def reference_unsound_reason(conn: sqlite3.Connection) -> Optional[str]:
+def reference_unsound_reason(conn: sqlite3.Connection) -> str | None:
     """Refuse the withdrawn bundle and any row still labelled as official without a press note."""
     cols = _columns(conn, "mospi_cpi_series")
     if not cols:
         return None
     if "source" in cols:
         labels = [row[0] for row in conn.execute("SELECT source FROM mospi_cpi_series")]
-        if any(isinstance(label, str) and label.strip().casefold() in _BARE_OFFICIAL_LABELS for label in labels):
+        if any(
+            isinstance(label, str) and label.strip().casefold() in _BARE_OFFICIAL_LABELS
+            for label in labels
+        ):
             return (
                 "mospi_cpi_series contains rows labelled source=MoSPI with no press-note citation. "
                 "That label was used for a withdrawn bundle that contradicted NSO press notes. "
@@ -162,13 +166,35 @@ def reference_unsound_reason(conn: sqlite3.Connection) -> Optional[str]:
             )
     fingerprints = []
     if "headline_cpi" in cols:
-        fingerprints.append(("year_month = '2024-01' AND headline_cpi = 185.2", "2024-01 headline 185.2"))
-        fingerprints.append(("year_month = '2025-12' AND headline_cpi = 195.8", "2025-12 headline 195.8"))
-        fingerprints.append(("year_month = '2026-01' AND headline_cpi = 196.4", "2026-01 headline 196.4"))
+        fingerprints.append(
+            (
+                "year_month = '2024-01' AND headline_cpi = 185.2",
+                "2024-01 headline 185.2",
+            )
+        )
+        fingerprints.append(
+            (
+                "year_month = '2025-12' AND headline_cpi = 195.8",
+                "2025-12 headline 195.8",
+            )
+        )
+        fingerprints.append(
+            (
+                "year_month = '2026-01' AND headline_cpi = 196.4",
+                "2026-01 headline 196.4",
+            )
+        )
     if "cpi_transport_index" in cols:
-        fingerprints.append(("year_month = '2024-01' AND cpi_transport_index = 174.5", "2024-01 transport 174.5"))
+        fingerprints.append(
+            (
+                "year_month = '2024-01' AND cpi_transport_index = 174.5",
+                "2024-01 transport 174.5",
+            )
+        )
     for clause, label in fingerprints:
-        hit = conn.execute(f"SELECT 1 FROM mospi_cpi_series WHERE {clause} LIMIT 1").fetchone()
+        hit = conn.execute(
+            f"SELECT 1 FROM mospi_cpi_series WHERE {clause} LIMIT 1"
+        ).fetchone()
         if hit:
             return (
                 f"mospi_cpi_series still contains the withdrawn value {label}, which contradicts "
@@ -177,7 +203,7 @@ def reference_unsound_reason(conn: sqlite3.Connection) -> Optional[str]:
     return None
 
 
-def load_mospi(conn: sqlite3.Connection) -> Dict[str, float]:
+def load_mospi(conn: sqlite3.Connection) -> dict[str, float]:
     rows = conn.execute(
         "SELECT year_month, airfare_sub_index FROM mospi_cpi_series "
         "WHERE airfare_sub_index IS NOT NULL"
@@ -185,7 +211,7 @@ def load_mospi(conn: sqlite3.Connection) -> Dict[str, float]:
     return {str(y).strip(): float(v) for y, v in rows}
 
 
-def history_span_days(first: Optional[str], last: Optional[str]) -> int:
+def history_span_days(first: str | None, last: str | None) -> int:
     if not first or not last:
         return 0
     a = date.fromisoformat(first[:10])
@@ -276,7 +302,9 @@ def run(db_path: str, required_days: int = REQUIRED_WINDOW_DAYS) -> BacktestResu
     result.correlation_at_best_lag = None if best_r is None else round(best_r, 4)
 
     if r is None:
-        result.reason = "Correlation is undefined, most likely a constant series on one side."
+        result.reason = (
+            "Correlation is undefined, most likely a constant series on one side."
+        )
     return result
 
 
@@ -329,7 +357,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", default="apix.db", help="SQLite database path")
     parser.add_argument(
-        "--days", type=int, default=REQUIRED_WINDOW_DAYS, help="Required history in days"
+        "--days",
+        type=int,
+        default=REQUIRED_WINDOW_DAYS,
+        help="Required history in days",
     )
     parser.add_argument("--json-out", default=None, help="Write the result as JSON")
     parser.add_argument("--md-out", default=None, help="Write a markdown summary")
@@ -351,7 +382,9 @@ def main() -> int:
     print(f"  MoSPI months      : {res.mospi_observations}")
     if res.status == "OK":
         print(f"  pearson r         : {res.pearson_r} (r2={res.r_squared})")
-        print(f"  best lag          : {res.best_lag_months} month(s), r={res.correlation_at_best_lag}")
+        print(
+            f"  best lag          : {res.best_lag_months} month(s), r={res.correlation_at_best_lag}"
+        )
         print(f"  direction agree   : {res.direction_agreement_pct}%")
     else:
         print(f"  reason            : {res.reason}")

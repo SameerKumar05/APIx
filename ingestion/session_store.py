@@ -95,7 +95,9 @@ def session_settings_from_env() -> SessionSettings:
     return SessionSettings(
         enabled=_env_flag("SCRAPER_SESSION_REUSE", "0"),
         directory=Path(os.getenv("SCRAPER_SESSION_DIR", "artifacts/scraper-sessions")),
-        max_age_seconds=_env_int("SCRAPER_SESSION_MAX_AGE_SECONDS", DEFAULT_MAX_AGE_SECONDS),
+        max_age_seconds=_env_int(
+            "SCRAPER_SESSION_MAX_AGE_SECONDS", DEFAULT_MAX_AGE_SECONDS
+        ),
         max_bytes=_env_int("SCRAPER_SESSION_MAX_BYTES", DEFAULT_MAX_BYTES),
     )
 

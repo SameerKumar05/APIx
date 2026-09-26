@@ -120,7 +120,11 @@ def calculate_dynamic_z_score(
     sigma_dyn = sigma * urgency_factor
 
     dynamic_z = diff / sigma_dyn
-    return round(float(dynamic_z), 4), round(float(standard_z), 4), round(float(urgency_factor), 4)
+    return (
+        round(float(dynamic_z), 4),
+        round(float(standard_z), 4),
+        round(float(urgency_factor), 4),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +214,7 @@ def calculate_hhi(carrier_shares: Mapping[str, float]) -> float:
         return 0.25
 
     normalized = [v / total for v in carrier_shares.values() if v > 0]
-    hhi = sum(s ** 2 for s in normalized)
+    hhi = sum(s**2 for s in normalized)
     return round(float(hhi), 4)
 
 
@@ -293,7 +297,11 @@ def classify_surge_multifeature(
         dod_surge = round(float((p - previous_fare) / previous_fare), 4)
 
     # 4. Surge Multiple relative to median
-    eff_median = float(route_median) if route_median is not None and route_median > 0 else (mu if mu > 0 else 5000.0)
+    eff_median = (
+        float(route_median)
+        if route_median is not None and route_median > 0
+        else (mu if mu > 0 else 5000.0)
+    )
     fare_ratio = round(p / eff_median, 3)
 
     # 5. Composite Anomaly Score (0.0 to 1.0)
@@ -301,13 +309,21 @@ def classify_surge_multifeature(
     score_z = min(1.0, max(0.0, dyn_z / 3.5)) if dyn_z > 0 else 0.0
 
     # Feature 2: Surge multiple contribution
-    score_ratio = min(1.0, max(0.0, (fare_ratio - 1.0) / 1.5)) if fare_ratio > 1.0 else 0.0
+    score_ratio = (
+        min(1.0, max(0.0, (fare_ratio - 1.0) / 1.5)) if fare_ratio > 1.0 else 0.0
+    )
 
     # Feature 3: DoD surge contribution
-    score_dod = min(1.0, max(0.0, dod_surge / 0.50)) if dod_surge is not None and dod_surge > 0 else 0.0
+    score_dod = (
+        min(1.0, max(0.0, dod_surge / 0.50))
+        if dod_surge is not None and dod_surge > 0
+        else 0.0
+    )
 
     # Feature 4: Market power multiplier (HHI penalty on concentrated routes)
-    score_hhi = min(1.0, max(0.0, (carrier_hhi - 0.25) / 0.50)) if carrier_hhi > 0.25 else 0.0
+    score_hhi = (
+        min(1.0, max(0.0, (carrier_hhi - 0.25) / 0.50)) if carrier_hhi > 0.25 else 0.0
+    )
 
     # Feature 5: Tukey outlier contribution
     score_tukey = 1.0 if is_tukey else 0.0
@@ -350,20 +366,28 @@ def classify_surge_multifeature(
     # Check 3: Route price > 2.5x route baseline median
     if fare_ratio >= 2.50:
         is_dgca_violation = True
-        violations_found.append(f"Surge Multiple ({fare_ratio:.2f}x >= 2.50x Route Median)")
+        violations_found.append(
+            f"Surge Multiple ({fare_ratio:.2f}x >= 2.50x Route Median)"
+        )
         violation_code = "DGCA_CAR_TARIFF_CEILING_BREACH"
 
     # Check 4: Anti-competitive predatory spike in concentrated market
     if carrier_hhi >= 0.40 and dyn_z >= 2.5:
         is_dgca_violation = True
-        violations_found.append(f"Concentrated Market Price Shock (HHI={carrier_hhi:.2f}, Z={dyn_z:.2f})")
+        violations_found.append(
+            f"Concentrated Market Price Shock (HHI={carrier_hhi:.2f}, Z={dyn_z:.2f})"
+        )
         violation_code = violation_code or "DGCA_ANTI_COMPETITIVE_SURGE"
 
     # Severity classification
     if is_dgca_violation or anomaly_score >= 0.65:
         severity = MLAnomalySeverity.CRITICAL
         is_anomaly = True
-    elif dyn_z >= 2.0 or (dod_surge is not None and dod_surge >= 0.25) or anomaly_score >= 0.35:
+    elif (
+        dyn_z >= 2.0
+        or (dod_surge is not None and dod_surge >= 0.25)
+        or anomaly_score >= 0.35
+    ):
         severity = MLAnomalySeverity.WARNING
         is_anomaly = True
     else:
@@ -389,9 +413,7 @@ def classify_surge_multifeature(
             f"Fare INR {p:.2f} vs baseline INR {mu:.2f} (Score={anomaly_score:.2f})."
         )
     else:
-        explanation = (
-            f"Normal pricing within statistical bounds (Z={dyn_z:.2f}, Score={anomaly_score:.2f})."
-        )
+        explanation = f"Normal pricing within statistical bounds (Z={dyn_z:.2f}, Score={anomaly_score:.2f})."
 
     return MLAnomalyResult(
         observed_fare=round(p, 2),
@@ -443,7 +465,9 @@ class MLAnomalyDetector:
         default_lead_time_days: int = 7,
     ) -> None:
         self.airline_shares = dict(
-            airline_market_shares if airline_market_shares is not None else DEFAULT_AIRLINE_MARKET_SHARES
+            airline_market_shares
+            if airline_market_shares is not None
+            else DEFAULT_AIRLINE_MARKET_SHARES
         )
         self.default_lead_time = default_lead_time_days
         self.cached_hhi = calculate_hhi(self.airline_shares)
@@ -504,7 +528,9 @@ class MLAnomalyDetector:
             fare = float(q.get("fare", q.get("total_fare", 0.0)))
             orig = q.get("origin", "")
             dest = q.get("destination", "")
-            route_code = q.get("route_code", f"{orig}-{dest}" if orig and dest else "UNKNOWN")
+            route_code = q.get(
+                "route_code", f"{orig}-{dest}" if orig and dest else "UNKNOWN"
+            )
             win = q.get("booking_window", "T+7")
 
             key = f"{route_code}:{win}"

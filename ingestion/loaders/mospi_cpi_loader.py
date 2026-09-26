@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from pydantic import BaseModel, Field
-from sqlalchemy import Date, DateTime, Float, Index, Integer, String, select
+from sqlalchemy import Date, DateTime, Float, Integer, String, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from backend.app.db.session import Base, SessionLocal
@@ -63,7 +63,9 @@ class MospiCpiRecord(BaseModel):
         default=None,
         description="Year-on-Year Transport CPI inflation percentage change",
     )
-    published_at: DateType = Field(..., description="Publication date carried by the file, if any")
+    published_at: DateType = Field(
+        ..., description="Publication date carried by the file, if any"
+    )
     source: str = Field(
         default="undeclared",
         description="Provenance. Bare 'MoSPI' is not a citation; a press-note URL is.",
@@ -99,8 +101,12 @@ class MospiCpiRecord(BaseModel):
             "airfare_sub_index": self.airfare_sub_index,
             "headline_cpi": self.headline_cpi,
             "base_year": self.base_year,
-            "inflation_mom": round(self.inflation_mom, 3) if self.inflation_mom is not None else None,
-            "inflation_yoy": round(self.inflation_yoy, 3) if self.inflation_yoy is not None else None,
+            "inflation_mom": (
+                round(self.inflation_mom, 3) if self.inflation_mom is not None else None
+            ),
+            "inflation_yoy": (
+                round(self.inflation_yoy, 3) if self.inflation_yoy is not None else None
+            ),
             "published_at": self.published_at.isoformat(),
             "source": self.source,
         }
@@ -214,7 +220,11 @@ class MospiCpiLoader:
         - Published: published_at, publication_date, release_date
         - Source: source, agency, publisher
         """
-        if isinstance(csv_source, Path) or (isinstance(csv_source, str) and "\n" not in csv_source and Path(csv_source).exists()):
+        if isinstance(csv_source, Path) or (
+            isinstance(csv_source, str)
+            and "\n" not in csv_source
+            and Path(csv_source).exists()
+        ):
             with open(csv_source, encoding="utf-8") as f:
                 content = f.read()
         elif isinstance(csv_source, io.StringIO):
@@ -243,8 +253,14 @@ class MospiCpiLoader:
 
             # Normalize to YYYY-MM
             ym_clean = ym_val[:7] if len(ym_val) >= 7 and ym_val[4] == "-" else ym_val
-            if len(ym_clean) != 7 or not ym_clean[:4].isdigit() or not ym_clean[5:].isdigit():
-                logger.warning("Skipping invalid period '%s' at row %d", ym_val, row_idx)
+            if (
+                len(ym_clean) != 7
+                or not ym_clean[:4].isdigit()
+                or not ym_clean[5:].isdigit()
+            ):
+                logger.warning(
+                    "Skipping invalid period '%s' at row %d", ym_val, row_idx
+                )
                 continue
 
             y_str, m_str = ym_clean.split("-")
@@ -270,7 +286,9 @@ class MospiCpiLoader:
                 or row.get("airfare")
                 or row.get("airfare_index")
             )
-            airfare_cpi = float(a_val_str) if a_val_str else round(cpi_transport * 0.98, 2)
+            airfare_cpi = (
+                float(a_val_str) if a_val_str else round(cpi_transport * 0.98, 2)
+            )
 
             # 4. Resolve Headline CPI (default to 1.05 * transport if absent)
             h_val_str = (
@@ -280,10 +298,16 @@ class MospiCpiLoader:
                 or row.get("headline")
                 or row.get("combined_cpi")
             )
-            headline_cpi = float(h_val_str) if h_val_str else round(cpi_transport * 1.04, 2)
+            headline_cpi = (
+                float(h_val_str) if h_val_str else round(cpi_transport * 1.04, 2)
+            )
 
             # 5. Resolve Publication date
-            pub_str = row.get("published_at") or row.get("publication_date") or row.get("release_date")
+            pub_str = (
+                row.get("published_at")
+                or row.get("publication_date")
+                or row.get("release_date")
+            )
             if pub_str:
                 pub_date = date.fromisoformat(pub_str[:10])
             else:
@@ -318,18 +342,30 @@ class MospiCpiLoader:
             pm, py = (12, y - 1) if m == 1 else (m - 1, y)
             prior_ym = f"{py:04d}-{pm:02d}"
             if prior_ym in transport_map:
-                r.inflation_mom = ((r.cpi_transport_index - transport_map[prior_ym]) / transport_map[prior_ym]) * 100.0
+                r.inflation_mom = (
+                    (r.cpi_transport_index - transport_map[prior_ym])
+                    / transport_map[prior_ym]
+                ) * 100.0
 
             # YoY
             yoy_ym = f"{y - 1:04d}-{m:02d}"
             if yoy_ym in transport_map:
-                r.inflation_yoy = ((r.cpi_transport_index - transport_map[yoy_ym]) / transport_map[yoy_ym]) * 100.0
+                r.inflation_yoy = (
+                    (r.cpi_transport_index - transport_map[yoy_ym])
+                    / transport_map[yoy_ym]
+                ) * 100.0
 
         return records
 
-    def parse_json(self, json_source: str | Path | list[dict[str, Any]] | dict[str, Any]) -> list[MospiCpiRecord]:
+    def parse_json(
+        self, json_source: str | Path | list[dict[str, Any]] | dict[str, Any]
+    ) -> list[MospiCpiRecord]:
         """Parse MoSPI CPI records from JSON file path, string, or Python list/dict."""
-        if isinstance(json_source, Path) or (isinstance(json_source, str) and "\n" not in json_source and Path(json_source).exists()):
+        if isinstance(json_source, Path) or (
+            isinstance(json_source, str)
+            and "\n" not in json_source
+            and Path(json_source).exists()
+        ):
             with open(json_source, encoding="utf-8") as f:
                 data = json.load(f)
         elif isinstance(json_source, str):
@@ -337,23 +373,37 @@ class MospiCpiLoader:
         else:
             data = json_source
 
-        raw_list = data if isinstance(data, list) else data.get("records", data.get("data", []))
+        raw_list = (
+            data
+            if isinstance(data, list)
+            else data.get("records", data.get("data", []))
+        )
         if not isinstance(raw_list, list):
             raise ValueError("Expected JSON array of records")
 
         # Convert using parse_csv or direct dictionary mapping
         records: list[MospiCpiRecord] = []
         for item in raw_list:
-            ym = item.get("year_month") or item.get("period") or item.get("date", "")[:7]
+            ym = (
+                item.get("year_month") or item.get("period") or item.get("date", "")[:7]
+            )
             if not ym or len(ym) < 7:
                 continue
             ym = ym[:7]
             y, m = int(ym[:4]), int(ym[5:7])
             rec_date = date(y, m, 1)
 
-            t_val = float(item.get("cpi_transport_index") or item.get("cpi_transport") or item.get("transport", 100.0))
-            a_val = float(item.get("airfare_sub_index") or item.get("airfare", t_val * 0.98))
-            h_val = float(item.get("headline_cpi") or item.get("cpi_general", t_val * 1.04))
+            t_val = float(
+                item.get("cpi_transport_index")
+                or item.get("cpi_transport")
+                or item.get("transport", 100.0)
+            )
+            a_val = float(
+                item.get("airfare_sub_index") or item.get("airfare", t_val * 0.98)
+            )
+            h_val = float(
+                item.get("headline_cpi") or item.get("cpi_general", t_val * 1.04)
+            )
 
             pub_raw = item.get("published_at")
             if pub_raw:
@@ -504,7 +554,9 @@ class MospiCpiLoader:
             for r in self._records:
                 writer.writerow(r.to_dict())
 
-        logger.info("Exported %d MoSPI CPI records to CSV at %s", len(self._records), path)
+        logger.info(
+            "Exported %d MoSPI CPI records to CSV at %s", len(self._records), path
+        )
         return path
 
     def export_json(self, dest_path: str | Path) -> Path:
@@ -516,7 +568,9 @@ class MospiCpiLoader:
         with open(path, mode="w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
-        logger.info("Exported %d MoSPI CPI records to JSON at %s", len(self._records), path)
+        logger.info(
+            "Exported %d MoSPI CPI records to JSON at %s", len(self._records), path
+        )
         return path
 
     # ------------------------------------------------------------------------
@@ -552,13 +606,17 @@ class MospiCpiLoader:
                     }
                     for r in self._records
                 ]
-                count = bulk_upsert_mospi_cpi(db=session, records=records_data, commit=True)
+                count = bulk_upsert_mospi_cpi(
+                    db=session, records=records_data, commit=True
+                )
                 logger.info("Seeded %d MoSPI CPI records via econometrics_repo", count)
                 return count
 
             except (ImportError, AttributeError):
                 # 2. Fallback: Direct table creation and merge via SQLAlchemy ORM
-                logger.info("econometrics_repo not yet in branch; using direct MospiCpiSeries fallback")
+                logger.info(
+                    "econometrics_repo not yet in branch; using direct MospiCpiSeries fallback"
+                )
                 return self._seed_database_fallback(session)
 
         finally:
@@ -574,18 +632,28 @@ class MospiCpiLoader:
             # Define minimal Standalone MospiCpiSeries
             class StandaloneMospiCpi(Base):
                 __tablename__ = "mospi_cpi_series"
-                __table_args__ = (
-                    {"extend_existing": True},
-                )
+                __table_args__ = ({"extend_existing": True},)
 
-                id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-                year_month: Mapped[str] = mapped_column(String(7), nullable=False, unique=True, index=True)
-                cpi_transport_index: Mapped[float] = mapped_column(Float, nullable=False)
+                id: Mapped[int] = mapped_column(
+                    Integer, primary_key=True, autoincrement=True
+                )
+                year_month: Mapped[str] = mapped_column(
+                    String(7), nullable=False, unique=True, index=True
+                )
+                cpi_transport_index: Mapped[float] = mapped_column(
+                    Float, nullable=False
+                )
                 airfare_sub_index: Mapped[float] = mapped_column(Float, nullable=False)
                 headline_cpi: Mapped[float] = mapped_column(Float, nullable=False)
                 published_at: Mapped[date] = mapped_column(Date, nullable=False)
-                source: Mapped[str] = mapped_column(String(100), nullable=False, default="undeclared")
-                created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+                source: Mapped[str] = mapped_column(
+                    String(100), nullable=False, default="undeclared"
+                )
+                created_at: Mapped[datetime] = mapped_column(
+                    DateTime(timezone=True),
+                    nullable=False,
+                    default=lambda: datetime.now(UTC),
+                )
 
             MospiCpiSeries = StandaloneMospiCpi
 
@@ -594,7 +662,9 @@ class MospiCpiLoader:
 
         count = 0
         for r in self._records:
-            stmt = select(MospiCpiSeries).where(MospiCpiSeries.year_month == r.year_month)
+            stmt = select(MospiCpiSeries).where(
+                MospiCpiSeries.year_month == r.year_month
+            )
             existing = session.execute(stmt).scalar_one_or_none()
             if existing:
                 existing.cpi_transport_index = r.cpi_transport_index

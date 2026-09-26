@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 # Ensure repo root is on sys.path
@@ -93,7 +93,9 @@ def run_tests() -> bool:
         "error_details",
         "created_at",
     }
-    assert expected_t_cols.issubset(telemetry_cols), f"Missing telemetry columns: {expected_t_cols - telemetry_cols}"
+    assert expected_t_cols.issubset(
+        telemetry_cols
+    ), f"Missing telemetry columns: {expected_t_cols - telemetry_cols}"
     print(f"  ✓ ScraperTelemetry columns verified: {sorted(list(expected_t_cols))}")
 
     proxy_cols = {col["name"] for col in inspector.get_columns("proxy_health_records")}
@@ -109,7 +111,9 @@ def run_tests() -> bool:
         "error_message",
         "created_at",
     }
-    assert expected_p_cols.issubset(proxy_cols), f"Missing proxy columns: {expected_p_cols - proxy_cols}"
+    assert expected_p_cols.issubset(
+        proxy_cols
+    ), f"Missing proxy columns: {expected_p_cols - proxy_cols}"
     print(f"  ✓ ProxyHealthRecord columns verified: {sorted(list(expected_p_cols))}")
 
     # 2. Scraper Telemetry Logging
@@ -211,7 +215,9 @@ def run_tests() -> bool:
     # 3. Crawler Uptime and Error Rate Aggregations
     print("\n[3/7] Testing crawler uptime and error rate aggregation calculations...")
     # makemytrip has 3 runs: 2 SUCCESS, 1 FAILED -> 66.67% uptime, 33.33% error rate
-    mmt_uptime = calculate_crawler_uptime(db, crawler_name="makemytrip", window_hours=24)
+    mmt_uptime = calculate_crawler_uptime(
+        db, crawler_name="makemytrip", window_hours=24
+    )
     assert mmt_uptime["total_runs"] == 3
     assert mmt_uptime["successful_runs"] == 2
     assert mmt_uptime["failed_runs"] == 1
@@ -219,7 +225,9 @@ def run_tests() -> bool:
     assert mmt_uptime["total_records_extracted"] == 80  # 42 + 38 + 0
     print(f"  ✓ MakeMyTrip uptime: {mmt_uptime['uptime_pct']}% (2/3 runs)")
 
-    mmt_error = calculate_crawler_error_rate(db, crawler_name="makemytrip", window_hours=24)
+    mmt_error = calculate_crawler_error_rate(
+        db, crawler_name="makemytrip", window_hours=24
+    )
     assert mmt_error["total_runs"] == 3
     assert mmt_error["error_runs"] == 1
     assert mmt_error["error_rate_pct"] == 33.33
@@ -233,7 +241,9 @@ def run_tests() -> bool:
     assert sp_uptime["successful_runs"] == 2
 
     # easemytrip has 2 runs: 1 fallback_amadeus (considered successful degraded), 1 TIMEOUT
-    emt_uptime = calculate_crawler_uptime(db, crawler_name="easemytrip", window_hours=24)
+    emt_uptime = calculate_crawler_uptime(
+        db, crawler_name="easemytrip", window_hours=24
+    )
     assert emt_uptime["total_runs"] == 2
     assert emt_uptime["successful_runs"] == 1
     assert emt_uptime["uptime_pct"] == 50.0
@@ -250,10 +260,14 @@ def run_tests() -> bool:
     print(f"  ✓ Global crawler uptime: {all_uptime['uptime_pct']}% across 3 platforms")
 
     # Empty state handling
-    empty_uptime = calculate_crawler_uptime(db, crawler_name="nonexistent_crawler", window_hours=24)
+    empty_uptime = calculate_crawler_uptime(
+        db, crawler_name="nonexistent_crawler", window_hours=24
+    )
     assert empty_uptime["total_runs"] == 0
     assert empty_uptime["uptime_pct"] == 100.0
-    empty_error = calculate_crawler_error_rate(db, crawler_name="nonexistent_crawler", window_hours=24)
+    empty_error = calculate_crawler_error_rate(
+        db, crawler_name="nonexistent_crawler", window_hours=24
+    )
     assert empty_error["error_rate_pct"] == 0.0
     print("  ✓ Empty state defaults (100% uptime, 0% error) verified.")
 
@@ -262,7 +276,9 @@ def run_tests() -> bool:
     assert summary["total_runs"] == 7
     assert summary["overall_uptime_pct"] == 71.43
     assert summary["overall_error_rate_pct"] == 28.57
-    print(f"  ✓ Composite crawler summary verified: {summary['overall_uptime_pct']}% uptime, {summary['total_records_extracted']} total records.")
+    print(
+        f"  ✓ Composite crawler summary verified: {summary['overall_uptime_pct']}% uptime, {summary['total_records_extracted']} total records."
+    )
 
     # 4. Proxy Health Logging and State Transitions
     print("\n[4/7] Testing proxy health logging, circuit breaking, and upsert...")
@@ -284,57 +300,95 @@ def run_tests() -> bool:
     # Upsert proxy health transitions
     target_proxy = "10.0.0.2:8080"
     # 1st success
-    u1 = upsert_proxy_health(db, proxy_ip=target_proxy, latency_ms=180.0, is_success=True)
+    u1 = upsert_proxy_health(
+        db, proxy_ip=target_proxy, latency_ms=180.0, is_success=True
+    )
     assert u1.success_count == 1
     assert u1.consecutive_failures == 0
     assert u1.status == "HEALTHY"
 
     # 2nd success
-    u2 = upsert_proxy_health(db, proxy_ip=target_proxy, latency_ms=160.0, is_success=True)
+    u2 = upsert_proxy_health(
+        db, proxy_ip=target_proxy, latency_ms=160.0, is_success=True
+    )
     assert u2.success_count == 2
     assert u2.consecutive_failures == 0
 
     # 1st failure
-    u3 = upsert_proxy_health(db, proxy_ip=target_proxy, latency_ms=1200.0, is_success=False, error_message="Connect timeout")
+    u3 = upsert_proxy_health(
+        db,
+        proxy_ip=target_proxy,
+        latency_ms=1200.0,
+        is_success=False,
+        error_message="Connect timeout",
+    )
     assert u3.failure_count == 1
     assert u3.consecutive_failures == 1
     assert u3.status == "HEALTHY"  # below circuit break threshold
 
     # 2nd failure
-    u4 = upsert_proxy_health(db, proxy_ip=target_proxy, latency_ms=2500.0, is_success=False)
+    u4 = upsert_proxy_health(
+        db, proxy_ip=target_proxy, latency_ms=2500.0, is_success=False
+    )
     assert u4.failure_count == 2
     assert u4.consecutive_failures == 2
     assert u4.status == "HEALTHY"
 
     # 3rd failure -> circuit break trigger (DEGRADED)
-    u5 = upsert_proxy_health(db, proxy_ip=target_proxy, latency_ms=5000.0, is_success=False, error_message="Circuit break threshold reached")
+    u5 = upsert_proxy_health(
+        db,
+        proxy_ip=target_proxy,
+        latency_ms=5000.0,
+        is_success=False,
+        error_message="Circuit break threshold reached",
+    )
     assert u5.failure_count == 3
     assert u5.consecutive_failures == 3
     assert u5.status == "DEGRADED"
-    print(f"  ✓ Proxy circuit breaker auto-transition to DEGRADED verified after 3 consecutive failures.")
+    print(
+        "  ✓ Proxy circuit breaker auto-transition to DEGRADED verified after 3 consecutive failures."
+    )
 
     # Recovery: 1 success resets consecutive failures and restores HEALTHY
-    u6 = upsert_proxy_health(db, proxy_ip=target_proxy, latency_ms=140.0, is_success=True)
+    u6 = upsert_proxy_health(
+        db, proxy_ip=target_proxy, latency_ms=140.0, is_success=True
+    )
     assert u6.consecutive_failures == 0
     assert u6.status == "HEALTHY"
-    print(f"  ✓ Proxy recovery to HEALTHY verified upon successful request.")
+    print("  ✓ Proxy recovery to HEALTHY verified upon successful request.")
 
     # 5. Proxy Latency Statistics and Active Proxy Filtering
     print("\n[5/7] Testing proxy latency statistics and pool retrieval...")
     # Add a few more proxies
     log_proxy_health(db, proxy_ip="10.0.0.3:8080", status="HEALTHY", latency_ms=85.0)
     log_proxy_health(db, proxy_ip="10.0.0.4:8080", status="HEALTHY", latency_ms=95.0)
-    log_proxy_health(db, proxy_ip="10.0.0.5:8080", status="DEGRADED", latency_ms=450.0, consecutive_failures=4)
-    log_proxy_health(db, proxy_ip="10.0.0.6:8080", status="BANNED", latency_ms=5000.0, consecutive_failures=10)
+    log_proxy_health(
+        db,
+        proxy_ip="10.0.0.5:8080",
+        status="DEGRADED",
+        latency_ms=450.0,
+        consecutive_failures=4,
+    )
+    log_proxy_health(
+        db,
+        proxy_ip="10.0.0.6:8080",
+        status="BANNED",
+        latency_ms=5000.0,
+        consecutive_failures=10,
+    )
 
     # Filter active healthy proxies
-    healthy_pool = get_active_healthy_proxies(db, max_latency_ms=200.0, max_consecutive_failures=3)
+    healthy_pool = get_active_healthy_proxies(
+        db, max_latency_ms=200.0, max_consecutive_failures=3
+    )
     healthy_ips = [p.proxy_ip for p in healthy_pool]
     assert "10.0.0.3:8080" in healthy_ips
     assert "10.0.0.4:8080" in healthy_ips
     assert "10.0.0.5:8080" not in healthy_ips
     assert "10.0.0.6:8080" not in healthy_ips
-    print(f"  ✓ Active healthy proxy filtering returned {len(healthy_pool)} valid proxies.")
+    print(
+        f"  ✓ Active healthy proxy filtering returned {len(healthy_pool)} valid proxies."
+    )
 
     # Latency stats
     p_stats = get_proxy_latency_stats(db, window_hours=24)
@@ -344,17 +398,21 @@ def run_tests() -> bool:
     assert p_stats["healthy_count"] >= 3
     assert p_stats["degraded_count"] >= 1
     assert p_stats["banned_count"] >= 1
-    print(f"  ✓ Proxy latency statistics: min={p_stats['min_latency_ms']}ms, avg={p_stats['avg_latency_ms']}ms, p95={p_stats['p95_latency_ms']}ms")
+    print(
+        f"  ✓ Proxy latency statistics: min={p_stats['min_latency_ms']}ms, avg={p_stats['avg_latency_ms']}ms, p95={p_stats['p95_latency_ms']}ms"
+    )
 
     # Proxy summary
     p_summary = get_proxy_summary(db, window_hours=24)
     assert p_summary["distinct_proxies"] >= 4
     assert p_summary["healthy_count"] >= 3
-    print(f"  ✓ Proxy pool summary verified: {p_summary['distinct_proxies']} distinct proxies.")
+    print(
+        f"  ✓ Proxy pool summary verified: {p_summary['distinct_proxies']} distinct proxies."
+    )
 
     # 6. Retention and Storage Cleanup
     print("\n[6/7] Testing automated retention pruning for stale telemetry...")
-    stale_date = datetime.now(timezone.utc) - timedelta(days=45)
+    stale_date = datetime.now(UTC) - timedelta(days=45)
 
     # Insert old telemetry and old proxy record
     old_t = ScraperTelemetry(
@@ -389,7 +447,9 @@ def run_tests() -> bool:
     assert len(old_query) == 0, "Old telemetry should be pruned"
     recent_query = get_scraper_telemetry(db, crawler_name="makemytrip")
     assert len(recent_query) > 0, "Recent telemetry should be preserved"
-    print(f"  ✓ Pruned {prune_res['scraper_telemetry_pruned']} stale telemetry and {prune_res['proxy_health_pruned']} proxy records. Recent data preserved.")
+    print(
+        f"  ✓ Pruned {prune_res['scraper_telemetry_pruned']} stale telemetry and {prune_res['proxy_health_pruned']} proxy records. Recent data preserved."
+    )
 
     # 7. Object-Oriented TelemetryRepo Wrapper
     print("\n[7/7] Testing TelemetryRepo OOP wrapper...")
@@ -408,7 +468,9 @@ def run_tests() -> bool:
     repo_uptime = repo.get_crawler_uptime(crawler_name="amadeus")
     assert repo_uptime["uptime_pct"] == 100.0
 
-    repo_proxy = repo.upsert_proxy(proxy_ip="10.0.0.99:8080", latency_ms=110.0, is_success=True)
+    repo_proxy = repo.upsert_proxy(
+        proxy_ip="10.0.0.99:8080", latency_ms=110.0, is_success=True
+    )
     assert repo_proxy.status == "HEALTHY"
     repo_summary = repo.get_crawler_summary()
     assert repo_summary["total_runs"] > 0

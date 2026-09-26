@@ -16,7 +16,10 @@ from backend.app.core.cleaning import (
     outlier_against_peers,
     resolve_duration_minutes,
 )
-from backend.app.core.fare_components import ESTIMATED_BASE_FARE_RATIO, classify_fare_split
+from backend.app.core.fare_components import (
+    ESTIMATED_BASE_FARE_RATIO,
+    classify_fare_split,
+)
 from backend.app.db.ingestion_repo import bulk_insert_raw_fares
 from backend.app.models.index import RouteDailyIndex
 from backend.app.models.raw_fare import RawFare
@@ -115,10 +118,7 @@ def test_ingest_persists_outlier_and_index_uses_only_the_normal_fare(
     inserted = bulk_insert_raw_fares(db_session, today, batch_id="today")
 
     assert inserted["inserted"] == 4
-    rows = {
-        row.flight_number: row
-        for row in db_session.scalars(select(RawFare)).all()
-    }
+    rows = {row.flight_number: row for row in db_session.scalars(select(RawFare)).all()}
     assert rows["6E-2002"].total_fare == 25000.0
     assert rows["6E-2002"].index_exclusion_reason == "outlier"
     assert rows["6E-2003"].index_exclusion_reason == "cancelled"
@@ -168,9 +168,12 @@ def test_ingest_persists_outlier_and_index_uses_only_the_normal_fare(
     assert window.median_fare == 4200.0
     assert window.min_fare == 4200.0
     assert window.max_fare == 4200.0
-    assert db_session.scalars(
-        select(RawFare).where(RawFare.flight_number == "6E-2002")
-    ).one().total_fare == 25000.0
+    assert (
+        db_session.scalars(select(RawFare).where(RawFare.flight_number == "6E-2002"))
+        .one()
+        .total_fare
+        == 25000.0
+    )
 
 
 def test_missing_split_is_marked_estimated_and_supplied_split_is_measured(
@@ -214,10 +217,7 @@ def test_missing_split_is_marked_estimated_and_supplied_split_is_measured(
     assert supplied.udf_fee is None
 
     bulk_insert_raw_fares(db_session, [omitted, supplied], batch_id="split")
-    rows = {
-        row.flight_number: row
-        for row in db_session.scalars(select(RawFare)).all()
-    }
+    rows = {row.flight_number: row for row in db_session.scalars(select(RawFare)).all()}
     assert rows["6E-5001"].fare_split_basis == "estimated"
     assert rows["6E-5001"].base_fare == expected_base
     assert rows["6E-5001"].udf_fee is None

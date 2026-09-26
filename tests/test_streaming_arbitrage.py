@@ -23,7 +23,7 @@ Covers:
 from __future__ import annotations
 
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any, List, Optional
 
 import pytest
@@ -57,6 +57,7 @@ BENCHMARK_FLIGHT_NUMBERS = frozenset(
 # ---------------------------------------------------------------------------
 # Helper Fixtures & Builders
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def dedup_engine() -> StreamingDedupEngine:
@@ -105,7 +106,7 @@ def arbitrage_detector() -> ArbitrageDetector:
 
 def create_quote(
     flight_number: str = "6E-205",
-    airline_code: Optional[str] = None,
+    airline_code: str | None = None,
     origin: str = "DEL",
     destination: str = "BOM",
     flight_date: str = "2026-09-25",
@@ -116,7 +117,9 @@ def create_quote(
     is_nonstop: bool = True,
 ) -> FlightQuote:
     """Helper to generate a populated FlightQuote instance."""
-    code = airline_code or (flight_number.split("-")[0] if "-" in flight_number else "6E")
+    code = airline_code or (
+        flight_number.split("-")[0] if "-" in flight_number else "6E"
+    )
     return FlightQuote(
         origin=origin,
         destination=destination,
@@ -130,9 +133,11 @@ def create_quote(
         is_nonstop=is_nonstop,
     )
 
+
 # ---------------------------------------------------------------------------
 # 1. Streaming Deduplication Engine Tests
 # ---------------------------------------------------------------------------
+
 
 class TestStreamingDedupEngine:
     """Tests for StreamingDedupEngine verifying real-time ingestion and dedup invariants."""
@@ -150,16 +155,22 @@ class TestStreamingDedupEngine:
         assert result.portal_count == 1
         assert dedup_engine.stats()["active_buffer_size"] == 1
 
-    def test_duplicate_resolves_minimum_consumer_price(self, dedup_engine: StreamingDedupEngine):
+    def test_duplicate_resolves_minimum_consumer_price(
+        self, dedup_engine: StreamingDedupEngine
+    ):
         """Verifies that duplicate quotes for the same flight update best fare to the minimum."""
         # 1. Higher fare arrives first from OTA
-        q1 = create_quote(flight_number="6E-501", fare=6800.0, source_portal="makemytrip")
+        q1 = create_quote(
+            flight_number="6E-501", fare=6800.0, source_portal="makemytrip"
+        )
         r1 = dedup_engine.ingest(q1)
         assert r1.is_new_flight is True
         assert r1.min_fare == 6800.0
 
         # 2. Lower direct airline fare arrives second
-        q2 = create_quote(flight_number="6E-501", fare=6100.0, source_portal="indigo_direct")
+        q2 = create_quote(
+            flight_number="6E-501", fare=6100.0, source_portal="indigo_direct"
+        )
         r2 = dedup_engine.ingest(q2)
         assert r2.is_new_flight is False
         assert r2.is_new_minimum is True
@@ -168,7 +179,9 @@ class TestStreamingDedupEngine:
         assert r2.portal_count == 2
 
         # 3. Third quote with higher fare arrives from another OTA
-        q3 = create_quote(flight_number="6E-501", fare=6950.0, source_portal="easemytrip")
+        q3 = create_quote(
+            flight_number="6E-501", fare=6950.0, source_portal="easemytrip"
+        )
         r3 = dedup_engine.ingest(q3)
         assert r3.is_new_flight is False
         assert r3.is_new_minimum is False
@@ -180,7 +193,9 @@ class TestStreamingDedupEngine:
         assert best.fare == 6100.0
         assert best.source_portal == "indigo_direct"
 
-    def test_sub_millisecond_ingestion_latency(self, dedup_engine: StreamingDedupEngine):
+    def test_sub_millisecond_ingestion_latency(
+        self, dedup_engine: StreamingDedupEngine
+    ):
         """Verifies that individual quote ingestion executes in sub-millisecond latency."""
         quote = create_quote(flight_number="AI-801", fare=5200.0)
 
@@ -196,13 +211,19 @@ class TestStreamingDedupEngine:
             latencies.append((time.perf_counter() - t0) * 1000.0)
 
         avg_latency_ms = sum(latencies) / len(latencies)
-        assert avg_latency_ms < 1.0, f"Average ingestion latency {avg_latency_ms:.3f}ms exceeds 1.0ms SLA"
+        assert (
+            avg_latency_ms < 1.0
+        ), f"Average ingestion latency {avg_latency_ms:.3f}ms exceeds 1.0ms SLA"
 
     def test_out_of_order_timestamp_arrival(self, dedup_engine: StreamingDedupEngine):
         """Verifies that quotes arriving out of order by timestamp are accommodated."""
-        t_base = datetime(2026, 9, 24, 10, 0, 0, tzinfo=timezone.utc)
-        q_earlier = create_quote(flight_number="SG-101", fare=5500.0, source_portal="spicejet_direct")
-        q_later = create_quote(flight_number="SG-101", fare=5100.0, source_portal="easemytrip")
+        t_base = datetime(2026, 9, 24, 10, 0, 0, tzinfo=UTC)
+        q_earlier = create_quote(
+            flight_number="SG-101", fare=5500.0, source_portal="spicejet_direct"
+        )
+        q_later = create_quote(
+            flight_number="SG-101", fare=5100.0, source_portal="easemytrip"
+        )
 
         # Ingest newer quote first
         r1 = dedup_engine.ingest(q_later, arrival_time=t_base + timedelta(seconds=20))
@@ -216,7 +237,7 @@ class TestStreamingDedupEngine:
     def test_sliding_window_pruning(self):
         """Verifies that quotes older than window_seconds are properly pruned."""
         engine = StreamingDedupEngine(window_seconds=60.0, max_buffer_size=100)
-        t0 = datetime(2026, 9, 24, 12, 0, 0, tzinfo=timezone.utc)
+        t0 = datetime(2026, 9, 24, 12, 0, 0, tzinfo=UTC)
 
         # Ingest 3 distinct flights at t0
         for i in range(3):
@@ -257,9 +278,15 @@ class TestStreamingDedupEngine:
     def test_batch_ingest(self, dedup_engine: StreamingDedupEngine):
         """Verifies ingest_batch correctly processes multiple quotes."""
         quotes = [
-            create_quote(flight_number="QP-101", fare=4500.0, source_portal="akasa_direct"),
-            create_quote(flight_number="QP-101", fare=4300.0, source_portal="makemytrip"),
-            create_quote(flight_number="QP-102", fare=5200.0, source_portal="easemytrip"),
+            create_quote(
+                flight_number="QP-101", fare=4500.0, source_portal="akasa_direct"
+            ),
+            create_quote(
+                flight_number="QP-101", fare=4300.0, source_portal="makemytrip"
+            ),
+            create_quote(
+                flight_number="QP-102", fare=5200.0, source_portal="easemytrip"
+            ),
         ]
         results = dedup_engine.ingest_batch(quotes)
         assert len(results) == 3
@@ -275,6 +302,7 @@ class TestStreamingDedupEngine:
 # ---------------------------------------------------------------------------
 # 2. Cross-Platform Arbitrage Detection Tests
 # ---------------------------------------------------------------------------
+
 
 class TestArbitrageDetector:
     """Tests for ArbitrageDetector verifying spread math and venue selection."""
@@ -318,11 +346,17 @@ class TestArbitrageDetector:
             assert spread_pct == 0.0
             assert is_neg is False
 
-    def test_detect_arbitrage_opportunity_direct_cheaper(self, arbitrage_detector: ArbitrageDetector):
+    def test_detect_arbitrage_opportunity_direct_cheaper(
+        self, arbitrage_detector: ArbitrageDetector
+    ):
         """Verifies detection of direct cheaper arbitrage between airline and OTA."""
         quotes = [
-            create_quote(flight_number="6E-101", fare=6000.0, source_portal="indigo_direct"),
-            create_quote(flight_number="6E-101", fare=6750.0, source_portal="makemytrip"),
+            create_quote(
+                flight_number="6E-101", fare=6000.0, source_portal="indigo_direct"
+            ),
+            create_quote(
+                flight_number="6E-101", fare=6750.0, source_portal="makemytrip"
+            ),
         ]
         opp = arbitrage_detector.detect_flight_arbitrage(quotes)
 
@@ -343,11 +377,17 @@ class TestArbitrageDetector:
         assert opp.actionable is True
         assert opp.is_negative_spread is False
 
-    def test_detect_arbitrage_opportunity_ota_cheaper(self, arbitrage_detector: ArbitrageDetector):
+    def test_detect_arbitrage_opportunity_ota_cheaper(
+        self, arbitrage_detector: ArbitrageDetector
+    ):
         """Verifies detection of reverse arbitrage where OTA is cheaper than direct."""
         quotes = [
-            create_quote(flight_number="AI-404", fare=7500.0, source_portal="airindia_direct"),
-            create_quote(flight_number="AI-404", fare=6750.0, source_portal="easemytrip"),
+            create_quote(
+                flight_number="AI-404", fare=7500.0, source_portal="airindia_direct"
+            ),
+            create_quote(
+                flight_number="AI-404", fare=6750.0, source_portal="easemytrip"
+            ),
         ]
         opp = arbitrage_detector.detect_flight_arbitrage(quotes)
 
@@ -367,8 +407,12 @@ class TestArbitrageDetector:
         """Verifies opportunities below min_spread_pct are marked non-actionable."""
         detector_strict = ArbitrageDetector(min_spread_pct=15.0)
         quotes = [
-            create_quote(flight_number="SG-202", fare=5000.0, source_portal="spicejet_direct"),
-            create_quote(flight_number="SG-202", fare=5500.0, source_portal="makemytrip"),  # +10% spread
+            create_quote(
+                flight_number="SG-202", fare=5000.0, source_portal="spicejet_direct"
+            ),
+            create_quote(
+                flight_number="SG-202", fare=5500.0, source_portal="makemytrip"
+            ),  # +10% spread
         ]
         opp = detector_strict.detect_flight_arbitrage(quotes)
         assert opp is not None
@@ -381,7 +425,11 @@ class TestArbitrageDetector:
         assert len(opps) == 0
 
     def test_single_quote_no_arbitrage(self, arbitrage_detector: ArbitrageDetector):
-        quotes = [create_quote(flight_number="6E-999", fare=6000.0, source_portal="indigo_direct")]
+        quotes = [
+            create_quote(
+                flight_number="6E-999", fare=6000.0, source_portal="indigo_direct"
+            )
+        ]
         assert arbitrage_detector.detect_flight_arbitrage(quotes) is None
         assert len(arbitrage_detector.detect_from_quotes(quotes)) == 0
 
@@ -390,13 +438,14 @@ class TestArbitrageDetector:
 # 3. Database & API Integration Tests
 # ---------------------------------------------------------------------------
 
+
 class TestArbitrageApiIntegration:
     """Tests for GET /api/v1/analytics/arbitrage endpoint and database queries."""
 
     def test_get_current_arbitrage_opportunities_from_db(self, db_session: Session):
         """Verifies get_current_arbitrage_opportunities extracts opportunities from DB raw fares."""
-        today = datetime.now(timezone.utc).date()
-        dep_time = datetime.now(timezone.utc) + timedelta(days=2)
+        today = datetime.now(UTC).date()
+        dep_time = datetime.now(UTC) + timedelta(days=2)
         fare1 = RawFare(
             batch_id="test-batch-001",
             hash_id="test-hash-direct-001",
@@ -409,7 +458,6 @@ class TestArbitrageApiIntegration:
             booking_window="T+1",
             source_platform="indigo_direct",
             flight_date=today,
-
         )
         fare2 = RawFare(
             batch_id="test-batch-001",
@@ -423,7 +471,6 @@ class TestArbitrageApiIntegration:
             booking_window="T+1",
             source_platform="makemytrip",
             flight_date=today,
-
         )
         db_session.add_all([fare1, fare2])
         db_session.commit()
@@ -444,7 +491,9 @@ class TestArbitrageApiIntegration:
         data = response.json()
         validated = ArbitrageResponse(**data)
         assert validated.opportunities_count == len(validated.items)
-        assert validated.routes_evaluated == len({i.route_code for i in validated.items})
+        assert validated.routes_evaluated == len(
+            {i.route_code for i in validated.items}
+        )
         assert isinstance(validated.items, list)
         assert not BENCHMARK_FLIGHT_NUMBERS.intersection(
             {item.flight_number for item in validated.items}
@@ -455,9 +504,14 @@ class TestArbitrageApiIntegration:
             assert isinstance(first, ArbitrageItem)
             assert first.buy_fare > 0
             assert first.sell_fare > 0
-            assert first.spread_inr == round(first.sell_fare - first.buy_fare, 2) or abs(first.spread_inr) > 0
+            assert (
+                first.spread_inr == round(first.sell_fare - first.buy_fare, 2)
+                or abs(first.spread_inr) > 0
+            )
 
-    def test_arbitrage_api_reports_no_coverage_instead_of_benchmark_rows(self, isolated_api_db):
+    def test_arbitrage_api_reports_no_coverage_instead_of_benchmark_rows(
+        self, isolated_api_db
+    ):
         """Given a database with no arbitrage candidates, coverage must read as zero rather than eight invented spreads."""
         with TestClient(app) as client:
             response = client.get("/api/v1/analytics/arbitrage")

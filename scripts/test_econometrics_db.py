@@ -122,38 +122,77 @@ def run_tests() -> bool:
     # Verify column presence in econometric_indices
     econ_cols = {c["name"] for c in inspector.get_columns("econometric_indices")}
     required_econ_cols = {
-        "id", "date", "route_code", "laspeyres_index", "paasche_index",
-        "fisher_ideal_index", "substitution_bias", "calculation_method", "created_at"
+        "id",
+        "date",
+        "route_code",
+        "laspeyres_index",
+        "paasche_index",
+        "fisher_ideal_index",
+        "substitution_bias",
+        "calculation_method",
+        "created_at",
     }
-    assert required_econ_cols.issubset(econ_cols), f"Missing required columns in econometric_indices: {required_econ_cols - econ_cols}"
+    assert required_econ_cols.issubset(
+        econ_cols
+    ), f"Missing required columns in econometric_indices: {required_econ_cols - econ_cols}"
 
     # Verify column presence in mospi_cpi_series
     mospi_cols = {c["name"] for c in inspector.get_columns("mospi_cpi_series")}
     required_mospi_cols = {
-        "id", "year_month", "cpi_transport_index", "airfare_sub_index",
-        "headline_cpi", "published_at", "source", "created_at"
+        "id",
+        "year_month",
+        "cpi_transport_index",
+        "airfare_sub_index",
+        "headline_cpi",
+        "published_at",
+        "source",
+        "created_at",
     }
-    assert required_mospi_cols.issubset(mospi_cols), f"Missing required columns in mospi_cpi_series: {required_mospi_cols - mospi_cols}"
+    assert required_mospi_cols.issubset(
+        mospi_cols
+    ), f"Missing required columns in mospi_cpi_series: {required_mospi_cols - mospi_cols}"
 
     # Verify column presence in route_elasticity
     elas_cols = {c["name"] for c in inspector.get_columns("route_elasticity")}
     required_elas_cols = {
-        "id", "route_code", "calculation_date", "t1_t7_elasticity",
-        "t7_t15_elasticity", "t15_t30_elasticity", "avg_lead_time_decay",
-        "confidence_score", "created_at"
+        "id",
+        "route_code",
+        "calculation_date",
+        "t1_t7_elasticity",
+        "t7_t15_elasticity",
+        "t15_t30_elasticity",
+        "avg_lead_time_decay",
+        "confidence_score",
+        "created_at",
     }
-    assert required_elas_cols.issubset(elas_cols), f"Missing required columns in route_elasticity: {required_elas_cols - elas_cols}"
+    assert required_elas_cols.issubset(
+        elas_cols
+    ), f"Missing required columns in route_elasticity: {required_elas_cols - elas_cols}"
 
     # Verify column presence in dgca_violations
     viol_cols = {c["name"] for c in inspector.get_columns("dgca_violations")}
     required_viol_cols = {
-        "id", "route_code", "airline_code", "flight_number", "flight_date",
-        "window", "fare_inr", "median_baseline_fare", "surge_multiple",
-        "severity", "violation_code", "detected_at", "status"
+        "id",
+        "route_code",
+        "airline_code",
+        "flight_number",
+        "flight_date",
+        "window",
+        "fare_inr",
+        "median_baseline_fare",
+        "surge_multiple",
+        "severity",
+        "violation_code",
+        "detected_at",
+        "status",
     }
-    assert required_viol_cols.issubset(viol_cols), f"Missing required columns in dgca_violations: {required_viol_cols - viol_cols}"
+    assert required_viol_cols.issubset(
+        viol_cols
+    ), f"Missing required columns in dgca_violations: {required_viol_cols - viol_cols}"
 
-    print("  ✓ Schema definitions for all Cycle 4 tables strictly match specifications.")
+    print(
+        "  ✓ Schema definitions for all Cycle 4 tables strictly match specifications."
+    )
 
     # ------------------------------------------------------------------------
     # Test 2: Indexing and Constraints
@@ -191,10 +230,14 @@ def run_tests() -> bool:
     db.add(dup_rec)
     try:
         db.commit()
-        raise AssertionError("Expected IntegrityError on duplicate EconometricIndex insert!")
+        raise AssertionError(
+            "Expected IntegrityError on duplicate EconometricIndex insert!"
+        )
     except IntegrityError:
         db.rollback()
-        print("  ✓ Verified unique constraint on (date, route_code, calculation_method).")
+        print(
+            "  ✓ Verified unique constraint on (date, route_code, calculation_method)."
+        )
 
     # ------------------------------------------------------------------------
     # Test 3: Idempotent Upsert & Single/Bulk Logging
@@ -400,7 +443,9 @@ def run_tests() -> bool:
     print("  ✓ Econometric index queries and latest lookup working as expected.")
 
     # Query MoSPI series
-    all_mospi = get_mospi_cpi_series(db=db, start_period="2026-01", end_period="2026-03")
+    all_mospi = get_mospi_cpi_series(
+        db=db, start_period="2026-01", end_period="2026-03"
+    )
     assert len(all_mospi) == 3
     latest_mospi = get_latest_mospi_cpi(db=db)
     assert latest_mospi is not None
@@ -431,7 +476,9 @@ def run_tests() -> bool:
     )
     assert updated_v is not None
     assert updated_v.status == "CONFIRMED"
-    print("  ✓ DGCA violation filtering, automated surge calculation, and status transition verified.")
+    print(
+        "  ✓ DGCA violation filtering, automated surge calculation, and status transition verified."
+    )
 
     # ------------------------------------------------------------------------
     # Test 5: Aggregations & Analytical Engine
@@ -445,8 +492,12 @@ def run_tests() -> bool:
     assert comp_sum["avg_paasche"] is not None
     assert comp_sum["avg_fisher"] is not None
     assert comp_sum["avg_substitution_bias"] is not None
-    assert comp_sum["avg_laspeyres"] > comp_sum["avg_paasche"]  # Laspeyres > Paasche in inflationary basket
-    print(f"  ✓ Index comparison summary: Avg L={comp_sum['avg_laspeyres']}, P={comp_sum['avg_paasche']}, F={comp_sum['avg_fisher']}, Bias={comp_sum['avg_substitution_bias']}")
+    assert (
+        comp_sum["avg_laspeyres"] > comp_sum["avg_paasche"]
+    )  # Laspeyres > Paasche in inflationary basket
+    print(
+        f"  ✓ Index comparison summary: Avg L={comp_sum['avg_laspeyres']}, P={comp_sum['avg_paasche']}, F={comp_sum['avg_fisher']}, Bias={comp_sum['avg_substitution_bias']}"
+    )
 
     # MoSPI CPI Divergence Analysis
     divergence = get_cpi_divergence_analysis(db=db, months=6)
@@ -456,14 +507,18 @@ def run_tests() -> bool:
     assert march_div["apix_national_fisher"] is not None
     assert march_div["divergence_airfare_pct"] is not None
     assert march_div["sample_days"] == 14
-    print(f"  ✓ MoSPI CPI Divergence computed: 2026-03 Airfare Divergence={march_div['divergence_airfare_pct']}% (APIx={march_div['apix_national_fisher']} vs MoSPI={march_div['mospi_airfare_sub_index']})")
+    print(
+        f"  ✓ MoSPI CPI Divergence computed: 2026-03 Airfare Divergence={march_div['divergence_airfare_pct']}% (APIx={march_div['apix_national_fisher']} vs MoSPI={march_div['mospi_airfare_sub_index']})"
+    )
 
     # Network Elasticity Summary
     net_elas = get_network_elasticity_summary(db=db, target_date=date(2026, 3, 1))
     assert net_elas["corridors_analyzed"] == 3
     assert net_elas["avg_t1_t7_elasticity"] is not None
     assert net_elas["avg_decay_rate"] is not None
-    print(f"  ✓ Network Elasticity Summary: Corridors={net_elas['corridors_analyzed']}, Avg T1/T7={net_elas['avg_t1_t7_elasticity']}, Avg Decay={net_elas['avg_decay_rate']}")
+    print(
+        f"  ✓ Network Elasticity Summary: Corridors={net_elas['corridors_analyzed']}, Avg T1/T7={net_elas['avg_t1_t7_elasticity']}, Avg Decay={net_elas['avg_decay_rate']}"
+    )
 
     # DGCA Violations Summary
     viol_sum = get_dgca_violations_summary(db=db, days=30)
@@ -471,12 +526,16 @@ def run_tests() -> bool:
     assert "CRITICAL" in viol_sum["by_severity"]
     assert "CONFIRMED" in viol_sum["by_status"]
     assert "6E" in viol_sum["by_airline"]
-    print(f"  ✓ DGCA Violations Summary: Total={viol_sum['total_violations']}, Max Surge={viol_sum['max_surge_multiple']}x, Severities={viol_sum['by_severity']}")
+    print(
+        f"  ✓ DGCA Violations Summary: Total={viol_sum['total_violations']}, Max Surge={viol_sum['max_surge_multiple']}x, Severities={viol_sum['by_severity']}"
+    )
 
     # ------------------------------------------------------------------------
     # Test 6: DGCA Traffic Weights & Route Synchronization
     # ------------------------------------------------------------------------
-    print("\n[Step 6/8] Verifying DGCA Traffic Weight Persistence & Route Weight Sync...")
+    print(
+        "\n[Step 6/8] Verifying DGCA Traffic Weight Persistence & Route Weight Sync..."
+    )
 
     # Seed routes into db
     r_del_bom = Route(
@@ -507,11 +566,20 @@ def run_tests() -> bool:
     assert isinstance(single_tw, DgcaTrafficWeight)
     assert single_tw.pax_volume == 185000
 
-
     # Ingest monthly traffic weights
     traffic_batch = [
-        {"route_code": "DEL-BOM", "year_month": "2026-03", "pax_volume": 215000, "share_weight": 0.175},
-        {"route_code": "BOM-DEL", "year_month": "2026-03", "pax_volume": 210000, "share_weight": 0.172},
+        {
+            "route_code": "DEL-BOM",
+            "year_month": "2026-03",
+            "pax_volume": 215000,
+            "share_weight": 0.175,
+        },
+        {
+            "route_code": "BOM-DEL",
+            "year_month": "2026-03",
+            "pax_volume": 210000,
+            "share_weight": 0.172,
+        },
     ]
     count_tw = bulk_upsert_dgca_traffic_weights(db=db, records=traffic_batch)
     assert count_tw == 2
@@ -531,7 +599,9 @@ def run_tests() -> bool:
     assert r_del_bom.weight == 0.175
     assert r_bom_del.dgca_monthly_pax == 210000
     assert r_bom_del.weight == 0.172
-    print(f"  ✓ Successfully synchronized {updated_routes} active Route records with DGCA monthly passenger volumes and basket weights.")
+    print(
+        f"  ✓ Successfully synchronized {updated_routes} active Route records with DGCA monthly passenger volumes and basket weights."
+    )
 
     # ------------------------------------------------------------------------
     # Test 7: Object-Oriented EconometricsRepo Facade & Serialization
@@ -561,43 +631,62 @@ def run_tests() -> bool:
     assert len(facade_viols) == 4
 
     # Serialization and repr checks
-    for model_instance in [facade_index, facade_mospi, facade_elas, facade_viols[0], tw_list[0]]:
+    for model_instance in [
+        facade_index,
+        facade_mospi,
+        facade_elas,
+        facade_viols[0],
+        tw_list[0],
+    ]:
         d = model_instance.to_dict()
         assert isinstance(d, dict)
         assert "id" in d
         r = repr(model_instance)
         assert isinstance(r, str) and len(r) > 10
 
-    print("  ✓ EconometricsRepo class facade and model serialization (to_dict, repr) validated.")
+    print(
+        "  ✓ EconometricsRepo class facade and model serialization (to_dict, repr) validated."
+    )
 
     # ------------------------------------------------------------------------
     # Test 8: Query Latency Benchmarks & Performance
     # ------------------------------------------------------------------------
-    print("\n[Step 8/8] Benchmarking High-Throughput Ingestion & Query Latency (<20ms)...")
+    print(
+        "\n[Step 8/8] Benchmarking High-Throughput Ingestion & Query Latency (<20ms)..."
+    )
 
     # Generate 1,000 synthetic econometric indices
     start_d = date(2023, 1, 1)
     large_batch: list[dict[str, Any]] = []
     for i in range(1000):
         cur_d = start_d + timedelta(days=i)
-        large_batch.append({
-            "date": cur_d,
-            "route_code": "BENCHMARK-CORRIDOR",
-            "laspeyres_index": 100.0 + (i % 50),
-            "paasche_index": 98.0 + (i % 50),
-            "fisher_ideal_index": 99.0 + (i % 50),
-            "calculation_method": "chain_weighted",
-        })
+        large_batch.append(
+            {
+                "date": cur_d,
+                "route_code": "BENCHMARK-CORRIDOR",
+                "laspeyres_index": 100.0 + (i % 50),
+                "paasche_index": 98.0 + (i % 50),
+                "fisher_ideal_index": 99.0 + (i % 50),
+                "calculation_method": "chain_weighted",
+            }
+        )
 
     t0 = time.perf_counter()
     inserted = bulk_upsert_econometric_indices(db=db, records=large_batch)
     t_insert = (time.perf_counter() - t0) * 1000.0
     assert inserted == 1000
-    print(f"  ✓ High-throughput bulk upsert: 1,000 records persisted in {t_insert:.2f}ms ({inserted / (t_insert / 1000.0):.0f} records/sec).")
+    print(
+        f"  ✓ High-throughput bulk upsert: 1,000 records persisted in {t_insert:.2f}ms ({inserted / (t_insert / 1000.0):.0f} records/sec)."
+    )
 
     # Measure filtered lookup latency
     query_times = []
-    for test_date in [date(2023, 6, 1), date(2024, 1, 1), date(2024, 12, 1), date(2025, 6, 1)]:
+    for test_date in [
+        date(2023, 6, 1),
+        date(2024, 1, 1),
+        date(2024, 12, 1),
+        date(2025, 6, 1),
+    ]:
         t_q0 = time.perf_counter()
         res = get_econometric_indices(
             db=db,
@@ -610,8 +699,12 @@ def run_tests() -> bool:
         assert len(res) > 0
 
     avg_query_time = sum(query_times) / len(query_times)
-    print(f"  ✓ Indexed range query latency: avg {avg_query_time:.2f}ms across {inserted} records (Target: < 20ms).")
-    assert avg_query_time < 50.0, f"Query latency {avg_query_time:.2f}ms exceeds threshold!"
+    print(
+        f"  ✓ Indexed range query latency: avg {avg_query_time:.2f}ms across {inserted} records (Target: < 20ms)."
+    )
+    assert (
+        avg_query_time < 50.0
+    ), f"Query latency {avg_query_time:.2f}ms exceeds threshold!"
 
     print("\n" + "=" * 80)
     print("ALL APIx CYCLE 4 ECONOMETRICS DB INVARIANTS & BENCHMARKS PASSED (8/8)")

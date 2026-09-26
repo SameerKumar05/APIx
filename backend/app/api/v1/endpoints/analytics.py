@@ -1,5 +1,4 @@
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,13 +21,14 @@ from backend.app.schemas.analytics import (
     LeadTimeCurvePoint,
     LeadTimeCurveResponse,
 )
+
 router = APIRouter()
 
 _IST = ZoneInfo("Asia/Kolkata")
 _DISMISSED = "DISMISSED"
 
 
-def _normalize_route(route_code: Optional[str]) -> str:
+def _normalize_route(route_code: str | None) -> str:
     return (route_code or "NATIONAL").strip().upper()
 
 
@@ -82,11 +82,13 @@ def _unavailable() -> HTTPException:
     description="Returns pricing curve dynamics from stored fares grouped by booking window.",
 )
 async def get_lead_time_curve(
-    route_code: Optional[str] = Query("NATIONAL", description="Route code (e.g., DEL-BOM) or NATIONAL"),
+    route_code: str | None = Query(
+        "NATIONAL", description="Route code (e.g., DEL-BOM) or NATIONAL"
+    ),
     db: Session = Depends(get_db),
 ) -> LeadTimeCurveResponse:
     target_route = _normalize_route(route_code)
-    generated_at = datetime.now(timezone.utc)
+    generated_at = datetime.now(UTC)
     empty = LeadTimeCurveResponse(
         route_code=target_route,
         curve_points=[],
@@ -100,7 +102,9 @@ async def get_lead_time_curve(
     try:
         query = db.query(RawFare.booking_window, RawFare.total_fare)
         if airports is not None:
-            query = query.filter(RawFare.origin == airports[0], RawFare.destination == airports[1])
+            query = query.filter(
+                RawFare.origin == airports[0], RawFare.destination == airports[1]
+            )
         rows = query.all()
     except SQLAlchemyError as exc:
         db.rollback()
@@ -118,7 +122,7 @@ async def get_lead_time_curve(
         return empty
 
     baseline_median = _linear_percentile(buckets[max(buckets)], 0.5)
-    curve_points: List[LeadTimeCurvePoint] = []
+    curve_points: list[LeadTimeCurvePoint] = []
     for days in sorted(buckets, reverse=True):
         fares = buckets[days]
         median = _linear_percentile(fares, 0.5)
@@ -148,8 +152,10 @@ async def get_lead_time_curve(
     description="Returns observed departure-slot fares. Slots with no observations are omitted.",
 )
 async def get_heatmap_matrix(
-    route_code: Optional[str] = Query("NATIONAL", description="Route code or NATIONAL"),
-    metric: str = Query("avg_fare", description="Metric to project: 'avg_fare' or 'fare_index'"),
+    route_code: str | None = Query("NATIONAL", description="Route code or NATIONAL"),
+    metric: str = Query(
+        "avg_fare", description="Metric to project: 'avg_fare' or 'fare_index'"
+    ),
     db: Session = Depends(get_db),
 ) -> HeatmapMatrixResponse:
     target_route = _normalize_route(route_code)
@@ -168,7 +174,9 @@ async def get_heatmap_matrix(
     try:
         query = db.query(RawFare.departure_time, RawFare.total_fare)
         if airports is not None:
-            query = query.filter(RawFare.origin == airports[0], RawFare.destination == airports[1])
+            query = query.filter(
+                RawFare.origin == airports[0], RawFare.destination == airports[1]
+            )
         rows = query.all()
     except SQLAlchemyError as exc:
         db.rollback()
@@ -184,7 +192,7 @@ async def get_heatmap_matrix(
 
     observed = [fare for fares in slots.values() for fare in fares]
     overall = sum(observed) / len(observed)
-    matrix: List[HeatmapCell] = []
+    matrix: list[HeatmapCell] = []
     scale: list[float] = []
     for (day, hour), fares in sorted(slots.items()):
         cell_avg = round(sum(fares) / len(fares), 2)
@@ -218,9 +226,16 @@ async def get_heatmap_matrix(
     description="Returns pricing surges, flash sales, price crashes, and DGCA regulatory cap breaches.",
 )
 async def get_anomalies(
-    route_code: Optional[str] = Query(None, description="Filter by route code (e.g. DEL-BOM)"),
-    severity: Optional[str] = Query(None, description="Filter by severity ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')"),
-    status: Optional[str] = Query(None, description="Filter by status ('ACTIVE', 'OPEN', 'INVESTIGATING', 'RESOLVED')"),
+    route_code: str | None = Query(
+        None, description="Filter by route code (e.g. DEL-BOM)"
+    ),
+    severity: str | None = Query(
+        None, description="Filter by severity ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')"
+    ),
+    status: str | None = Query(
+        None,
+        description="Filter by status ('ACTIVE', 'OPEN', 'INVESTIGATING', 'RESOLVED')",
+    ),
     db: Session = Depends(get_db),
 ) -> AnomalyAlertsResponse:
     try:
@@ -238,7 +253,8 @@ async def get_anomalies(
                     )
                 else:
                     query = query.filter(
-                        func.upper(AnomalyAlert.origin + "-" + AnomalyAlert.destination) == clean_route
+                        func.upper(AnomalyAlert.origin + "-" + AnomalyAlert.destination)
+                        == clean_route
                     )
 
             if severity:
@@ -248,16 +264,22 @@ async def get_anomalies(
             if status:
                 clean_status = status.strip().upper()
                 if clean_status in ("ACTIVE", "OPEN"):
-                    query = query.filter(func.upper(AnomalyAlert.status).in_(["ACTIVE", "OPEN"]))
+                    query = query.filter(
+                        func.upper(AnomalyAlert.status).in_(["ACTIVE", "OPEN"])
+                    )
                 else:
-                    query = query.filter(func.upper(AnomalyAlert.status) == clean_status)
+                    query = query.filter(
+                        func.upper(AnomalyAlert.status) == clean_status
+                    )
 
-            db_alerts = query.order_by(AnomalyAlert.created_at.desc(), AnomalyAlert.id.desc()).all()
-            items: List[AnomalyAlertItem] = []
+            db_alerts = query.order_by(
+                AnomalyAlert.created_at.desc(), AnomalyAlert.id.desc()
+            ).all()
+            items: list[AnomalyAlertItem] = []
             for a in db_alerts:
                 dt = a.created_at
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+                    dt = dt.replace(tzinfo=UTC)
                 items.append(
                     AnomalyAlertItem(
                         id=f"anom-{a.origin.lower()}-{a.destination.lower()}-{a.id:03d}",
@@ -293,7 +315,7 @@ async def get_anomalies(
 async def get_dgca_validation(
     db: Session = Depends(get_db),
 ) -> DGCAValidationResponse:
-    checked_at = datetime.now(timezone.utc)
+    checked_at = datetime.now(UTC)
     try:
         rows = db.query(DgcaViolation).all()
     except SQLAlchemyError as exc:
@@ -315,7 +337,7 @@ async def get_dgca_validation(
     for row in active:
         grouped.setdefault(row.route_code, []).append(row)
 
-    violations: List[DGCAValidationItem] = []
+    violations: list[DGCAValidationItem] = []
     for route_code in sorted(grouped):
         group = grouped[route_code]
         peak = max(group, key=lambda item: item.fare_inr)

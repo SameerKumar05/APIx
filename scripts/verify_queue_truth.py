@@ -2,6 +2,7 @@ import os
 import sqlite3
 import sys
 
+
 def verify_queue():
     db_path = os.environ.get("DATABASE_PATH", "./apix.db")
     if not os.path.exists(db_path):
@@ -11,10 +12,14 @@ def verify_queue():
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
 
-    cur.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='crawler_jobs'")
+    cur.execute(
+        "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='crawler_jobs'"
+    )
     assert cur.fetchone()[0] == 1, "crawler_jobs table missing"
 
-    cur.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='worker_heartbeats'")
+    cur.execute(
+        "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='worker_heartbeats'"
+    )
     assert cur.fetchone()[0] == 1, "worker_heartbeats table missing"
 
     cur.execute("""
@@ -38,12 +43,15 @@ def verify_queue():
     assert worker_id == "direct-sql-worker"
     conn.commit()
 
-    cur.execute("""
+    cur.execute(
+        """
         UPDATE crawler_jobs
         SET status = 'COMPLETED', completed_at = datetime('now')
         WHERE id = ? AND worker_id = 'direct-sql-worker' AND lease_token = 'tok-1234' AND status = 'CLAIMED'
         RETURNING id, status
-    """, (claimed_id,))
+    """,
+        (claimed_id,),
+    )
     completed = cur.fetchall()
     assert len(completed) == 1
     assert completed[0][1] == "COMPLETED"
@@ -53,8 +61,11 @@ def verify_queue():
     conn.commit()
     conn.close()
 
-    print("Direct SQL verification passed: atomic claim via UPDATE ... RETURNING, lease fencing, and completion verified.")
+    print(
+        "Direct SQL verification passed: atomic claim via UPDATE ... RETURNING, lease fencing, and completion verified."
+    )
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(verify_queue())

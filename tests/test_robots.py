@@ -28,16 +28,23 @@ Sitemap: https://www.makemytrip.com/sitemap.xml
 
 
 def test_parses_directives_for_wildcard_agent() -> None:
-    policy = parse_robots_txt("https://www.makemytrip.com/robots.txt", SAMPLE, user_agent="*")
+    policy = parse_robots_txt(
+        "https://www.makemytrip.com/robots.txt", SAMPLE, user_agent="*"
+    )
     assert policy.can_fetch("https://www.makemytrip.com/flights/search") is True
-    assert policy.can_fetch("https://www.makemytrip.com/api/v1/search/availability") is False
+    assert (
+        policy.can_fetch("https://www.makemytrip.com/api/v1/search/availability")
+        is False
+    )
     # The query component participates in matching, so a query-scoped rule applies.
     assert policy.can_fetch("https://www.makemytrip.com/search?q=flights") is False
     assert policy.can_fetch("https://www.makemytrip.com/flights/DEL-BOM") is True
 
 
 def test_named_agent_group_overrides_wildcard() -> None:
-    policy = parse_robots_txt("https://www.makemytrip.com/robots.txt", SAMPLE, user_agent="APIxBot")
+    policy = parse_robots_txt(
+        "https://www.makemytrip.com/robots.txt", SAMPLE, user_agent="APIxBot"
+    )
     assert policy.can_fetch("https://www.makemytrip.com/private/booking") is False
     # The wildcard Disallow still applies. A named group may add a restriction,
     # never lift one.
@@ -46,7 +53,9 @@ def test_named_agent_group_overrides_wildcard() -> None:
 
 
 def test_wildcard_agent_uses_star_group_delay() -> None:
-    policy = parse_robots_txt("https://www.makemytrip.com/robots.txt", SAMPLE, user_agent="*")
+    policy = parse_robots_txt(
+        "https://www.makemytrip.com/robots.txt", SAMPLE, user_agent="*"
+    )
     assert policy.crawl_delay() == 7
 
 
@@ -58,12 +67,16 @@ def test_longest_match_wins_over_shorter_rule() -> None:
 
 
 def test_disallow_everything_blocks_all_paths() -> None:
-    policy = parse_robots_txt("https://x.test/robots.txt", "User-agent: *\nDisallow: /\n")
+    policy = parse_robots_txt(
+        "https://x.test/robots.txt", "User-agent: *\nDisallow: /\n"
+    )
     assert policy.can_fetch("https://x.test/anything") is False
 
 
 def test_missing_crawl_delay_is_none_not_zero() -> None:
-    policy = parse_robots_txt("https://x.test/robots.txt", "User-agent: *\nDisallow: /x\n")
+    policy = parse_robots_txt(
+        "https://x.test/robots.txt", "User-agent: *\nDisallow: /x\n"
+    )
     assert policy.crawl_delay() is None
 
 
@@ -91,7 +104,9 @@ def test_denied_reason_is_reported_for_telemetry() -> None:
 
 
 def test_crawl_delay_is_at_least_configured_floor() -> None:
-    policy = parse_robots_txt("https://x.test/robots.txt", "User-agent: *\nCrawl-delay: 0\n")
+    policy = parse_robots_txt(
+        "https://x.test/robots.txt", "User-agent: *\nCrawl-delay: 0\n"
+    )
     from ingestion.config import IngestionConfig
 
     cfg = IngestionConfig(ingestion_mode="live")

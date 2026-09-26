@@ -36,7 +36,11 @@ from backend.app.db.session import SessionLocal
 from backend.app.db.telemetry_repo import log_scraper_telemetry
 from backend.app.models.crawler_job import CrawlerJob
 from ingestion.base import RawFareRecord
-from ingestion.captcha import BLOCKED_BY_CAPTCHA, consume_challenge, telemetry_status_for
+from ingestion.captcha import (
+    BLOCKED_BY_CAPTCHA,
+    consume_challenge,
+    telemetry_status_for,
+)
 from ingestion.client import IngestionClient
 from ingestion.config import (
     BOOKING_WINDOW_MAP,
@@ -69,7 +73,9 @@ class CrawlerWorker:
     ) -> None:
         self.hostname = socket.gethostname()
         self.pid = os.getpid()
-        self.worker_id = worker_id or f"worker-{self.hostname}-{self.pid}-{uuid.uuid4().hex[:6]}"
+        self.worker_id = (
+            worker_id or f"worker-{self.hostname}-{self.pid}-{uuid.uuid4().hex[:6]}"
+        )
         self.config = config or IngestionConfig()
         self.orchestrator = orchestrator or IngestionOrchestrator(config=self.config)
         self.client = client or IngestionClient(config=self.config)
@@ -88,7 +94,12 @@ class CrawlerWorker:
 
     def start(self) -> None:
         self.is_running = True
-        logger.info("Starting CrawlerWorker %s (PID: %d, Host: %s)", self.worker_id, self.pid, self.hostname)
+        logger.info(
+            "Starting CrawlerWorker %s (PID: %d, Host: %s)",
+            self.worker_id,
+            self.pid,
+            self.hostname,
+        )
 
         with self.session_factory() as db:
             register_worker_heartbeat(
@@ -97,7 +108,10 @@ class CrawlerWorker:
                 hostname=self.hostname,
                 pid=self.pid,
                 worker_type="crawler_worker",
-                metadata={"scraper_source": self.orchestrator.scraper_source, "mode": self.config.ingestion_mode},
+                metadata={
+                    "scraper_source": self.orchestrator.scraper_source,
+                    "mode": self.config.ingestion_mode,
+                },
             )
 
         self._last_heartbeat_time = time.time()
@@ -147,7 +161,9 @@ class CrawlerWorker:
     def _send_heartbeat(self, current_job_id: str | None = None) -> None:
         try:
             with self.session_factory() as db:
-                update_worker_heartbeat(db, self.worker_id, current_job_id=current_job_id)
+                update_worker_heartbeat(
+                    db, self.worker_id, current_job_id=current_job_id
+                )
         except Exception as exc:
             logger.warning("Worker %s heartbeat update failed: %s", self.worker_id, exc)
 
@@ -161,13 +177,17 @@ class CrawlerWorker:
     def _claim_job(self) -> CrawlerJob | None:
         try:
             with self.session_factory() as db:
-                return claim_next_job(db, worker_id=self.worker_id, lease_seconds=self.lease_seconds)
+                return claim_next_job(
+                    db, worker_id=self.worker_id, lease_seconds=self.lease_seconds
+                )
         except SQLAlchemyError:
             logger.exception("Claim attempt failed for worker %s", self.worker_id)
             self._claim_failed = True
             return None
 
-    def _refresh_while_executing(self, job_id: str, stop_event: threading.Event) -> None:
+    def _refresh_while_executing(
+        self, job_id: str, stop_event: threading.Event
+    ) -> None:
         while not stop_event.wait(self.heartbeat_interval):
             self._send_heartbeat(current_job_id=job_id)
 
@@ -176,7 +196,11 @@ class CrawlerWorker:
         if stop_event is not None:
             stop_event.set()
         refresher = self._execution_heartbeat_thread
-        if refresher is not None and refresher.is_alive() and threading.current_thread() is not refresher:
+        if (
+            refresher is not None
+            and refresher.is_alive()
+            and threading.current_thread() is not refresher
+        ):
             refresher.join(timeout=self.heartbeat_interval + 1.0)
         self._execution_heartbeat_thread = None
         self._execution_heartbeat_stop = None
@@ -189,7 +213,15 @@ class CrawlerWorker:
         for r in DEFAULT_ROUTES:
             if r.origin == orig and r.destination == dest:
                 return [r]
-        return [Route(origin=orig, destination=dest, distance_km=1200, typical_duration_min=130, dgca_weight=0.05)]
+        return [
+            Route(
+                origin=orig,
+                destination=dest,
+                distance_km=1200,
+                typical_duration_min=130,
+                dgca_weight=0.05,
+            )
+        ]
 
     def _resolve_windows(self, window_code: str | None) -> list[BookingWindow]:
         if not window_code or window_code.upper() in ("ALL", "ALL_WINDOWS"):
@@ -207,7 +239,13 @@ class CrawlerWorker:
         route_str = job.route_code
         window_str = job.booking_window
 
-        logger.info("Executing job %s (crawler=%s, route=%s, window=%s)", job_id_str, crawler, route_str, window_str)
+        logger.info(
+            "Executing job %s (crawler=%s, route=%s, window=%s)",
+            job_id_str,
+            crawler,
+            route_str,
+            window_str,
+        )
         stop_event = threading.Event()
         self._execution_heartbeat_stop = stop_event
         refresher = threading.Thread(
@@ -235,11 +273,19 @@ class CrawlerWorker:
             for r in routes:
                 for w in windows:
                     with self.session_factory() as db:
-                        alive = heartbeat_job(db, job_pk, self.worker_id, lease_tok, lease_seconds=self.lease_seconds)
+                        alive = heartbeat_job(
+                            db,
+                            job_pk,
+                            self.worker_id,
+                            lease_tok,
+                            lease_seconds=self.lease_seconds,
+                        )
                         if not alive:
                             raise RuntimeError(f"Lease lost for job {job_id_str}")
 
-                    scraper_override = crawler if crawler not in ("all", "default") else None
+                    scraper_override = (
+                        crawler if crawler not in ("all", "default") else None
+                    )
                     scrape_res = consume_challenge(
                         self.orchestrator.scrape_slot(
                             origin=r,
@@ -259,14 +305,21 @@ class CrawlerWorker:
                         )
                     elif scrape_res.success and scrape_res.records:
                         all_records.extend(scrape_res.records)
-                    if scrape_res.errors and scrape_res.metadata.get("outcome") != BLOCKED_BY_CAPTCHA:
+                    if (
+                        scrape_res.errors
+                        and scrape_res.metadata.get("outcome") != BLOCKED_BY_CAPTCHA
+                    ):
                         errors.extend(scrape_res.errors)
 
                     slot_idx += 1
 
             dispatched_batches = 0
             if all_records:
-                logger.info("[%s] Dispatching %d collected records to Ingestion API", job_id_str, len(all_records))
+                logger.info(
+                    "[%s] Dispatching %d collected records to Ingestion API",
+                    job_id_str,
+                    len(all_records),
+                )
                 batch_responses = self.client.post_records_chunked(
                     records=all_records,
                     source=f"worker_{crawler}",
@@ -275,7 +328,9 @@ class CrawlerWorker:
                 dispatched_batches = len(batch_responses)
 
             elapsed_ms = round((time.time() - start_time) * 1000.0, 2)
-            telemetry_status = telemetry_status_for(records=len(all_records), captcha_hits=captcha_hits)
+            telemetry_status = telemetry_status_for(
+                records=len(all_records), captcha_hits=captcha_hits
+            )
             job_status = "FAILED" if telemetry_status == "CAPTCHA" else "COMPLETED"
             summary_dict = {
                 "records_collected": len(all_records),
@@ -283,7 +338,11 @@ class CrawlerWorker:
                 "duration_ms": elapsed_ms,
                 "errors": errors,
                 "slots_processed": slot_idx,
-                "outcome": BLOCKED_BY_CAPTCHA if telemetry_status == "CAPTCHA" else telemetry_status,
+                "outcome": (
+                    BLOCKED_BY_CAPTCHA
+                    if telemetry_status == "CAPTCHA"
+                    else telemetry_status
+                ),
                 "captcha_hits": captcha_hits,
             }
 
@@ -295,8 +354,14 @@ class CrawlerWorker:
                     booking_window=window_str or "T+1",
                     status=telemetry_status,
                     response_time_ms=elapsed_ms,
-                    records_extracted=0 if telemetry_status == "CAPTCHA" else len(all_records),
-                    error_details=BLOCKED_BY_CAPTCHA if telemetry_status == "CAPTCHA" else ("; ".join(errors) if errors else None),
+                    records_extracted=(
+                        0 if telemetry_status == "CAPTCHA" else len(all_records)
+                    ),
+                    error_details=(
+                        BLOCKED_BY_CAPTCHA
+                        if telemetry_status == "CAPTCHA"
+                        else ("; ".join(errors) if errors else None)
+                    ),
                 )
 
                 completed = complete_job(
@@ -306,16 +371,35 @@ class CrawlerWorker:
                     lease_token=lease_tok,
                     status=job_status,
                     result_summary=summary_dict,
-                    error_message=BLOCKED_BY_CAPTCHA if telemetry_status == "CAPTCHA" else None,
+                    error_message=(
+                        BLOCKED_BY_CAPTCHA if telemetry_status == "CAPTCHA" else None
+                    ),
                 )
                 if completed and job_status == "FAILED":
-                    update_worker_heartbeat(db, self.worker_id, current_job_id=None, jobs_failed_increment=1)
-                    logger.warning("Job %s blocked_by_captcha; no records ingested", job_id_str)
+                    update_worker_heartbeat(
+                        db, self.worker_id, current_job_id=None, jobs_failed_increment=1
+                    )
+                    logger.warning(
+                        "Job %s blocked_by_captcha; no records ingested", job_id_str
+                    )
                 elif completed:
-                    update_worker_heartbeat(db, self.worker_id, current_job_id=None, jobs_completed_increment=1)
-                    logger.info("Job %s completed successfully: %d fares in %.1fms", job_id_str, len(all_records), elapsed_ms)
+                    update_worker_heartbeat(
+                        db,
+                        self.worker_id,
+                        current_job_id=None,
+                        jobs_completed_increment=1,
+                    )
+                    logger.info(
+                        "Job %s completed successfully: %d fares in %.1fms",
+                        job_id_str,
+                        len(all_records),
+                        elapsed_ms,
+                    )
                 else:
-                    logger.warning("Fenced completion rejected for job %s: lease was lost", job_id_str)
+                    logger.warning(
+                        "Fenced completion rejected for job %s: lease was lost",
+                        job_id_str,
+                    )
 
         except Exception as exc:
             elapsed_ms = round((time.time() - start_time) * 1000.0, 2)
@@ -342,7 +426,9 @@ class CrawlerWorker:
                         status="FAILED",
                         error_message=err_msg,
                     )
-                    update_worker_heartbeat(db, self.worker_id, current_job_id=None, jobs_failed_increment=1)
+                    update_worker_heartbeat(
+                        db, self.worker_id, current_job_id=None, jobs_failed_increment=1
+                    )
             except Exception as inner_exc:
                 logger.error("Failed recording job error state: %s", inner_exc)
         finally:
@@ -352,9 +438,21 @@ class CrawlerWorker:
 def main() -> int:
     """CLI entrypoint for standalone worker daemon."""
     parser = argparse.ArgumentParser(description="APIx Ingestion Queue Worker Daemon")
-    parser.add_argument("--worker-id", type=str, default=None, help="Explicit worker ID identifier")
-    parser.add_argument("--poll-interval", type=float, default=2.0, help="Queue polling interval in seconds")
-    parser.add_argument("--lease-seconds", type=int, default=90, help="Lease timeout duration in seconds")
+    parser.add_argument(
+        "--worker-id", type=str, default=None, help="Explicit worker ID identifier"
+    )
+    parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=2.0,
+        help="Queue polling interval in seconds",
+    )
+    parser.add_argument(
+        "--lease-seconds",
+        type=int,
+        default=90,
+        help="Lease timeout duration in seconds",
+    )
     parser.add_argument(
         "--mode",
         choices=["live", "mock", "synthetic"],

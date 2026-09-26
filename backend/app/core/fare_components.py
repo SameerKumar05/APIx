@@ -105,7 +105,9 @@ def classify_fare_split(
     of the total, not the ratio. Neither supplied: the single documented estimate.
     """
     if base_fare is not None and taxes_and_fees is not None:
-        return FareSplit(float(base_fare), float(taxes_and_fees), FareSplitBasis.MEASURED)
+        return FareSplit(
+            float(base_fare), float(taxes_and_fees), FareSplitBasis.MEASURED
+        )
     if base_fare is not None:
         return FareSplit(
             float(base_fare),

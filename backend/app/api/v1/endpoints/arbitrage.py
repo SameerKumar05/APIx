@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import SQLAlchemyError
@@ -16,6 +15,7 @@ from backend.app.schemas.arbitrage import ArbitrageItem, ArbitrageResponse
 logger = logging.getLogger("apix.api.arbitrage")
 
 router = APIRouter()
+
 
 @router.get(
     "",
@@ -40,20 +40,30 @@ router = APIRouter()
     ),
 )
 async def get_arbitrage_opportunities(
-    route_code: Optional[str] = Query(None, description="Optional route filter (e.g. DEL-BOM)"),
-    airline_code: Optional[str] = Query(None, description="Optional airline filter (e.g. 6E, AI)"),
-    min_spread_pct: float = Query(0.0, ge=0.0, description="Minimum spread percentage threshold"),
-    actionable_only: bool = Query(False, description="Filter only actionable opportunities"),
+    route_code: str | None = Query(
+        None, description="Optional route filter (e.g. DEL-BOM)"
+    ),
+    airline_code: str | None = Query(
+        None, description="Optional airline filter (e.g. 6E, AI)"
+    ),
+    min_spread_pct: float = Query(
+        0.0, ge=0.0, description="Minimum spread percentage threshold"
+    ),
+    actionable_only: bool = Query(
+        False, description="Filter only actionable opportunities"
+    ),
     limit: int = Query(50, ge=1, le=500, description="Max opportunities to return"),
     db: Session = Depends(get_db),
 ) -> ArbitrageResponse:
     """Analyze price discrepancies across airline direct websites vs OTAs."""
-    opportunities: List[ArbitrageItem] = []
-    now = datetime.now(timezone.utc)
+    opportunities: list[ArbitrageItem] = []
+    now = datetime.now(UTC)
 
     # 1. Attempt to resolve from ArbitrageDetector service and database
     try:
-        from backend.app.services.arbitrage_detector import get_current_arbitrage_opportunities
+        from backend.app.services.arbitrage_detector import (
+            get_current_arbitrage_opportunities,
+        )
 
         db_opps = get_current_arbitrage_opportunities(
             db=db,
@@ -67,7 +77,11 @@ async def get_arbitrage_opportunities(
                 opp_route = f"{d.get('origin', '')}-{d.get('destination', '')}".upper()
                 if route_code and route_code.strip().upper() != opp_route:
                     continue
-                if airline_code and airline_code.strip().upper() != d.get("airline_code", "").upper():
+                if (
+                    airline_code
+                    and airline_code.strip().upper()
+                    != d.get("airline_code", "").upper()
+                ):
                     continue
                 if actionable_only and not d.get("actionable", False):
                     continue
@@ -110,7 +124,11 @@ async def get_arbitrage_opportunities(
     routes_evaluated = len(set(o.route_code for o in opportunities))
     total_savings = round(sum(o.spread_inr for o in opportunities), 2)
     avg_spread = (
-        round(sum(o.spread_percentage for o in opportunities) / max(len(opportunities), 1), 2)
+        round(
+            sum(o.spread_percentage for o in opportunities)
+            / max(len(opportunities), 1),
+            2,
+        )
         if opportunities
         else 0.0
     )

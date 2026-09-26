@@ -159,7 +159,9 @@ class MospiCpiSeries(Base):
             "cpi_transport_index": self.cpi_transport_index,
             "airfare_sub_index": self.airfare_sub_index,
             "headline_cpi": self.headline_cpi,
-            "published_at": self.published_at.isoformat() if self.published_at else None,
+            "published_at": (
+                self.published_at.isoformat() if self.published_at else None
+            ),
             "source": self.source,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

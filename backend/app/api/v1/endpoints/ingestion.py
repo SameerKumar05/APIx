@@ -39,7 +39,9 @@ async def ingest_fare_batch(
 
     for idx, record in enumerate(payload.records):
         if record.origin == record.destination:
-            errors.append(f"Record #{idx}: Origin and destination cannot be identical ({record.origin})")
+            errors.append(
+                f"Record #{idx}: Origin and destination cannot be identical ({record.origin})"
+            )
             continue
         if record.fare_inr <= 0:
             errors.append(f"Record #{idx}: Fare INR must be greater than zero")
@@ -52,7 +54,9 @@ async def ingest_fare_batch(
     if valid_records:
         try:
             repo = IngestionRepo(db)
-            insert_stats = repo.bulk_insert(valid_records, batch_id=batch_id, commit=True)
+            insert_stats = repo.bulk_insert(
+                valid_records, batch_id=batch_id, commit=True
+            )
         except SQLAlchemyError as exc:
             db.rollback()
             logger.exception("Failed to persist ingested fares")
@@ -66,7 +70,9 @@ async def ingest_fare_batch(
         background_tasks.add_task(run_daily_index_pipeline)
     processing_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
     valid_count = len(valid_records)
-    status_str = "success" if len(errors) == 0 else ("partial" if valid_count > 0 else "failed")
+    status_str = (
+        "success" if len(errors) == 0 else ("partial" if valid_count > 0 else "failed")
+    )
     message = (
         f"Processed {len(payload.records)} records in {processing_time_ms:.1f}ms: "
         f"{inserted_count} inserted, {duplicate_count} duplicates, {len(errors)} rejected."

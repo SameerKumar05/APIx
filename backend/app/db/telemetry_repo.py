@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, func, select
@@ -48,6 +48,7 @@ def _is_success_status(status: str) -> bool:
 # Scraper Telemetry Logging and Querying
 # ============================================================================
 
+
 def log_scraper_telemetry(
     db: Session,
     crawler_name: str,
@@ -88,7 +89,7 @@ def log_scraper_telemetry(
         records_extracted=max(0, int(records_extracted)),
         proxy_ip=proxy_ip,
         error_details=error_details,
-        created_at=created_at or datetime.now(timezone.utc),
+        created_at=created_at or datetime.now(UTC),
     )
     db.add(telemetry)
     if commit:
@@ -116,7 +117,7 @@ def bulk_log_scraper_telemetry(
         return 0
 
     to_add: list[ScraperTelemetry] = []
-    now_utc = datetime.now(timezone.utc)
+    now_utc = datetime.now(UTC)
 
     for item in records:
         if isinstance(item, ScraperTelemetry):
@@ -220,6 +221,7 @@ def count_scraper_telemetry(
 # Crawler Metrics Aggregations (Uptime, Error Rates, Summaries)
 # ============================================================================
 
+
 def calculate_crawler_uptime(
     db: Session,
     crawler_name: str | None = None,
@@ -238,7 +240,7 @@ def calculate_crawler_uptime(
         Dictionary with uptime_pct, total_runs, successful_runs, failed_runs,
         avg_response_time_ms, total_records_extracted, and per-crawler breakdown.
     """
-    cutoff = since or (datetime.now(timezone.utc) - timedelta(hours=window_hours))
+    cutoff = since or (datetime.now(UTC) - timedelta(hours=window_hours))
 
     # Base query for all matching records within the window
     stmt = select(
@@ -314,11 +316,15 @@ def calculate_crawler_uptime(
         c_total = cs["total_runs"]
         c_succ = cs["successful_runs"]
         per_crawler_result[c_name] = {
-            "uptime_pct": round((c_succ / c_total) * 100.0, 2) if c_total > 0 else 100.0,
+            "uptime_pct": (
+                round((c_succ / c_total) * 100.0, 2) if c_total > 0 else 100.0
+            ),
             "total_runs": c_total,
             "successful_runs": c_succ,
             "failed_runs": cs["failed_runs"],
-            "avg_response_time_ms": round(cs["total_time_ms"] / c_total, 2) if c_total > 0 else 0.0,
+            "avg_response_time_ms": (
+                round(cs["total_time_ms"] / c_total, 2) if c_total > 0 else 0.0
+            ),
             "total_records_extracted": cs["total_records"],
         }
 
@@ -354,7 +360,7 @@ def calculate_crawler_error_rate(
         Dictionary with error_rate_pct, total_runs, error_runs,
         errors_by_status, errors_by_crawler, and recent error samples.
     """
-    cutoff = since or (datetime.now(timezone.utc) - timedelta(hours=window_hours))
+    cutoff = since or (datetime.now(UTC) - timedelta(hours=window_hours))
 
     stmt = select(ScraperTelemetry).where(ScraperTelemetry.created_at >= cutoff)
     if crawler_name:
@@ -387,19 +393,25 @@ def calculate_crawler_error_rate(
             error_runs += 1
             st_key = r.status.upper()
             errors_by_status[st_key] = errors_by_status.get(st_key, 0) + 1
-            errors_by_crawler[r.crawler_name] = errors_by_crawler.get(r.crawler_name, 0) + 1
+            errors_by_crawler[r.crawler_name] = (
+                errors_by_crawler.get(r.crawler_name, 0) + 1
+            )
 
             if len(recent_errors) < 10:
-                recent_errors.append({
-                    "id": r.id,
-                    "crawler_name": r.crawler_name,
-                    "route": r.route,
-                    "booking_window": r.booking_window,
-                    "status": r.status,
-                    "proxy_ip": r.proxy_ip,
-                    "error_details": r.error_details,
-                    "created_at": r.created_at.isoformat() if r.created_at else None,
-                })
+                recent_errors.append(
+                    {
+                        "id": r.id,
+                        "crawler_name": r.crawler_name,
+                        "route": r.route,
+                        "booking_window": r.booking_window,
+                        "status": r.status,
+                        "proxy_ip": r.proxy_ip,
+                        "error_details": r.error_details,
+                        "created_at": (
+                            r.created_at.isoformat() if r.created_at else None
+                        ),
+                    }
+                )
 
     error_rate_pct = round((error_runs / total_runs) * 100.0, 2)
 
@@ -424,8 +436,12 @@ def get_crawler_summary(
 
     Integrates uptime, error rate, throughput, and status distribution.
     """
-    uptime_data = calculate_crawler_uptime(db, crawler_name=None, window_hours=window_hours)
-    error_data = calculate_crawler_error_rate(db, crawler_name=None, window_hours=window_hours)
+    uptime_data = calculate_crawler_uptime(
+        db, crawler_name=None, window_hours=window_hours
+    )
+    error_data = calculate_crawler_error_rate(
+        db, crawler_name=None, window_hours=window_hours
+    )
 
     return {
         "window_hours": window_hours,
@@ -448,6 +464,7 @@ def get_crawler_summary(
 # Proxy Health Monitoring and Latency Statistics
 # ============================================================================
 
+
 def log_proxy_health(
     db: Session,
     proxy_ip: str,
@@ -462,7 +479,7 @@ def log_proxy_health(
     commit: bool = True,
 ) -> ProxyHealthRecord:
     """Create and persist an individual proxy health diagnostic observation."""
-    now_utc = datetime.now(timezone.utc)
+    now_utc = datetime.now(UTC)
     record = ProxyHealthRecord(
         proxy_ip=proxy_ip,
         status=status.upper(),
@@ -510,7 +527,7 @@ def upsert_proxy_health(
     Returns:
         The updated or newly created ProxyHealthRecord.
     """
-    now_utc = datetime.now(timezone.utc)
+    now_utc = datetime.now(UTC)
     stmt = (
         select(ProxyHealthRecord)
         .where(ProxyHealthRecord.proxy_ip == proxy_ip)
@@ -524,7 +541,11 @@ def upsert_proxy_health(
         succ_cnt = 1 if is_success is True else 0
         fail_cnt = 1 if is_success is False else 0
 
-        initial_status = status.upper() if status else ("HEALTHY" if is_success is not False else "DEGRADED")
+        initial_status = (
+            status.upper()
+            if status
+            else ("HEALTHY" if is_success is not False else "DEGRADED")
+        )
         record = ProxyHealthRecord(
             proxy_ip=proxy_ip,
             status=initial_status,
@@ -581,7 +602,9 @@ def get_proxy_health_records(
     if status:
         stmt = stmt.where(ProxyHealthRecord.status == status.upper())
 
-    stmt = stmt.order_by(ProxyHealthRecord.last_checked_at.desc(), ProxyHealthRecord.id.desc())
+    stmt = stmt.order_by(
+        ProxyHealthRecord.last_checked_at.desc(), ProxyHealthRecord.id.desc()
+    )
     stmt = stmt.offset(max(0, offset)).limit(max(1, limit))
     return list(db.scalars(stmt).all())
 
@@ -593,17 +616,16 @@ def get_active_healthy_proxies(
     limit: int = 50,
 ) -> list[ProxyHealthRecord]:
     """Retrieve active healthy proxies suitable for scraper pool rotation."""
-    stmt = (
-        select(ProxyHealthRecord)
-        .where(
-            ProxyHealthRecord.status == "HEALTHY",
-            ProxyHealthRecord.consecutive_failures < max_consecutive_failures,
-        )
+    stmt = select(ProxyHealthRecord).where(
+        ProxyHealthRecord.status == "HEALTHY",
+        ProxyHealthRecord.consecutive_failures < max_consecutive_failures,
     )
     if max_latency_ms is not None:
         stmt = stmt.where(ProxyHealthRecord.latency_ms <= max_latency_ms)
 
-    stmt = stmt.order_by(ProxyHealthRecord.latency_ms.asc(), ProxyHealthRecord.last_checked_at.desc())
+    stmt = stmt.order_by(
+        ProxyHealthRecord.latency_ms.asc(), ProxyHealthRecord.last_checked_at.desc()
+    )
     stmt = stmt.limit(max(1, limit))
     return list(db.scalars(stmt).all())
 
@@ -628,7 +650,7 @@ def get_proxy_latency_stats(
         Dictionary with count, avg_latency_ms, min_latency_ms, max_latency_ms,
         p95_latency_ms, status breakdown, healthy/degraded/banned/dead counts.
     """
-    cutoff = since or (datetime.now(timezone.utc) - timedelta(hours=window_hours))
+    cutoff = since or (datetime.now(UTC) - timedelta(hours=window_hours))
 
     stmt = select(ProxyHealthRecord).where(ProxyHealthRecord.last_checked_at >= cutoff)
     if proxy_ip:
@@ -716,10 +738,9 @@ def get_proxy_summary(
     """Retrieve comprehensive proxy pool operations summary for API monitoring endpoints."""
     stats = get_proxy_latency_stats(db, proxy_ip=None, window_hours=window_hours)
     # Distinct active proxies count
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours)
-    stmt = (
-        select(func.count(func.distinct(ProxyHealthRecord.proxy_ip)))
-        .where(ProxyHealthRecord.last_checked_at >= cutoff)
+    cutoff = datetime.now(UTC) - timedelta(hours=window_hours)
+    stmt = select(func.count(func.distinct(ProxyHealthRecord.proxy_ip))).where(
+        ProxyHealthRecord.last_checked_at >= cutoff
     )
     distinct_proxies = db.scalar(stmt) or 0
 
@@ -744,6 +765,7 @@ def get_proxy_summary(
 # Retention and Storage Cleanup
 # ============================================================================
 
+
 def cleanup_old_telemetry(
     db: Session,
     retention_days: int = 30,
@@ -762,17 +784,25 @@ def cleanup_old_telemetry(
         Dictionary with pruned counts for scraper_telemetry and proxy_health_records.
     """
     if cutoff_datetime is None:
-        cutoff_datetime = datetime.now(timezone.utc) - timedelta(days=retention_days)
+        cutoff_datetime = datetime.now(UTC) - timedelta(days=retention_days)
 
     # 1. Prune scraper telemetry
-    stmt_telemetry = delete(ScraperTelemetry).where(ScraperTelemetry.created_at < cutoff_datetime)
+    stmt_telemetry = delete(ScraperTelemetry).where(
+        ScraperTelemetry.created_at < cutoff_datetime
+    )
     res_t = db.execute(stmt_telemetry)
-    telemetry_pruned = res_t.rowcount if res_t.rowcount is not None and res_t.rowcount >= 0 else 0
+    telemetry_pruned = (
+        res_t.rowcount if res_t.rowcount is not None and res_t.rowcount >= 0 else 0
+    )
 
     # 2. Prune proxy health records
-    stmt_proxy = delete(ProxyHealthRecord).where(ProxyHealthRecord.created_at < cutoff_datetime)
+    stmt_proxy = delete(ProxyHealthRecord).where(
+        ProxyHealthRecord.created_at < cutoff_datetime
+    )
     res_p = db.execute(stmt_proxy)
-    proxy_pruned = res_p.rowcount if res_p.rowcount is not None and res_p.rowcount >= 0 else 0
+    proxy_pruned = (
+        res_p.rowcount if res_p.rowcount is not None and res_p.rowcount >= 0 else 0
+    )
 
     if commit:
         db.commit()
@@ -796,6 +826,7 @@ def cleanup_old_telemetry(
 # Object-Oriented Repository Wrapper
 # ============================================================================
 
+
 class TelemetryRepo:
     """Object-oriented repository wrapper for scraper telemetry and proxy health operations.
 
@@ -810,7 +841,9 @@ class TelemetryRepo:
         """Log a scraper telemetry event."""
         return log_scraper_telemetry(self.db, **kwargs)
 
-    def bulk_log_telemetry(self, records: Sequence[dict[str, Any] | ScraperTelemetry], commit: bool = True) -> int:
+    def bulk_log_telemetry(
+        self, records: Sequence[dict[str, Any] | ScraperTelemetry], commit: bool = True
+    ) -> int:
         """Bulk log scraper telemetry events."""
         return bulk_log_scraper_telemetry(self.db, records=records, commit=commit)
 

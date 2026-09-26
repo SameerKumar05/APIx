@@ -1,13 +1,12 @@
-from datetime import date, datetime, timedelta, timezone
-from typing import List, Optional
+from datetime import UTC, date, datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db
 from backend.app.models.econometrics import MospiCpiSeries
-from backend.app.services.mospi_provenance import source_cites_press_note
 from backend.app.models.index import NationalDailyIndex, RouteDailyIndex
 from backend.app.models.raw_fare import RawFare
 from backend.app.models.route import Route
@@ -19,6 +18,7 @@ from backend.app.schemas.index import (
     RouteListResponse,
     RouteOverviewItem,
 )
+from backend.app.services.mospi_provenance import source_cites_press_note
 
 router = APIRouter()
 
@@ -35,22 +35,29 @@ def _horizon_context(db: Session, index_value: float) -> dict:
     out: dict = {}
 
     mospi = db.query(MospiCpiSeries).order_by(MospiCpiSeries.year_month.desc()).first()
-    if mospi is not None and mospi.cpi_transport_index and source_cites_press_note(mospi.source):
+    if (
+        mospi is not None
+        and mospi.cpi_transport_index
+        and source_cites_press_note(mospi.source)
+    ):
         out["mospi_cpi"] = round(float(mospi.cpi_transport_index), 2)
-        out["mospi_cpi_divergence"] = round(index_value - float(mospi.cpi_transport_index), 2)
+        out["mospi_cpi_divergence"] = round(
+            index_value - float(mospi.cpi_transport_index), 2
+        )
         out["mospi_source"] = mospi.source
 
     weights = {
         f"{origin}-{destination}": float(weight)
-        for origin, destination, weight in db.query(Route.origin, Route.destination, Route.weight)
+        for origin, destination, weight in db.query(
+            Route.origin, Route.destination, Route.weight
+        )
         .filter(Route.is_active.is_(True))
         .all()
         if weight
     }
-    rows = (
-        db.query(RouteDailyIndex.origin, RouteDailyIndex.destination, RouteDailyIndex.mean_fare)
-        .all()
-    )
+    rows = db.query(
+        RouteDailyIndex.origin, RouteDailyIndex.destination, RouteDailyIndex.mean_fare
+    ).all()
     num = den = 0.0
     for origin, destination, mean_fare in rows:
         if not mean_fare:
@@ -73,8 +80,11 @@ def _horizon_context(db: Session, index_value: float) -> dict:
         for days, field in ((1, "t1_index"), (30, "t30_index")):
             values = horizon.get(days)
             if values:
-                out[field] = round((sum(values) / len(values)) / float(overall) * index_value, 2)
+                out[field] = round(
+                    (sum(values) / len(values)) / float(overall) * index_value, 2
+                )
     return out
+
 
 @router.get(
     "/national/latest",
@@ -86,22 +96,32 @@ async def get_national_index_latest(
     db: Session = Depends(get_db),
 ) -> NationalIndexLatestResponse:
     try:
-        base_query = db.query(NationalDailyIndex).filter(NationalDailyIndex.booking_window == "COMPOSITE")
+        base_query = db.query(NationalDailyIndex).filter(
+            NationalDailyIndex.booking_window == "COMPOSITE"
+        )
         latest = (
-            base_query.filter(NationalDailyIndex.index_type == "laspeyres")
-            .order_by(NationalDailyIndex.index_date.desc())
-            .first()
-        ) or base_query.order_by(NationalDailyIndex.index_date.desc(), NationalDailyIndex.id.desc()).first() or (
-            db.query(NationalDailyIndex)
-            .order_by(NationalDailyIndex.index_date.desc(), NationalDailyIndex.id.desc())
-            .first()
+            (
+                base_query.filter(NationalDailyIndex.index_type == "laspeyres")
+                .order_by(NationalDailyIndex.index_date.desc())
+                .first()
+            )
+            or base_query.order_by(
+                NationalDailyIndex.index_date.desc(), NationalDailyIndex.id.desc()
+            ).first()
+            or (
+                db.query(NationalDailyIndex)
+                .order_by(
+                    NationalDailyIndex.index_date.desc(), NationalDailyIndex.id.desc()
+                )
+                .first()
+            )
         )
         if latest is not None:
-            ts = datetime.combine(latest.index_date, datetime.min.time(), tzinfo=timezone.utc)
+            ts = datetime.combine(latest.index_date, datetime.min.time(), tzinfo=UTC)
             if latest.calculation_timestamp:
                 ts = latest.calculation_timestamp
                 if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
+                    ts = ts.replace(tzinfo=UTC)
             change_24h = round(latest.inflation_dod_pct, 2)
             val = round(latest.index_value, 2)
             prior = (
@@ -109,14 +129,20 @@ async def get_national_index_latest(
                 .filter(
                     NationalDailyIndex.booking_window == latest.booking_window,
                     NationalDailyIndex.index_type == latest.index_type,
-                    NationalDailyIndex.index_date == latest.index_date - timedelta(days=7),
+                    NationalDailyIndex.index_date
+                    == latest.index_date - timedelta(days=7),
                 )
                 .order_by(NationalDailyIndex.id.desc())
                 .first()
             )
             change_7d = None
             if prior is not None and prior.index_value:
-                change_7d = round((latest.index_value - prior.index_value) / prior.index_value * 100.0, 2)
+                change_7d = round(
+                    (latest.index_value - prior.index_value)
+                    / prior.index_value
+                    * 100.0,
+                    2,
+                )
             return NationalIndexLatestResponse(
                 timestamp=ts,
                 index_value=val,
@@ -164,28 +190,38 @@ async def get_national_index_history(
     records = (
         db.query(NationalDailyIndex)
         .filter(NationalDailyIndex.index_date >= cutoff)
-        .filter(func.lower(func.coalesce(NationalDailyIndex.index_type, "")) == "fisher")
+        .filter(
+            func.lower(func.coalesce(NationalDailyIndex.index_type, "")) == "fisher"
+        )
         .order_by(NationalDailyIndex.index_date.asc())
         .all()
     )
 
-    buckets: dict[str, List[NationalDailyIndex]] = {}
+    buckets: dict[str, list[NationalDailyIndex]] = {}
     for r in records:
         buckets.setdefault(_bucket_key(r.index_date, frequency), []).append(r)
 
-    points: List[NationalIndexPoint] = []
+    points: list[NationalIndexPoint] = []
     previous_value: float | None = None
     for key in sorted(buckets):
         group = buckets[key]
         index_value = sum(g.index_value for g in group) / len(group)
         sample_size = sum(g.total_samples or 0 for g in group)
-        bucket_date = date.fromisoformat(f"{key}-01") if frequency == "monthly" else group[-1].index_date
-        change = 0.0 if previous_value in (None, 0) else round(
-            (index_value - previous_value) / previous_value * 100.0, 2
+        bucket_date = (
+            date.fromisoformat(f"{key}-01")
+            if frequency == "monthly"
+            else group[-1].index_date
+        )
+        change = (
+            0.0
+            if previous_value in (None, 0)
+            else round((index_value - previous_value) / previous_value * 100.0, 2)
         )
         points.append(
             NationalIndexPoint(
-                timestamp=datetime.combine(bucket_date, datetime.min.time(), tzinfo=timezone.utc),
+                timestamp=datetime.combine(
+                    bucket_date, datetime.min.time(), tzinfo=UTC
+                ),
                 index_value=round(index_value, 2),
                 change_24h=change if frequency == "daily" else 0.0,
                 change_7d=change,
@@ -224,7 +260,7 @@ async def get_routes_overview(
     try:
         db_routes = db.query(Route).filter(Route.is_active == True).all()
         if db_routes:
-            routes_list: List[RouteOverviewItem] = []
+            routes_list: list[RouteOverviewItem] = []
             for r in db_routes:
                 latest_idx = (
                     db.query(RouteDailyIndex)
@@ -232,7 +268,9 @@ async def get_routes_overview(
                         RouteDailyIndex.origin == r.origin,
                         RouteDailyIndex.destination == r.destination,
                     )
-                    .order_by(RouteDailyIndex.index_date.desc(), RouteDailyIndex.id.desc())
+                    .order_by(
+                        RouteDailyIndex.index_date.desc(), RouteDailyIndex.id.desc()
+                    )
                     .first()
                 )
                 if latest_idx:
@@ -247,7 +285,14 @@ async def get_routes_overview(
                         .first()
                     )
                     change_24h = (
-                        round(((latest_idx.index_value - prior_idx.index_value) / prior_idx.index_value) * 100.0, 2)
+                        round(
+                            (
+                                (latest_idx.index_value - prior_idx.index_value)
+                                / prior_idx.index_value
+                            )
+                            * 100.0,
+                            2,
+                        )
                         if prior_idx is not None and prior_idx.index_value
                         else None
                     )
@@ -318,22 +363,32 @@ async def get_route_history(
         if route_indices:
             route_indices.reverse()
             by_date = {row.index_date: row for row in route_indices}
-            points: List[NationalIndexPoint] = []
+            points: list[NationalIndexPoint] = []
             for idx, r in enumerate(route_indices):
-                ts = datetime.combine(r.index_date, datetime.min.time(), tzinfo=timezone.utc)
+                ts = datetime.combine(r.index_date, datetime.min.time(), tzinfo=UTC)
                 if r.calculation_timestamp:
                     ts = r.calculation_timestamp
                     if ts.tzinfo is None:
-                        ts = ts.replace(tzinfo=timezone.utc)
+                        ts = ts.replace(tzinfo=UTC)
                 prev = route_indices[idx - 1] if idx > 0 else None
                 change_24h = (
-                    round(((r.index_value - prev.index_value) / prev.index_value) * 100.0, 2)
+                    round(
+                        ((r.index_value - prev.index_value) / prev.index_value) * 100.0,
+                        2,
+                    )
                     if prev is not None and prev.index_value
                     else None
                 )
                 week_prior = by_date.get(r.index_date - timedelta(days=7))
                 change_7d = (
-                    round(((r.index_value - week_prior.index_value) / week_prior.index_value) * 100.0, 2)
+                    round(
+                        (
+                            (r.index_value - week_prior.index_value)
+                            / week_prior.index_value
+                        )
+                        * 100.0,
+                        2,
+                    )
                     if week_prior is not None and week_prior.index_value
                     else None
                 )

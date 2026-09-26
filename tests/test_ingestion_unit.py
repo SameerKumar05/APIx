@@ -14,13 +14,14 @@ from ingestion.client import IngestionClient
 from ingestion.config import (
     BOOKING_WINDOWS,
     DEFAULT_ROUTES,
-    IngestionConfig,
     VALID_IATA_CODES,
+    IngestionConfig,
 )
 from ingestion.crawlers.amadeus import AmadeusFlightClient, parse_iso_duration
 from ingestion.crawlers.easemytrip import EaseMyTripScraper
 from ingestion.crawlers.synthetic import SyntheticFlightGenerator
 from ingestion.orchestrator import IngestionOrchestrator
+
 
 class TestIngestionConfig(unittest.TestCase):
     def test_default_routes_count_and_properties(self):
@@ -214,7 +215,6 @@ class TestIngestionClient(unittest.TestCase):
         self.assertIn("hash_id", payload["records"][0])
 
 
-
 class TestAmadeusFlightClient(unittest.TestCase):
     def setUp(self):
         self.client = AmadeusFlightClient(mock_mode=True)
@@ -265,6 +265,7 @@ class TestIngestionOrchestrator(unittest.TestCase):
         self.assertGreater(summary.total_records_collected, 150)
         self.assertEqual(summary.backend_status, "skipped_dry_run")
         self.assertEqual(len(summary.slots), len(DEFAULT_ROUTES) * len(BOOKING_WINDOWS))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -130,7 +130,15 @@ def test_page_with_no_fare_returns_zero_records_and_reason(
 def test_parse_sets_live_only_when_fare_is_read(cls: type[PortalScraper]) -> None:
     scraper = _scraper(cls)
     missing = scraper.parse_flight_json(
-        {"flights": [{"flightNumber": "6E-1", "departureTime": "2026-09-25T06:00:00", "arrivalTime": "2026-09-25T08:00:00"}]},
+        {
+            "flights": [
+                {
+                    "flightNumber": "6E-1",
+                    "departureTime": "2026-09-25T06:00:00",
+                    "arrivalTime": "2026-09-25T08:00:00",
+                }
+            ]
+        },
         "DEL",
         "BOM",
         "T+7",
@@ -160,8 +168,16 @@ def test_parse_sets_live_only_when_fare_is_read(cls: type[PortalScraper]) -> Non
 
 def test_published_search_paths_are_denied_by_robots() -> None:
     cases: list[tuple[PortalScraper, str, str]] = [
-        (_scraper(AirIndiaExpressScraper), AIX_ROBOTS, "https://www.airindiaexpress.com/robots.txt"),
-        (_scraper(CleartripScraper), CLEARTRIP_ROBOTS, "https://www.cleartrip.com/robots.txt"),
+        (
+            _scraper(AirIndiaExpressScraper),
+            AIX_ROBOTS,
+            "https://www.airindiaexpress.com/robots.txt",
+        ),
+        (
+            _scraper(CleartripScraper),
+            CLEARTRIP_ROBOTS,
+            "https://www.cleartrip.com/robots.txt",
+        ),
         (_scraper(IxigoScraper), IXIGO_ROBOTS, "https://www.ixigo.com/robots.txt"),
     ]
     for scraper, body, robots_url in cases:
@@ -172,11 +188,15 @@ def test_published_search_paths_are_denied_by_robots() -> None:
 
 def test_akasa_published_robots_allows_search_url() -> None:
     scraper = _scraper(AkasaScraper)
-    policy = parse_robots_txt("https://www.akasaair.com/robots.txt", AKASA_ROBOTS, user_agent="APIxBot")
+    policy = parse_robots_txt(
+        "https://www.akasaair.com/robots.txt", AKASA_ROBOTS, user_agent="APIxBot"
+    )
     assert policy.can_fetch(scraper.build_search_url("DEL", "BOM", TARGET)) is True
 
 
-def test_unreachable_robots_fails_closed_before_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unreachable_robots_fails_closed_before_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     scraper = _scraper(IndiGoScraper)
     policy = RobotsPolicy.deny_all(
         "https://www.goindigo.in/robots.txt",
@@ -202,7 +222,9 @@ def test_synthetic_fallback_keeps_label_and_generator_fare() -> None:
     result = scraper.scrape_route("DEL", "BOM", TARGET, "T+7")
     assert result.records
     assert result.metadata["tier"] == 3
-    assert [record.fare_inr for record in result.records] == [record.fare_inr for record in generated.records]
+    assert [record.fare_inr for record in result.records] == [
+        record.fare_inr for record in generated.records
+    ]
     for record in result.records:
         assert record.is_synthetic is True
         assert record.source == "indigo"

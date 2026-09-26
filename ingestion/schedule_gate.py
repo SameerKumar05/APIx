@@ -11,7 +11,7 @@ from __future__ import annotations
 import fcntl
 import os
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import TextIO
@@ -63,7 +63,7 @@ def parse_dispatch(raw: str) -> DispatchMode:
 
 def next_daily_run(cron_expr: str, now: datetime) -> datetime:
     """Next fire time of a UTC cron. ``now`` must be timezone-aware."""
-    trigger = CronTrigger.from_crontab(cron_expr, timezone=timezone.utc)
+    trigger = CronTrigger.from_crontab(cron_expr, timezone=UTC)
     nxt = trigger.get_next_fire_time(None, now)
     if nxt is None:
         raise ScheduleError(cron_expr)
@@ -122,13 +122,17 @@ class SweepGate:
         self._ensure()
         marker = self._completed_path(day)
         if marker.is_file():
-            return SweepClaim(acquired=False, day=day.isoformat(), reason="already_completed")
+            return SweepClaim(
+                acquired=False, day=day.isoformat(), reason="already_completed"
+            )
         held = self.claim_process()
         if not held.acquired:
             return SweepClaim(acquired=False, day=day.isoformat(), reason=held.reason)
         if marker.is_file():
             self.release()
-            return SweepClaim(acquired=False, day=day.isoformat(), reason="already_completed")
+            return SweepClaim(
+                acquired=False, day=day.isoformat(), reason="already_completed"
+            )
         return SweepClaim(acquired=True, day=day.isoformat(), reason="acquired")
 
     def complete(self, day: date) -> None:

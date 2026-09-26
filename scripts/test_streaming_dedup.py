@@ -19,7 +19,7 @@ import math
 import os
 import sys
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 
 # Add project root to sys.path
@@ -117,7 +117,9 @@ def test_exact_hash_deduplication() -> None:
 
     print(f"  ✓ Canonical Key: {key1}")
     print(f"  ✓ Deterministic SHA-256 Hash: {hash1}")
-    print("  ✓ PASSED: All portal variations resolve to identical canonical key and hash.")
+    print(
+        "  ✓ PASSED: All portal variations resolve to identical canonical key and hash."
+    )
 
 
 def test_minimum_consumer_price_resolution() -> None:
@@ -127,33 +129,39 @@ def test_minimum_consumer_price_resolution() -> None:
     engine = StreamingDedupEngine(window_seconds=300.0)
 
     # Ingest MMT quote at INR 5,400
-    res1 = engine.ingest({
-        "airline_code": "SG",
-        "flight_number": "SG-8169",
-        "origin": "DEL",
-        "destination": "BOM",
-        "flight_date": "2026-10-20",
-        "departure_time": "14:30",
-        "fare": 5400.0,
-        "source_portal": "makemytrip",
-    })
+    res1 = engine.ingest(
+        {
+            "airline_code": "SG",
+            "flight_number": "SG-8169",
+            "origin": "DEL",
+            "destination": "BOM",
+            "flight_date": "2026-10-20",
+            "departure_time": "14:30",
+            "fare": 5400.0,
+            "source_portal": "makemytrip",
+        }
+    )
     assert res1.is_new_flight is True
     assert res1.is_new_minimum is True
     assert res1.min_fare == 5400.0
     assert res1.portal_count == 1
-    assert res1.latency_us < 1000.0, f"Latency {res1.latency_us} us must be sub-millisecond"
+    assert (
+        res1.latency_us < 1000.0
+    ), f"Latency {res1.latency_us} us must be sub-millisecond"
 
     # Ingest EaseMyTrip quote at INR 5,150 (new minimum)
-    res2 = engine.ingest({
-        "airline_code": "SG",
-        "flight_number": "SG-8169",
-        "origin": "DEL",
-        "destination": "BOM",
-        "flight_date": "2026-10-20",
-        "departure_time": "14:30",
-        "fare": 5150.0,
-        "source_portal": "easemytrip",
-    })
+    res2 = engine.ingest(
+        {
+            "airline_code": "SG",
+            "flight_number": "SG-8169",
+            "origin": "DEL",
+            "destination": "BOM",
+            "flight_date": "2026-10-20",
+            "departure_time": "14:30",
+            "fare": 5150.0,
+            "source_portal": "easemytrip",
+        }
+    )
     assert res2.is_new_flight is False
     assert res2.is_new_minimum is True
     assert res2.min_fare == 5150.0
@@ -161,16 +169,18 @@ def test_minimum_consumer_price_resolution() -> None:
     assert res2.previous_min_fare == 5400.0
 
     # Ingest SpiceJet direct quote at INR 4,800 (new minimum from direct carrier)
-    res3 = engine.ingest({
-        "airline_code": "SG",
-        "flight_number": "SG-8169",
-        "origin": "DEL",
-        "destination": "BOM",
-        "flight_date": "2026-10-20",
-        "departure_time": "14:30",
-        "fare": 4800.0,
-        "source_portal": "spicejet",
-    })
+    res3 = engine.ingest(
+        {
+            "airline_code": "SG",
+            "flight_number": "SG-8169",
+            "origin": "DEL",
+            "destination": "BOM",
+            "flight_date": "2026-10-20",
+            "departure_time": "14:30",
+            "fare": 4800.0,
+            "source_portal": "spicejet",
+        }
+    )
     assert res3.is_new_minimum is True
     assert res3.min_fare == 4800.0
     assert res3.portal_count == 3
@@ -179,16 +189,18 @@ def test_minimum_consumer_price_resolution() -> None:
     assert res3.spread_pct == round((600.0 / 4800.0) * 100.0, 4)
 
     # Ingest another OTA quote at higher price INR 5,600 (should NOT lower min_fare)
-    res4 = engine.ingest({
-        "airline_code": "SG",
-        "flight_number": "SG-8169",
-        "origin": "DEL",
-        "destination": "BOM",
-        "flight_date": "2026-10-20",
-        "departure_time": "14:30",
-        "fare": 5600.0,
-        "source_portal": "yatra",
-    })
+    res4 = engine.ingest(
+        {
+            "airline_code": "SG",
+            "flight_number": "SG-8169",
+            "origin": "DEL",
+            "destination": "BOM",
+            "flight_date": "2026-10-20",
+            "departure_time": "14:30",
+            "fare": 5600.0,
+            "source_portal": "yatra",
+        }
+    )
     assert res4.is_new_minimum is False
     assert res4.min_fare == 4800.0
     assert res4.portal_count == 4
@@ -201,7 +213,9 @@ def test_minimum_consumer_price_resolution() -> None:
     assert best.source_portal == "spicejet"
 
     print(f"  ✓ Best Quote Resolved: Fare=INR {best.fare} via {best.source_portal}")
-    print(f"  ✓ Portals Tracked: {res4.portal_count} ({list(res4.portal_fares.keys())})")
+    print(
+        f"  ✓ Portals Tracked: {res4.portal_count} ({list(res4.portal_fares.keys())})"
+    )
     print(f"  ✓ Cross-Portal Fare Spread: INR {res4.spread_inr} ({res4.spread_pct}%)")
     print("  ✓ PASSED: Minimum consumer price resolved across 4 portals accurately.")
 
@@ -214,7 +228,13 @@ def test_sub_millisecond_latency_benchmark() -> None:
 
     # Generate 5,000 diverse flight quotes across 1,000 unique flights and 5 portals
     portals = ["makemytrip", "easemytrip", "spicejet", "indigo", "airindia"]
-    routes = [("DEL", "BOM"), ("BLR", "DEL"), ("BOM", "GOI"), ("MAA", "CCU"), ("HYD", "DEL")]
+    routes = [
+        ("DEL", "BOM"),
+        ("BLR", "DEL"),
+        ("BOM", "GOI"),
+        ("MAA", "CCU"),
+        ("HYD", "DEL"),
+    ]
     airlines = ["6E", "SG", "AI", "UK", "QP"]
 
     quotes = []
@@ -226,18 +246,20 @@ def test_sub_millisecond_latency_benchmark() -> None:
         base_p = 3500 + (flight_idx * 7) % 4000
         # Varied fare per portal
         fare = base_p + ((i * 37) % 500)
-        quotes.append({
-            "airline_code": airline,
-            "flight_number": f"{airline}-{100 + (flight_idx % 300)}",
-            "origin": orig,
-            "destination": dest,
-            "flight_date": "2026-11-01",
-            "departure_time": f"{(flight_idx % 24):02d}:00",
-            "fare": float(fare),
-            "source_portal": portal,
-            "cabin_class": "economy",
-            "booking_datetime": "2026-09-24T12:00:00Z",
-        })
+        quotes.append(
+            {
+                "airline_code": airline,
+                "flight_number": f"{airline}-{100 + (flight_idx % 300)}",
+                "origin": orig,
+                "destination": dest,
+                "flight_date": "2026-11-01",
+                "departure_time": f"{(flight_idx % 24):02d}:00",
+                "fare": float(fare),
+                "source_portal": portal,
+                "cabin_class": "economy",
+                "booking_datetime": "2026-09-24T12:00:00Z",
+            }
+        )
 
     # Benchmark ingestion loop
     start_total = time.perf_counter_ns()
@@ -250,14 +272,20 @@ def test_sub_millisecond_latency_benchmark() -> None:
     throughput_qps = len(quotes) / (total_elapsed_ms / 1000.0)
 
     print(f"  ✓ Processed Quotes: {len(quotes):,} quotes in {total_elapsed_ms:.2f} ms")
-    print(f"  ✓ Average Latency: {avg_latency_us:.2f} µs ({avg_latency_ms:.4f} ms per quote)")
+    print(
+        f"  ✓ Average Latency: {avg_latency_us:.2f} µs ({avg_latency_ms:.4f} ms per quote)"
+    )
     print(f"  ✓ Max Recorded Latency: {stats['max_latency_us']:.2f} µs")
     print(f"  ✓ Engine Throughput: {throughput_qps:,.0f} quotes/second")
     print(f"  ✓ Sub-Millisecond Compliant: {stats['sub_millisecond_compliant']}")
 
-    assert avg_latency_ms < 1.0, f"Average latency {avg_latency_ms} ms exceeds 1.0 ms threshold!"
+    assert (
+        avg_latency_ms < 1.0
+    ), f"Average latency {avg_latency_ms} ms exceeds 1.0 ms threshold!"
     assert stats["sub_millisecond_compliant"] is True
-    print("  ✓ PASSED: Sub-millisecond latency requirement verified with premier margin.")
+    print(
+        "  ✓ PASSED: Sub-millisecond latency requirement verified with premier margin."
+    )
 
 
 def test_sliding_window_and_out_of_order() -> None:
@@ -267,7 +295,7 @@ def test_sliding_window_and_out_of_order() -> None:
     window_sec = 60.0  # 60 second sliding window
     engine = StreamingDedupEngine(window_seconds=window_sec)
 
-    base_time = datetime(2026, 9, 24, 10, 0, 0, tzinfo=timezone.utc)
+    base_time = datetime(2026, 9, 24, 10, 0, 0, tzinfo=UTC)
 
     # Ingest quote at T = 10:00:30
     engine.ingest(
@@ -332,7 +360,7 @@ def test_sliding_window_and_out_of_order() -> None:
     assert pruned_late == 2
     assert len(engine._buffer) == 0
 
-    print(f"  ✓ Out-of-order arrival correctly flagged and resolved lower price.")
+    print("  ✓ Out-of-order arrival correctly flagged and resolved lower price.")
     print(f"  ✓ Sliding window expiration pruned {pruned_late} records precisely.")
     print("  ✓ PASSED: Sliding window and out-of-order timestamp handling verified.")
 
@@ -346,43 +374,51 @@ def test_lru_memory_bounding() -> None:
 
     # Ingest 200 distinct flights
     for i in range(200):
-        engine.ingest({
-            "airline_code": "6E",
-            "flight_number": f"6E-{i}",
-            "origin": "DEL",
-            "destination": "BOM",
-            "flight_date": "2026-10-01",
-            "departure_time": "08:00",
-            "fare": 5000.0 + i,
-            "source_portal": "makemytrip",
-        })
+        engine.ingest(
+            {
+                "airline_code": "6E",
+                "flight_number": f"6E-{i}",
+                "origin": "DEL",
+                "destination": "BOM",
+                "flight_date": "2026-10-01",
+                "departure_time": "08:00",
+                "fare": 5000.0 + i,
+                "source_portal": "makemytrip",
+            }
+        )
 
     stats = engine.stats()
-    assert len(engine._buffer) == max_buf, f"Buffer size {len(engine._buffer)} must equal max_buf {max_buf}"
+    assert (
+        len(engine._buffer) == max_buf
+    ), f"Buffer size {len(engine._buffer)} must equal max_buf {max_buf}"
     assert stats["active_buffer_size"] == max_buf
     assert stats["lru_evictions_count"] == 150  # 200 - 50 = 150 evicted
 
     # The most recent 50 flights (i = 150 to 199) must be retained
     for i in range(150, 200):
-        key, _ = engine.generate_flight_key({
+        key, _ = engine.generate_flight_key(
+            {
+                "airline_code": "6E",
+                "flight_number": f"6E-{i}",
+                "origin": "DEL",
+                "destination": "BOM",
+                "flight_date": "2026-10-01",
+                "departure_time": "08:00",
+            }
+        )
+        assert engine.get_best_quote(key) is not None
+
+    # Flight 0 should have been evicted
+    key_old, _ = engine.generate_flight_key(
+        {
             "airline_code": "6E",
-            "flight_number": f"6E-{i}",
+            "flight_number": "6E-0",
             "origin": "DEL",
             "destination": "BOM",
             "flight_date": "2026-10-01",
             "departure_time": "08:00",
-        })
-        assert engine.get_best_quote(key) is not None
-
-    # Flight 0 should have been evicted
-    key_old, _ = engine.generate_flight_key({
-        "airline_code": "6E",
-        "flight_number": "6E-0",
-        "origin": "DEL",
-        "destination": "BOM",
-        "flight_date": "2026-10-01",
-        "departure_time": "08:00",
-    })
+        }
+    )
     assert engine.get_best_quote(key_old) is None
 
     print(f"  ✓ Buffer capped at: {len(engine._buffer)} records (max={max_buf})")
@@ -397,14 +433,18 @@ def test_cross_platform_arbitrage_detector() -> None:
     detector = ArbitrageDetector(min_spread_pct=3.0, allow_reverse_arbitrage=True)
 
     # 1. Spread Calculation Function Test
-    spread_inr, spread_pct, direction, is_neg = calculate_spread(direct_fare=4500.0, ota_fare=5000.0)
+    spread_inr, spread_pct, direction, is_neg = calculate_spread(
+        direct_fare=4500.0, ota_fare=5000.0
+    )
     assert spread_inr == 500.0
     assert spread_pct == round((500.0 / 4500.0) * 100.0, 4)  # ~11.1111%
     assert direction == "direct_cheaper"
     assert is_neg is False
 
     # Negative spread (OTA is cheaper)
-    spread_neg_inr, spread_neg_pct, dir_neg, is_neg_flag = calculate_spread(direct_fare=6000.0, ota_fare=5400.0)
+    spread_neg_inr, spread_neg_pct, dir_neg, is_neg_flag = calculate_spread(
+        direct_fare=6000.0, ota_fare=5400.0
+    )
     assert spread_neg_inr == -600.0
     assert spread_neg_pct == round((-600.0 / 6000.0) * 100.0, 4)  # -10.0%
     assert dir_neg == "ota_cheaper"
@@ -511,11 +551,15 @@ def test_cross_platform_arbitrage_detector() -> None:
     # Verify sorting by absolute spread percentage descending
     assert abs(batch_opps[0].spread_pct) >= abs(batch_opps[1].spread_pct)
 
-    print(f"  ✓ Direct Cheaper Arbitrage: Buy={opp_pos.buy_venue} (INR {opp_pos.buy_fare}), "
-          f"Sell={opp_pos.sell_venue} (INR {opp_pos.sell_fare}), Spread=+{opp_pos.spread_pct}%")
-    print(f"  ✓ OTA Cheaper Arbitrage: Buy={opp_neg.buy_venue} (INR {opp_neg.buy_fare}), "
-          f"Sell={opp_neg.sell_venue} (INR {opp_neg.sell_fare}), Spread={opp_neg.spread_pct}%")
-    print(f"  ✓ Threshold filtering & sorting verified.")
+    print(
+        f"  ✓ Direct Cheaper Arbitrage: Buy={opp_pos.buy_venue} (INR {opp_pos.buy_fare}), "
+        f"Sell={opp_pos.sell_venue} (INR {opp_pos.sell_fare}), Spread=+{opp_pos.spread_pct}%"
+    )
+    print(
+        f"  ✓ OTA Cheaper Arbitrage: Buy={opp_neg.buy_venue} (INR {opp_neg.buy_fare}), "
+        f"Sell={opp_neg.sell_venue} (INR {opp_neg.sell_fare}), Spread={opp_neg.spread_pct}%"
+    )
+    print("  ✓ Threshold filtering & sorting verified.")
     print("  ✓ PASSED: Arbitrage detection and spread calculations verified.")
 
 
@@ -570,13 +614,17 @@ def test_arbitrage_edge_cases() -> None:
     assert detector.detect_flight_arbitrage(ota_only_quotes) is None
 
     # Zero or negative fare edge cases (must never raise ZeroDivisionError)
-    spread_inr, spread_pct, direction, is_neg = calculate_spread(direct_fare=0.0, ota_fare=5000.0)
+    spread_inr, spread_pct, direction, is_neg = calculate_spread(
+        direct_fare=0.0, ota_fare=5000.0
+    )
     assert spread_inr == 0.0
     assert spread_pct == 0.0
     assert direction == "invalid"
     assert is_neg is False
 
-    spread_inr, spread_pct, direction, is_neg = calculate_spread(direct_fare=-100.0, ota_fare=5000.0)
+    spread_inr, spread_pct, direction, is_neg = calculate_spread(
+        direct_fare=-100.0, ota_fare=5000.0
+    )
     assert spread_pct == 0.0
     assert direction == "invalid"
 
@@ -644,11 +692,12 @@ def test_index_pipeline_and_db_integration() -> None:
     """Test 8: Verify end-to-end integration with database session and daily index pipeline."""
     print("\n[Test 8] Index Pipeline & DB Integration")
 
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
     from backend.app.db.seed import seed_all
     from backend.app.db.session import Base
     from backend.app.models.raw_fare import RawFare
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
 
     engine = create_engine("sqlite:///:memory:", echo=False)
     Base.metadata.create_all(engine)
@@ -668,8 +717,8 @@ def test_index_pipeline_and_db_integration() -> None:
                 origin="DEL",
                 destination="BOM",
                 flight_date=calc_date,
-                departure_time=datetime(2026, 9, 24, 8, 0, tzinfo=timezone.utc),
-                scraped_at=datetime(2026, 9, 24, 7, 0, tzinfo=timezone.utc),
+                departure_time=datetime(2026, 9, 24, 8, 0, tzinfo=UTC),
+                scraped_at=datetime(2026, 9, 24, 7, 0, tzinfo=UTC),
                 total_fare=4800.0,
                 base_fare=3800.0,
                 taxes_and_fees=1000.0,
@@ -684,8 +733,8 @@ def test_index_pipeline_and_db_integration() -> None:
                 origin="DEL",
                 destination="BOM",
                 flight_date=calc_date,
-                departure_time=datetime(2026, 9, 24, 8, 0, tzinfo=timezone.utc),
-                scraped_at=datetime(2026, 9, 24, 7, 5, tzinfo=timezone.utc),
+                departure_time=datetime(2026, 9, 24, 8, 0, tzinfo=UTC),
+                scraped_at=datetime(2026, 9, 24, 7, 5, tzinfo=UTC),
                 total_fare=5400.0,
                 base_fare=4200.0,
                 taxes_and_fees=1200.0,
@@ -700,8 +749,8 @@ def test_index_pipeline_and_db_integration() -> None:
                 origin="DEL",
                 destination="BOM",
                 flight_date=calc_date,
-                departure_time=datetime(2026, 9, 24, 8, 0, tzinfo=timezone.utc),
-                scraped_at=datetime(2026, 9, 24, 7, 10, tzinfo=timezone.utc),
+                departure_time=datetime(2026, 9, 24, 8, 0, tzinfo=UTC),
+                scraped_at=datetime(2026, 9, 24, 7, 10, tzinfo=UTC),
                 total_fare=5200.0,
                 base_fare=4100.0,
                 taxes_and_fees=1100.0,
@@ -717,8 +766,8 @@ def test_index_pipeline_and_db_integration() -> None:
                 origin="BLR",
                 destination="DEL",
                 flight_date=calc_date,
-                departure_time=datetime(2026, 9, 24, 14, 0, tzinfo=timezone.utc),
-                scraped_at=datetime(2026, 9, 24, 10, 0, tzinfo=timezone.utc),
+                departure_time=datetime(2026, 9, 24, 14, 0, tzinfo=UTC),
+                scraped_at=datetime(2026, 9, 24, 10, 0, tzinfo=UTC),
                 total_fare=4200.0,
                 base_fare=3200.0,
                 taxes_and_fees=1000.0,
@@ -733,8 +782,8 @@ def test_index_pipeline_and_db_integration() -> None:
                 origin="BLR",
                 destination="DEL",
                 flight_date=calc_date,
-                departure_time=datetime(2026, 9, 24, 14, 0, tzinfo=timezone.utc),
-                scraped_at=datetime(2026, 9, 24, 10, 5, tzinfo=timezone.utc),
+                departure_time=datetime(2026, 9, 24, 14, 0, tzinfo=UTC),
+                scraped_at=datetime(2026, 9, 24, 10, 5, tzinfo=UTC),
                 total_fare=4950.0,
                 base_fare=3900.0,
                 taxes_and_fees=1050.0,
@@ -747,8 +796,12 @@ def test_index_pipeline_and_db_integration() -> None:
         session.commit()
 
         # Test get_current_arbitrage_opportunities with db session
-        db_opps = get_current_arbitrage_opportunities(session, min_spread_pct=5.0, target_date=calc_date)
-        assert len(db_opps) == 2, f"Expected 2 arbitrage opportunities, got {len(db_opps)}"
+        db_opps = get_current_arbitrage_opportunities(
+            session, min_spread_pct=5.0, target_date=calc_date
+        )
+        assert (
+            len(db_opps) == 2
+        ), f"Expected 2 arbitrage opportunities, got {len(db_opps)}"
         assert db_opps[0].airline_code in ("6E", "SG")
         assert db_opps[0].is_arbitrage is True
 
@@ -765,9 +818,13 @@ def test_index_pipeline_and_db_integration() -> None:
         assert res["arbitrage_count"] == 2
 
         print(f"  ✓ DB Arbitrage Query returned {len(db_opps)} opportunities.")
-        print(f"  ✓ Pipeline executed with streaming dedup: {stats['total_processed']} quotes, "
-              f"avg latency={stats['avg_latency_us']:.2f} µs.")
-        print(f"  ✓ Arbitrage Opportunities in Pipeline Summary: {res['arbitrage_count']}")
+        print(
+            f"  ✓ Pipeline executed with streaming dedup: {stats['total_processed']} quotes, "
+            f"avg latency={stats['avg_latency_us']:.2f} µs."
+        )
+        print(
+            f"  ✓ Arbitrage Opportunities in Pipeline Summary: {res['arbitrage_count']}"
+        )
         print("  ✓ PASSED: End-to-end integration verified successfully.")
 
 

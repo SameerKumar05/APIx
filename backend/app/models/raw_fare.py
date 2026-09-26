@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -202,7 +202,7 @@ class RawFare(Base):
     scraped_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         doc="Timestamp when price quote was captured",
     )
     hash_id: Mapped[str] = mapped_column(
@@ -251,6 +251,7 @@ class RawFare(Base):
     @fare.setter
     def fare(self, value: float) -> None:
         self.total_fare = value
+
     @property
     def cabin_class(self) -> str:
         return self.fare_class

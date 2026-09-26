@@ -11,11 +11,11 @@ import logging
 import os
 import re
 import time
-import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-from urllib.error import HTTPError, URLError
 import urllib.request
+import uuid
+from datetime import UTC, datetime
+from typing import Any
+from urllib.error import HTTPError, URLError
 
 from ingestion.base import RawFareRecord
 from ingestion.config import IngestionConfig
@@ -25,6 +25,7 @@ logger = logging.getLogger("ingestion.client")
 # Attempt importing httpx for async / high-performance HTTP
 try:
     import httpx
+
     HAS_HTTPX = True
 except ImportError:
     httpx = None  # type: ignore
@@ -36,25 +37,27 @@ class IngestionClient:
 
     def __init__(
         self,
-        config: Optional[IngestionConfig] = None,
-        base_url: Optional[str] = None,
-        ingestion_key: Optional[str] = None,
+        config: IngestionConfig | None = None,
+        base_url: str | None = None,
+        ingestion_key: str | None = None,
     ) -> None:
         self.config = config or IngestionConfig()
-        self.base_url = (base_url or os.getenv("INGESTION_ENDPOINT_URL") or self.config.api_base_url).rstrip("/")
+        self.base_url = (
+            base_url or os.getenv("INGESTION_ENDPOINT_URL") or self.config.api_base_url
+        ).rstrip("/")
         self.ingestion_key = ingestion_key or self.config.ingestion_key
         self.batch_endpoint = f"{self.base_url}/api/v1/ingestion/batch"
 
     def _format_payload(
         self,
-        records: List[RawFareRecord],
+        records: list[RawFareRecord],
         source: str,
-        batch_id: Optional[str] = None,
-        scraped_at: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        batch_id: str | None = None,
+        scraped_at: str | None = None,
+    ) -> dict[str, Any]:
         """Formats payload conforming to IngestionBatchRequest schema."""
         b_id = batch_id or f"batch-{uuid.uuid4().hex[:12]}"
-        scrape_time = scraped_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        scrape_time = scraped_at or datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S")
 
         serialized_records = []
         for r in records:
@@ -72,7 +75,7 @@ class IngestionClient:
             "records": serialized_records,
         }
 
-    def _post_with_urllib(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _post_with_urllib(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Dispatches batch using standard library urllib."""
         data_bytes = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
@@ -90,7 +93,7 @@ class IngestionClient:
             resp_body = resp.read().decode("utf-8")
             return json.loads(resp_body)
 
-    def _post_with_httpx(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _post_with_httpx(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Dispatches batch using httpx."""
         headers = {
             "Content-Type": "application/json",
@@ -104,11 +107,11 @@ class IngestionClient:
 
     def post_batch(
         self,
-        records: List[RawFareRecord],
+        records: list[RawFareRecord],
         source: str = "synthetic",
-        batch_id: Optional[str] = None,
-        scraped_at: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        batch_id: str | None = None,
+        scraped_at: str | None = None,
+    ) -> dict[str, Any]:
         """Posts a single batch of records with retry and exponential backoff.
 
         Returns server response dict.
@@ -123,7 +126,7 @@ class IngestionClient:
         retries = self.config.max_retries
         backoff = self.config.retry_backoff_factor
 
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for attempt in range(1, retries + 1):
             try:
                 logger.info(
@@ -142,7 +145,12 @@ class IngestionClient:
             except (HTTPError, URLError, Exception) as exc:
                 last_error = exc
                 if attempt == retries:
-                    logger.error("Failed to post batch %s after %d attempts: %s", payload["batch_id"], retries, exc)
+                    logger.error(
+                        "Failed to post batch %s after %d attempts: %s",
+                        payload["batch_id"],
+                        retries,
+                        exc,
+                    )
                     raise
                 wait_time = backoff ** (attempt - 1)
                 logger.warning(
@@ -157,15 +165,17 @@ class IngestionClient:
 
     async def post_batch_async(
         self,
-        records: List[RawFareRecord],
+        records: list[RawFareRecord],
         source: str = "synthetic",
-        batch_id: Optional[str] = None,
-        scraped_at: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        batch_id: str | None = None,
+        scraped_at: str | None = None,
+    ) -> dict[str, Any]:
         """Asynchronously posts a batch using httpx AsyncClient."""
         if not HAS_HTTPX:
             # Fall back to synchronous post if httpx is not installed
-            return self.post_batch(records, source=source, batch_id=batch_id, scraped_at=scraped_at)
+            return self.post_batch(
+                records, source=source, batch_id=batch_id, scraped_at=scraped_at
+            )
 
         payload = self._format_payload(
             records=records,
@@ -179,22 +189,24 @@ class IngestionClient:
             "User-Agent": "APIx-IngestionClient/1.0",
         }
         async with httpx.AsyncClient(timeout=self.config.timeout_seconds) as client:
-            response = await client.post(self.batch_endpoint, json=payload, headers=headers)
+            response = await client.post(
+                self.batch_endpoint, json=payload, headers=headers
+            )
             response.raise_for_status()
             return response.json()
 
     def post_records_chunked(
         self,
-        records: List[RawFareRecord],
+        records: list[RawFareRecord],
         source: str = "synthetic",
-        chunk_size: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        chunk_size: int | None = None,
+    ) -> list[dict[str, Any]]:
         """Splits large record lists into chunk_size batches and posts each sequentially.
 
         Returns list of batch responses.
         """
         size = chunk_size or self.config.batch_size
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
 
         total = len(records)
         for i in range(0, total, size):

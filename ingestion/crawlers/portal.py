@@ -10,11 +10,17 @@ from __future__ import annotations
 import logging
 import re
 import time
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
-from ingestion.config import BOOKING_WINDOWS, DEFAULT_ROUTES, BookingWindow, IngestionConfig, Route
+from ingestion.config import (
+    BOOKING_WINDOWS,
+    DEFAULT_ROUTES,
+    BookingWindow,
+    IngestionConfig,
+    Route,
+)
 from ingestion.crawlers.amadeus import AmadeusFlightClient
 from ingestion.crawlers.portal_browser import read_search_payloads
 from ingestion.crawlers.portal_parse import parse_portal_flights
@@ -31,7 +37,7 @@ class PortalScraper(BaseScraper):
     BASE_URL = ""
     SOURCE_NAME = ""
     SOURCE_TYPE = ""
-    AIRLINE_CODE: Optional[str] = None
+    AIRLINE_CODE: str | None = None
     API_URL_PATTERNS: tuple[str, ...] = ()
     API_REJECT_PATTERNS: tuple[str, ...] = (
         r"getStationDetails",
@@ -43,16 +49,18 @@ class PortalScraper(BaseScraper):
 
     def __init__(
         self,
-        config: Optional[IngestionConfig] = None,
-        amadeus_client: Optional[AmadeusFlightClient] = None,
-        synthetic_generator: Optional[SyntheticFlightGenerator] = None,
-        proxy: Optional[Union[str, Dict[str, str]]] = None,
+        config: IngestionConfig | None = None,
+        amadeus_client: AmadeusFlightClient | None = None,
+        synthetic_generator: SyntheticFlightGenerator | None = None,
+        proxy: str | dict[str, str] | None = None,
     ) -> None:
         super().__init__(config)
         self.proxy = proxy or getattr(self.config, "proxy_url", None)
         self.amadeus_client = amadeus_client or AmadeusFlightClient(config=self.config)
-        self.synthetic_generator = synthetic_generator or SyntheticFlightGenerator(config=self.config)
-        self.live_block_reason: Optional[str] = None
+        self.synthetic_generator = synthetic_generator or SyntheticFlightGenerator(
+            config=self.config
+        )
+        self.live_block_reason: str | None = None
 
     def build_search_url(
         self,
@@ -72,12 +80,12 @@ class PortalScraper(BaseScraper):
 
     def parse_flight_json(
         self,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         origin: str,
         destination: str,
         window_code: str,
-        capture_dt: Optional[datetime] = None,
-    ) -> List[RawFareRecord]:
+        capture_dt: datetime | None = None,
+    ) -> list[RawFareRecord]:
         """Parse a response. is_synthetic stays False only when a fare was read."""
         return parse_portal_flights(
             self,
@@ -90,7 +98,9 @@ class PortalScraper(BaseScraper):
             capture_dt,
         )
 
-    def _read_search_payloads(self, search_url: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    def _read_search_payloads(
+        self, search_url: str
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """Open the search URL. A 403 or captcha comes back as a reason, not a fare."""
         return read_search_payloads(self, search_url)
 
@@ -100,7 +110,7 @@ class PortalScraper(BaseScraper):
         destination: str,
         target_date: date,
         window_code: str,
-    ) -> List[RawFareRecord]:
+    ) -> list[RawFareRecord]:
         """Fetch one route. robots_gate runs before the browser is launched."""
         self.live_block_reason = None
         search_url = self.build_search_url(origin, destination, target_date)
@@ -117,11 +127,13 @@ class PortalScraper(BaseScraper):
         if fetch_reason:
             self.live_block_reason = fetch_reason
             return []
-        capture_time = datetime.now(timezone.utc)
-        records: List[RawFareRecord] = []
+        capture_time = datetime.now(UTC)
+        records: list[RawFareRecord] = []
         for payload in payloads:
             records.extend(
-                self.parse_flight_json(payload, origin, destination, window_code, capture_time)
+                self.parse_flight_json(
+                    payload, origin, destination, window_code, capture_time
+                )
             )
         if not records:
             self.live_block_reason = PAGE_YIELDED_NO_FARE
@@ -136,7 +148,9 @@ class PortalScraper(BaseScraper):
     ) -> ScrapeResult:
         """Live tier only. Zero records carry the reason. No synthetic fill-in."""
         started = time.time()
-        records = self._scrape_with_playwright(origin, destination, target_date, window_code)
+        records = self._scrape_with_playwright(
+            origin, destination, target_date, window_code
+        )
         reason = self.live_block_reason
         errors = [reason] if reason and not records else []
         return ScrapeResult(
@@ -189,7 +203,9 @@ class PortalScraper(BaseScraper):
         target_date: date,
         window_code: str,
     ) -> ScrapeResult:
-        generated = self.synthetic_generator.scrape_route(origin, destination, target_date, window_code)
+        generated = self.synthetic_generator.scrape_route(
+            origin, destination, target_date, window_code
+        )
         labelled = [self._label_synthetic(record) for record in generated.records]
         return ScrapeResult(
             source=self.SOURCE_NAME,
@@ -217,16 +233,22 @@ class PortalScraper(BaseScraper):
         norm_dest = self.normalize_iata(destination)
         mode = self.config.ingestion_mode.lower()
         if mode == "synthetic":
-            result = self._synthetic_fallback(norm_orig, norm_dest, target_date, window_code)
+            result = self._synthetic_fallback(
+                norm_orig, norm_dest, target_date, window_code
+            )
             result.metadata["tier"] = 3
             return result
         if mode == "mock":
-            amadeus = self.amadeus_client.scrape_route(norm_orig, norm_dest, target_date, window_code)
+            amadeus = self.amadeus_client.scrape_route(
+                norm_orig, norm_dest, target_date, window_code
+            )
             if amadeus.success and amadeus.records:
                 amadeus.metadata["tier"] = 2
                 amadeus.metadata["source"] = f"{self.SOURCE_NAME}_tier2_amadeus_mock"
                 return amadeus
-            result = self._synthetic_fallback(norm_orig, norm_dest, target_date, window_code)
+            result = self._synthetic_fallback(
+                norm_orig, norm_dest, target_date, window_code
+            )
             result.metadata["tier"] = 3
             return result
 
@@ -236,16 +258,22 @@ class PortalScraper(BaseScraper):
             return live
         tier1_errors = list(live.errors)
         try:
-            amadeus = self.amadeus_client.scrape_route(norm_orig, norm_dest, target_date, window_code)
+            amadeus = self.amadeus_client.scrape_route(
+                norm_orig, norm_dest, target_date, window_code
+            )
         except (OSError, ValueError, RuntimeError) as exc:
-            amadeus = ScrapeResult(source="amadeus", success=False, records=[], errors=[str(exc)])
+            amadeus = ScrapeResult(
+                source="amadeus", success=False, records=[], errors=[str(exc)]
+            )
         if amadeus.success and amadeus.records:
             amadeus.metadata["tier"] = 2
             amadeus.metadata["tier1_errors"] = tier1_errors
             amadeus.errors = tier1_errors + list(amadeus.errors)
             amadeus.duration_ms = round((time.time() - started) * 1000, 2)
             return amadeus
-        fallback = self._synthetic_fallback(norm_orig, norm_dest, target_date, window_code)
+        fallback = self._synthetic_fallback(
+            norm_orig, norm_dest, target_date, window_code
+        )
         fallback.errors = tier1_errors + list(fallback.errors)
         fallback.metadata["tier1_errors"] = tier1_errors
         fallback.duration_ms = round((time.time() - started) * 1000, 2)
@@ -253,18 +281,20 @@ class PortalScraper(BaseScraper):
 
     def scrape_all(
         self,
-        routes: Optional[List[Route]] = None,
-        windows: Optional[List[BookingWindow]] = None,
-    ) -> List[ScrapeResult]:
+        routes: list[Route] | None = None,
+        windows: list[BookingWindow] | None = None,
+    ) -> list[ScrapeResult]:
         """Scrape every configured route and booking window."""
         target_routes = routes or DEFAULT_ROUTES
         target_windows = windows or BOOKING_WINDOWS
         today = date.today()
-        results: List[ScrapeResult] = []
+        results: list[ScrapeResult] = []
         for route in target_routes:
             for window in target_windows:
                 target_date = today + timedelta(days=window.days_advance)
                 results.append(
-                    self.scrape_route(route.origin, route.destination, target_date, window.code)
+                    self.scrape_route(
+                        route.origin, route.destination, target_date, window.code
+                    )
                 )
         return results

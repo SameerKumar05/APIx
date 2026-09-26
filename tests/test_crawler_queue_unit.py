@@ -223,6 +223,7 @@ def test_worker_heartbeat_and_liveness_helpers(db_session: Session) -> None:
 
 def test_crawler_worker_process_single_job_simulation(db_session: Session) -> None:
     from sqlalchemy.orm import sessionmaker
+
     testing_session_factory = sessionmaker(bind=db_session.bind, expire_on_commit=False)
 
     enqueue_job(
@@ -351,7 +352,9 @@ def test_worker_refreshes_heartbeat_while_job_is_blocked(tmp_path: Path) -> None
             assert not orchestrator.release.is_set()
             with factory() as db:
                 heartbeat = db.scalars(
-                    select(WorkerHeartbeat).where(WorkerHeartbeat.worker_id == "heartbeat-probe")
+                    select(WorkerHeartbeat).where(
+                        WorkerHeartbeat.worker_id == "heartbeat-probe"
+                    )
                 ).one()
             assert heartbeat.current_job_id == job.job_id
             assert heartbeat.status == "ALIVE"
@@ -366,8 +369,18 @@ def test_worker_refreshes_heartbeat_while_job_is_blocked(tmp_path: Path) -> None
 def test_stop_releases_only_this_workers_active_lease(db_session: Session) -> None:
     """Given two claimed jobs, graceful stop frees this worker's lease and leaves the other."""
     factory = sessionmaker(bind=db_session.bind, expire_on_commit=False)
-    enqueue_job(db=db_session, crawler_name="synthetic", route_code="DEL-BOM", booking_window="T+1")
-    enqueue_job(db=db_session, crawler_name="synthetic", route_code="BOM-DEL", booking_window="T+7")
+    enqueue_job(
+        db=db_session,
+        crawler_name="synthetic",
+        route_code="DEL-BOM",
+        booking_window="T+1",
+    )
+    enqueue_job(
+        db=db_session,
+        crawler_name="synthetic",
+        route_code="BOM-DEL",
+        booking_window="T+7",
+    )
     stopping = CrawlerWorker(worker_id="stopping-worker", session_factory=factory)
     other = CrawlerWorker(worker_id="other-worker", session_factory=factory)
     owned = stopping._claim_job()
@@ -392,8 +405,11 @@ def test_stop_releases_only_this_workers_active_lease(db_session: Session) -> No
     assert reclaimed.id == owned.id
 
 
-def test_claim_failure_is_logged_and_backs_off(caplog: pytest.LogCaptureFixture) -> None:
+def test_claim_failure_is_logged_and_backs_off(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Given a database error on claim, the worker logs it and waits longer than a poll."""
+
     def broken_session() -> Session:
         raise SQLAlchemyError("queue claim failed")
 
@@ -408,7 +424,10 @@ def test_claim_failure_is_logged_and_backs_off(caplog: pytest.LogCaptureFixture)
     slept: list[float] = []
 
     with caplog.at_level(logging.ERROR, logger="ingestion.worker"):
-        with patch("ingestion.worker.time.sleep", side_effect=lambda seconds: slept.append(seconds)):
+        with patch(
+            "ingestion.worker.time.sleep",
+            side_effect=lambda seconds: slept.append(seconds),
+        ):
             worker._tick()
 
     assert slept == [7.5]
@@ -418,10 +437,14 @@ def test_claim_failure_is_logged_and_backs_off(caplog: pytest.LogCaptureFixture)
     )
 
 
-def test_reap_dead_letters_passed_deadline_with_attempts_remaining(db_session: Session) -> None:
+def test_reap_dead_letters_passed_deadline_with_attempts_remaining(
+    db_session: Session,
+) -> None:
     """Given a live lease and a passed deadline, the job is dead-lettered before attempts run out."""
     enqueue_job(db=db_session, crawler_name="synthetic", route_code="DEL-HYD")
-    claimed = claim_next_job(db=db_session, worker_id="worker-deadline", max_runtime_seconds=900)
+    claimed = claim_next_job(
+        db=db_session, worker_id="worker-deadline", max_runtime_seconds=900
+    )
     assert claimed is not None
     assert claimed.attempts < claimed.max_attempts
     claimed.deadline_at = datetime.now(UTC) - timedelta(seconds=5)
@@ -439,7 +462,9 @@ def test_reap_dead_letters_passed_deadline_with_attempts_remaining(db_session: S
     assert "deadline" in claimed.error_message
 
 
-def test_reap_does_not_requeue_when_deadline_and_lease_have_both_expired(db_session: Session) -> None:
+def test_reap_does_not_requeue_when_deadline_and_lease_have_both_expired(
+    db_session: Session,
+) -> None:
     """Given an expired lease and a passed deadline, remaining attempts do not put the job back."""
     enqueue_job(db=db_session, crawler_name="synthetic", route_code="HYD-DEL")
     claimed = claim_next_job(db=db_session, worker_id="worker-both-expired")
@@ -456,7 +481,9 @@ def test_reap_does_not_requeue_when_deadline_and_lease_have_both_expired(db_sess
     assert claimed.status == "DEAD"
 
 
-def test_health_fails_when_routes_exist_but_queue_tables_are_missing(tmp_path: Path) -> None:
+def test_health_fails_when_routes_exist_but_queue_tables_are_missing(
+    tmp_path: Path,
+) -> None:
     """Given routes without crawler queue tables, /health must not report ready."""
     engine = create_engine(
         f"sqlite:///{tmp_path / 'routes-only.db'}",

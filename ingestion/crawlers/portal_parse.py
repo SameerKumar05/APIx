@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from backend.app.core.cleaning import reported_flight_status, sourced_duration_minutes
 from ingestion.base import BaseScraper, RawFareRecord
@@ -60,14 +60,14 @@ ARRIVAL_KEYS: tuple[str, ...] = (
 )
 
 
-def _first_present(item: Dict[str, Any], keys: tuple[str, ...]) -> Any:
+def _first_present(item: dict[str, Any], keys: tuple[str, ...]) -> Any:
     for key in keys:
         if key in item and item[key] not in (None, ""):
             return item[key]
     return None
 
 
-def _read_fare(item: Dict[str, Any]) -> Optional[float]:
+def _read_fare(item: dict[str, Any]) -> float | None:
     """Return a fare read from this object, or None. Never invents one."""
     for key in FARE_KEYS:
         if key not in item or item[key] in (None, ""):
@@ -87,7 +87,7 @@ def _read_fare(item: Dict[str, Any]) -> Optional[float]:
     return None
 
 
-def flight_items(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+def flight_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
     """Pull flight dicts out of the shapes Indian portal APIs actually return."""
     if not isinstance(payload, dict):
         return []
@@ -104,7 +104,7 @@ def flight_items(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
                 return [item for item in value if isinstance(item, dict)]
     trips = payload.get("trips")
     if isinstance(trips, list):
-        found: List[Dict[str, Any]] = []
+        found: list[dict[str, Any]] = []
         for trip in trips:
             if not isinstance(trip, dict):
                 continue
@@ -120,7 +120,7 @@ def flight_items(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     return []
 
 
-def _flight_number(item: Dict[str, Any], segments: List[Any]) -> Optional[str]:
+def _flight_number(item: dict[str, Any], segments: list[Any]) -> str | None:
     first = segments[0] if segments and isinstance(segments[0], dict) else item
     raw = _first_present(first, FLIGHT_NUMBER_KEYS)
     if raw is None:
@@ -131,9 +131,15 @@ def _flight_number(item: Dict[str, Any], segments: List[Any]) -> Optional[str]:
     return text or None
 
 
-def _airline_code(item: Dict[str, Any], segments: List[Any], fallback: Optional[str]) -> Optional[str]:
+def _airline_code(
+    item: dict[str, Any], segments: list[Any], fallback: str | None
+) -> str | None:
     first = segments[0] if segments and isinstance(segments[0], dict) else item
-    raw = _first_present(first, AIRLINE_KEYS) or _first_present(item, AIRLINE_KEYS) or fallback
+    raw = (
+        _first_present(first, AIRLINE_KEYS)
+        or _first_present(item, AIRLINE_KEYS)
+        or fallback
+    )
     if raw is None:
         return None
     try:
@@ -144,23 +150,25 @@ def _airline_code(item: Dict[str, Any], segments: List[Any], fallback: Optional[
 
 def parse_portal_flights(
     scraper: BaseScraper,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     origin: str,
     destination: str,
     window_code: str,
     source_name: str,
-    airline_fallback: Optional[str],
-    capture_dt: Optional[datetime] = None,
-) -> List[RawFareRecord]:
+    airline_fallback: str | None,
+    capture_dt: datetime | None = None,
+) -> list[RawFareRecord]:
     """Parse one JSON body. is_synthetic is False only because a fare was read."""
-    records: List[RawFareRecord] = []
-    capture_time = capture_dt or datetime.now(timezone.utc)
+    records: list[RawFareRecord] = []
+    capture_time = capture_dt or datetime.now(UTC)
     booking_dt_str = capture_time.strftime("%Y-%m-%dT%H:%M:%S")
     norm_origin = scraper.normalize_iata(origin)
     norm_dest = scraper.normalize_iata(destination)
 
     for item in flight_items(payload):
-        segments = item.get("segments") if isinstance(item.get("segments"), list) else []
+        segments = (
+            item.get("segments") if isinstance(item.get("segments"), list) else []
+        )
         first = segments[0] if segments and isinstance(segments[0], dict) else item
         fare_inr = _read_fare(item)
         if fare_inr is None and isinstance(first, dict):
@@ -173,14 +181,20 @@ def parse_portal_flights(
             continue
         clean_num = flight_no_raw
         if clean_num.upper().startswith(airline_code):
-            clean_num = clean_num[len(airline_code):].lstrip("- ")
+            clean_num = clean_num[len(airline_code) :].lstrip("- ")
         else:
             clean_num = re.sub(r"^[A-Za-z]{2}[-\s]?", "", clean_num)
         clean_num = clean_num.strip()
         if not clean_num:
             continue
-        full_flight_no = clean_num if clean_num.upper().startswith(f"{airline_code}-") else f"{airline_code}-{clean_num}"
-        dep_raw = _first_present(first, DEPARTURE_KEYS) if isinstance(first, dict) else None
+        full_flight_no = (
+            clean_num
+            if clean_num.upper().startswith(f"{airline_code}-")
+            else f"{airline_code}-{clean_num}"
+        )
+        dep_raw = (
+            _first_present(first, DEPARTURE_KEYS) if isinstance(first, dict) else None
+        )
         if dep_raw is None:
             dep_raw = _first_present(item, DEPARTURE_KEYS)
         last = segments[-1] if segments and isinstance(segments[-1], dict) else first
@@ -196,7 +210,9 @@ def parse_portal_flights(
             dep_dt_str,
             arr_dt_str,
         )
-        stops_raw = item.get("stops", item.get("Stops", len(segments) - 1 if segments else 0))
+        stops_raw = item.get(
+            "stops", item.get("Stops", len(segments) - 1 if segments else 0)
+        )
         try:
             stops = int(stops_raw)
         except (TypeError, ValueError):
@@ -226,5 +242,7 @@ def parse_portal_flights(
         if is_valid:
             records.append(record)
         else:
-            logger.debug("Skipping invalid %s record: %s", source_name, validation_errors)
+            logger.debug(
+                "Skipping invalid %s record: %s", source_name, validation_errors
+            )
     return records

@@ -16,15 +16,16 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any
 
 # MODELLED domestic airline market shares, not a DGCA release. These mirror
 # AIRLINES in ingestion/config.py so the index and the seed data cannot disagree.
 # They sum to exactly 1.0; the previous values summed to 0.99, which quietly
 # under-weighted every carrier in the composite.
-DEFAULT_AIRLINE_MARKET_SHARES: Dict[str, float] = {
+DEFAULT_AIRLINE_MARKET_SHARES: dict[str, float] = {
     "6E": 0.60,  # IndiGo
     "AI": 0.15,  # Air India
     "IX": 0.10,  # Air India Express
@@ -36,9 +37,9 @@ DEFAULT_AIRLINE_MARKET_SHARES: Dict[str, float] = {
 # These mirror DEFAULT_LEAD_TIME_PAX_SHARES in econometric_engine.py so the two
 # weight tables cannot drift. T+45 was absent here, which left the fifth booking
 # window contributing nothing to the composite fare.
-DEFAULT_BOOKING_WINDOW_WEIGHTS: Dict[str, float] = {
-    "T1": 0.20,   # 1-day advance (urgent / business / emergency)
-    "T7": 0.32,   # 7-day advance (short-lead standard)
+DEFAULT_BOOKING_WINDOW_WEIGHTS: dict[str, float] = {
+    "T1": 0.20,  # 1-day advance (urgent / business / emergency)
+    "T7": 0.32,  # 7-day advance (short-lead standard)
     "T15": 0.26,  # 15-day advance (planned leisure)
     "T30": 0.14,  # 30-day advance (early bird / holiday)
     "T45": 0.08,  # 45-day advance (far-planned / corporate travel policy)
@@ -46,7 +47,7 @@ DEFAULT_BOOKING_WINDOW_WEIGHTS: Dict[str, float] = {
 
 # MODELLED city-pair traffic shares, not a DGCA release. Mirrors the seed data
 # in backend/app/db/seed.py so the two cannot disagree.
-DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES: Dict[str, float] = {
+DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES: dict[str, float] = {
     "DEL-BOM": 0.175,
     "BOM-DEL": 0.175,
     "BLR-DEL": 0.125,
@@ -71,13 +72,13 @@ class FlightQuote:
     flight_number: str
     departure_time: str
     fare: float
-    source_portal: Optional[str] = "unknown"
-    booking_window: Optional[str] = None
+    source_portal: str | None = "unknown"
+    booking_window: str | None = None
     currency: str = "INR"
     is_nonstop: bool = True
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert quote to dictionary representation."""
         return asdict(self)
 
@@ -96,10 +97,12 @@ class TukeyBounds:
     outlier_count: int
 
 
-def _extract_field(item: Union[FlightQuote, Mapping[str, Any], Any], field_name: str, default: Any = None) -> Any:
+def _extract_field(
+    item: FlightQuote | Mapping[str, Any] | Any, field_name: str, default: Any = None
+) -> Any:
     """Extract field from FlightQuote, dictionary, or generic object with alias resolution."""
     fare_aliases = ("fare", "total_fare", "fare_inr", "price")
-    alias_map: Dict[str, Tuple[str, ...]] = {
+    alias_map: dict[str, tuple[str, ...]] = {
         "fare": fare_aliases,
         "total_fare": fare_aliases,
         "fare_inr": fare_aliases,
@@ -141,13 +144,14 @@ def _extract_field(item: Union[FlightQuote, Mapping[str, Any], Any], field_name:
         if val is not None:
             return val
     if field_name in ("is_nonstop", "nonstop", "direct") and hasattr(item, "stops"):
-        stops_val = getattr(item, "stops")
+        stops_val = item.stops
         if stops_val is not None:
             try:
                 return int(stops_val) == 0
             except (ValueError, TypeError):
                 return stops_val == 0
     return default
+
 
 def _normalize_code(code: Any) -> str:
     """Normalize airport or airline code to uppercase stripped string."""
@@ -204,8 +208,8 @@ def _normalize_date(raw_date: Any) -> str:
 
 
 def deduplicate_quotes(
-    quotes: Iterable[Union[FlightQuote, Mapping[str, Any], Any]],
-) -> List[FlightQuote]:
+    quotes: Iterable[FlightQuote | Mapping[str, Any] | Any],
+) -> list[FlightQuote]:
     """Deduplicates cross-platform flight quotes.
 
     Groups quotes by (origin, destination, flight_date, airline_code,
@@ -218,15 +222,21 @@ def deduplicate_quotes(
         List of canonical deduplicated FlightQuote objects, each having the
         lowest consumer fare across reporting platforms.
     """
-    grouped: Dict[Tuple[str, str, str, str, str, str], List[FlightQuote]] = defaultdict(list)
+    grouped: dict[tuple[str, str, str, str, str, str], list[FlightQuote]] = defaultdict(
+        list
+    )
 
     for item in quotes:
         origin = _normalize_code(_extract_field(item, "origin"))
         destination = _normalize_code(_extract_field(item, "destination"))
         flight_date = _normalize_date(_extract_field(item, "flight_date"))
         airline_code = _normalize_code(_extract_field(item, "airline_code"))
-        flight_number = _normalize_flight_number(_extract_field(item, "flight_number"), airline_code)
-        departure_time = _normalize_departure_time(_extract_field(item, "departure_time"))
+        flight_number = _normalize_flight_number(
+            _extract_field(item, "flight_number"), airline_code
+        )
+        departure_time = _normalize_departure_time(
+            _extract_field(item, "departure_time")
+        )
         fare = float(_extract_field(item, "fare", 0.0))
         source_portal = str(_extract_field(item, "source_portal", "unknown"))
         booking_window = _extract_field(item, "booking_window", None)
@@ -261,7 +271,7 @@ def deduplicate_quotes(
         )
         grouped[dedup_key].append(quote_obj)
 
-    deduplicated: List[FlightQuote] = []
+    deduplicated: list[FlightQuote] = []
     for _key, quote_group in grouped.items():
         # Select quote with the minimum consumer fare
         best_quote = min(quote_group, key=lambda q: q.fare)
@@ -275,7 +285,9 @@ def deduplicate_quotes(
 # ---------------------------------------------------------------------------
 
 
-def _compute_percentile_linear(sorted_values: Sequence[float], percentile: float) -> float:
+def _compute_percentile_linear(
+    sorted_values: Sequence[float], percentile: float
+) -> float:
     """Compute percentile using linear interpolation (standard numpy/R type 7).
 
     Args:
@@ -325,7 +337,9 @@ def compute_tukey_bounds(fares: Sequence[float], k: float = 1.5) -> TukeyBounds:
             outlier_count=0,
         )
 
-    clean_fares = sorted([float(x) for x in fares if not math.isnan(x) and not math.isinf(x)])
+    clean_fares = sorted(
+        [float(x) for x in fares if not math.isnan(x) and not math.isinf(x)]
+    )
     total_count = len(clean_fares)
 
     if total_count < 4:
@@ -365,7 +379,7 @@ def compute_tukey_bounds(fares: Sequence[float], k: float = 1.5) -> TukeyBounds:
     )
 
 
-def filter_outliers_tukey(fares: Sequence[float], k: float = 1.5) -> List[float]:
+def filter_outliers_tukey(fares: Sequence[float], k: float = 1.5) -> list[float]:
     """Filters fares using Tukey IQR bounds [Q1 - k*IQR, Q3 + k*IQR].
 
     Args:
@@ -382,9 +396,9 @@ def filter_outliers_tukey(fares: Sequence[float], k: float = 1.5) -> List[float]
 
 
 def filter_quotes_tukey(
-    quotes: Sequence[Union[FlightQuote, Mapping[str, Any], Any]],
+    quotes: Sequence[FlightQuote | Mapping[str, Any] | Any],
     k: float = 1.5,
-) -> List[Union[FlightQuote, Mapping[str, Any], Any]]:
+) -> list[FlightQuote | Mapping[str, Any] | Any]:
     """Filters flight quote items using Tukey IQR bounds on fare amount.
 
     Args:
@@ -398,7 +412,11 @@ def filter_quotes_tukey(
         return []
     fares = [_extract_field(q, "fare") for q in quotes]
     bounds = compute_tukey_bounds(fares, k=k)
-    return [q for q in quotes if bounds.lower_bound <= float(_extract_field(q, "fare")) <= bounds.upper_bound]
+    return [
+        q
+        for q in quotes
+        if bounds.lower_bound <= float(_extract_field(q, "fare")) <= bounds.upper_bound
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -480,8 +498,8 @@ def weighted_median_values(
 
 
 def calculate_weighted_median(
-    quotes: Sequence[Union[FlightQuote, Mapping[str, Any], Any]],
-    market_shares: Optional[Mapping[str, float]] = None,
+    quotes: Sequence[FlightQuote | Mapping[str, Any] | Any],
+    market_shares: Mapping[str, float] | None = None,
 ) -> float:
     """Computes exact weighted median of flight quotes using airline market shares.
 
@@ -506,7 +524,9 @@ def calculate_weighted_median(
     if not quotes:
         raise ValueError("Cannot calculate weighted median on empty quote collection")
 
-    shares = dict(market_shares if market_shares is not None else DEFAULT_AIRLINE_MARKET_SHARES)
+    shares = dict(
+        market_shares if market_shares is not None else DEFAULT_AIRLINE_MARKET_SHARES
+    )
 
     # Invariant 1 fast path check: if all quotes have the exact same fare
     fares = [float(_extract_field(q, "fare")) for q in quotes]
@@ -515,13 +535,13 @@ def calculate_weighted_median(
         return float(first_fare)
 
     # Count quotes per airline
-    airline_counts: Dict[str, int] = defaultdict(int)
+    airline_counts: dict[str, int] = defaultdict(int)
     for q in quotes:
         ac = _normalize_code(_extract_field(q, "airline_code"))
         airline_counts[ac] += 1
 
     # Determine market share for each present airline
-    present_shares: Dict[str, float] = {}
+    present_shares: dict[str, float] = {}
     for ac in airline_counts:
         # If airline not in default dictionary, assign a minimal positive share (e.g. 0.01)
         present_shares[ac] = shares.get(ac, 0.01)
@@ -537,7 +557,7 @@ def calculate_weighted_median(
         }
 
     # Assign weight to each quote: carrier_weight / count_quotes_for_carrier
-    weights: List[float] = []
+    weights: list[float] = []
     for q in quotes:
         ac = _normalize_code(_extract_field(q, "airline_code"))
         carrier_weight = normalized_carrier_shares[ac]
@@ -545,6 +565,7 @@ def calculate_weighted_median(
         weights.append(quote_weight)
 
     return weighted_median_values(fares, weights)
+
 
 # Alias for compute_weighted_median
 compute_weighted_median = calculate_weighted_median
@@ -557,7 +578,7 @@ compute_weighted_median = calculate_weighted_median
 
 def calculate_route_composite_fare(
     window_fares: Mapping[str, float],
-    weights: Optional[Mapping[str, float]] = None,
+    weights: Mapping[str, float] | None = None,
 ) -> float:
     """Computes the route composite fare across booking horizon windows.
 
@@ -577,14 +598,14 @@ def calculate_route_composite_fare(
         raise ValueError("Cannot calculate composite fare from empty window fares")
 
     raw_weights = weights if weights is not None else DEFAULT_BOOKING_WINDOW_WEIGHTS
-    target_weights: Dict[str, float] = {}
+    target_weights: dict[str, float] = {}
     for k, v in raw_weights.items():
         sk = str(k).strip().upper().replace("+", "")
         if not sk.startswith("T") and sk.isdigit():
             sk = f"T{sk}"
         target_weights[sk] = float(v)
     # Standardize window keys (e.g. 'T+1' -> 'T1', '1' -> 'T1')
-    normalized_fares: Dict[str, float] = {}
+    normalized_fares: dict[str, float] = {}
     for k, v in window_fares.items():
         sk = str(k).strip().upper().replace("+", "")
         if not sk.startswith("T") and sk.isdigit():
@@ -598,7 +619,7 @@ def calculate_route_composite_fare(
     # totalled 0.92, so identical fares produced a composite 8% low and T+45 was
     # never consulted at all. One intersection-and-renormalise path is correct for
     # every subset of windows, so there is no longer a case to keep in sync.
-    present_weights: Dict[str, float] = {
+    present_weights: dict[str, float] = {
         window: target_weights.get(window, 0.0) for window in normalized_fares
     }
     weight_sum = sum(present_weights.values())
@@ -606,7 +627,7 @@ def calculate_route_composite_fare(
         # None of the supplied windows are weighted, so fall back to an even mix
         # rather than returning an unweighted number.
         weight_sum = float(len(normalized_fares))
-        present_weights = {window: 1.0 for window in normalized_fares}
+        present_weights = dict.fromkeys(normalized_fares, 1.0)
 
     composite = sum(
         (present_weights[window] / weight_sum) * normalized_fares[window]
@@ -623,7 +644,7 @@ def calculate_route_composite_fare(
 def calculate_laspeyres_index(
     current_fares: Mapping[str, float],
     base_fares: Mapping[str, float],
-    route_weights: Optional[Mapping[str, float]] = None,
+    route_weights: Mapping[str, float] | None = None,
     base_value: float = 100.0,
 ) -> float:
     """Computes the National Modified Laspeyres Airfare Price Index.
@@ -656,7 +677,9 @@ def calculate_laspeyres_index(
     # Invariant 2 fast path check: if all current fares equal base fares
     all_equal = True
     for r in common_routes:
-        if not math.isclose(current_fares[r], base_fares[r], rel_tol=1e-12, abs_tol=1e-12):
+        if not math.isclose(
+            current_fares[r], base_fares[r], rel_tol=1e-12, abs_tol=1e-12
+        ):
             all_equal = False
             break
     if all_equal:
@@ -673,14 +696,16 @@ def calculate_laspeyres_index(
         b = base_fares[r]
         if b <= 0:
             raise ValueError(f"Base fare for route {r} must be strictly positive")
-        if not math.isclose(current_fares[r] / b, ratio_0, rel_tol=1e-12, abs_tol=1e-12):
+        if not math.isclose(
+            current_fares[r] / b, ratio_0, rel_tol=1e-12, abs_tol=1e-12
+        ):
             uniform_ratio = False
             break
     if uniform_ratio:
         return float(ratio_0 * base_value)
 
     # Route weights
-    raw_weights: Dict[str, float] = {}
+    raw_weights: dict[str, float] = {}
     if route_weights is not None:
         for r in common_routes:
             raw_weights[r] = float(route_weights.get(r, 0.0))
@@ -691,7 +716,7 @@ def calculate_laspeyres_index(
     total_w = sum(raw_weights.values())
     if total_w <= 0.0:
         total_w = len(common_routes)
-        raw_weights = {r: 1.0 for r in common_routes}
+        raw_weights = dict.fromkeys(common_routes, 1.0)
 
     normalized_weights = {r: raw_weights[r] / total_w for r in common_routes}
 
@@ -718,11 +743,15 @@ def calculate_paasche_index(
     Formula:
         I_P = Sum(P_{r,t} * Q_{r,t}) / Sum(P_{r,0} * Q_{r,t}) * 100
     """
-    common_routes = [r for r in current_fares if r in base_fares and r in current_traffic_weights]
+    common_routes = [
+        r for r in current_fares if r in base_fares and r in current_traffic_weights
+    ]
     if not common_routes:
         raise ValueError("No common routes available for Paasche calculation")
 
-    numerator = sum(current_fares[r] * current_traffic_weights[r] for r in common_routes)
+    numerator = sum(
+        current_fares[r] * current_traffic_weights[r] for r in common_routes
+    )
     denominator = sum(base_fares[r] * current_traffic_weights[r] for r in common_routes)
 
     if denominator <= 0:
@@ -755,25 +784,31 @@ class IndexEngine:
 
     def __init__(
         self,
-        airline_weights: Optional[Mapping[str, float]] = None,
-        booking_window_weights: Optional[Mapping[str, float]] = None,
-        route_traffic_shares: Optional[Mapping[str, float]] = None,
+        airline_weights: Mapping[str, float] | None = None,
+        booking_window_weights: Mapping[str, float] | None = None,
+        route_traffic_shares: Mapping[str, float] | None = None,
     ):
         self.airline_weights = dict(
-            airline_weights if airline_weights is not None else DEFAULT_AIRLINE_MARKET_SHARES
+            airline_weights
+            if airline_weights is not None
+            else DEFAULT_AIRLINE_MARKET_SHARES
         )
         self.booking_window_weights = dict(
-            booking_window_weights if booking_window_weights is not None else DEFAULT_BOOKING_WINDOW_WEIGHTS
+            booking_window_weights
+            if booking_window_weights is not None
+            else DEFAULT_BOOKING_WINDOW_WEIGHTS
         )
         self.route_traffic_shares = dict(
-            route_traffic_shares if route_traffic_shares is not None else DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES
+            route_traffic_shares
+            if route_traffic_shares is not None
+            else DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES
         )
 
     def process_raw_quotes(
         self,
-        raw_quotes: Iterable[Union[FlightQuote, Mapping[str, Any], Any]],
+        raw_quotes: Iterable[FlightQuote | Mapping[str, Any] | Any],
         iqr_multiplier: float = 1.5,
-    ) -> List[FlightQuote]:
+    ) -> list[FlightQuote]:
         """Runs deduplication and Tukey outlier filtering on raw quotes."""
         deduped = deduplicate_quotes(raw_quotes)
         filtered = filter_quotes_tukey(deduped, k=iqr_multiplier)
@@ -781,7 +816,7 @@ class IndexEngine:
 
     def compute_window_representative_fare(
         self,
-        quotes: Sequence[Union[FlightQuote, Mapping[str, Any], Any]],
+        quotes: Sequence[FlightQuote | Mapping[str, Any] | Any],
     ) -> float:
         """Computes weighted median representative fare for a specific route window."""
         return calculate_weighted_median(quotes, market_shares=self.airline_weights)
@@ -791,16 +826,22 @@ class IndexEngine:
         window_fares: Mapping[str, float],
     ) -> float:
         """Computes composite fare for a route across T1, T7, T15, T30."""
-        return calculate_route_composite_fare(window_fares, weights=self.booking_window_weights)
+        return calculate_route_composite_fare(
+            window_fares, weights=self.booking_window_weights
+        )
 
     def compute_national_index(
         self,
         current_composite_fares: Mapping[str, float],
         base_composite_fares: Mapping[str, float],
-        custom_route_weights: Optional[Mapping[str, float]] = None,
+        custom_route_weights: Mapping[str, float] | None = None,
     ) -> float:
         """Computes National Modified Laspeyres Index."""
-        weights = custom_route_weights if custom_route_weights is not None else self.route_traffic_shares
+        weights = (
+            custom_route_weights
+            if custom_route_weights is not None
+            else self.route_traffic_shares
+        )
         return calculate_laspeyres_index(
             current_fares=current_composite_fares,
             base_fares=base_composite_fares,

@@ -12,7 +12,11 @@ from sqlalchemy.orm import Session
 
 from backend.app.db.session import get_db
 from backend.app.main import app
-from backend.app.models.econometrics import DgcaViolation, EconometricIndex, MospiCpiSeries
+from backend.app.models.econometrics import (
+    DgcaViolation,
+    EconometricIndex,
+    MospiCpiSeries,
+)
 from backend.app.models.raw_fare import RawFare
 
 
@@ -44,7 +48,9 @@ def test_dgca_violations_empty_database_returns_zero_items(client: TestClient) -
     assert "18500" not in response.text
 
 
-def test_cpi_divergence_empty_database_returns_null_correlation(client: TestClient) -> None:
+def test_cpi_divergence_empty_database_returns_null_correlation(
+    client: TestClient,
+) -> None:
     """Given no overlapping observations, correlation and lead are absent."""
     response = client.get("/api/v1/econometrics/cpi-divergence")
 
@@ -60,7 +66,9 @@ def test_cpi_divergence_empty_database_returns_null_correlation(client: TestClie
     assert "0.89" not in response.text
 
 
-def test_cpi_gap_alias_empty_database_returns_null_correlation(client: TestClient) -> None:
+def test_cpi_gap_alias_empty_database_returns_null_correlation(
+    client: TestClient,
+) -> None:
     """The alias must fail closed the same way as /cpi-divergence."""
     response = client.get("/api/v1/econometrics/cpi-gap")
 
@@ -116,7 +124,9 @@ def test_recalculate_without_raw_fares_fails(
 
     assert response.status_code == 503
     assert response.json()["detail"] == "no raw fares available to compute an index"
-    stored = db_session.execute(select(func.count()).select_from(EconometricIndex)).scalar_one()
+    stored = db_session.execute(
+        select(func.count()).select_from(EconometricIndex)
+    ).scalar_one()
     assert stored == 0
 
 
@@ -246,7 +256,9 @@ def test_dgca_carrier_stats_follow_the_stored_row(
             "compliance_rate": None,
         }
     ]
-    assert body["summary"]["top_violating_carriers"] == [{"airline_code": "SG", "violations": 1}]
+    assert body["summary"]["top_violating_carriers"] == [
+        {"airline_code": "SG", "violations": 1}
+    ]
 
 
 def test_cpi_divergence_correlation_is_computed_from_overlapping_rows(
@@ -291,4 +303,8 @@ def test_cpi_divergence_correlation_is_computed_from_overlapping_rows(
     assert body["summary"]["optimal_lead_days"] == 0
     assert body["inflation_lead_days"] == 0
     assert body["data_available"] is True
-    assert [point["apix_index"] for point in body["divergence_series"]] == [110.0, 120.0, 130.0]
+    assert [point["apix_index"] for point in body["divergence_series"]] == [
+        110.0,
+        120.0,
+        130.0,
+    ]

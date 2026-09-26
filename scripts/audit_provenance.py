@@ -31,7 +31,11 @@ from backend.app.models.telemetry import ProxyHealthRecord, ScraperTelemetry
 
 def audit(db: Session) -> dict:
     live_rows = db.execute(
-        select(RawFare.source_platform, func.count(RawFare.id), func.count(func.distinct(RawFare.scraped_at)))
+        select(
+            RawFare.source_platform,
+            func.count(RawFare.id),
+            func.count(func.distinct(RawFare.scraped_at)),
+        )
         .where(RawFare.is_synthetic.is_(False))
         .group_by(RawFare.source_platform)
     ).all()
@@ -95,7 +99,9 @@ def main(argv: list[str]) -> int:
             f"run={str(e['scraping_run_present']):5} -> {e['verdict']}"
         )
     if report["violations"]:
-        print("  RESULT: FAIL - a live claim is uncorroborated, so a LIVE badge would be false")
+        print(
+            "  RESULT: FAIL - a live claim is uncorroborated, so a LIVE badge would be false"
+        )
         return 1
     print("  RESULT: PASS - every live claim is corroborated")
     return 0

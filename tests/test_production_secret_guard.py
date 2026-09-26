@@ -15,7 +15,10 @@ from backend.app.core.config import INSECURE_DEFAULT_INGESTION_KEY, Settings
 
 
 def test_development_may_use_the_published_default() -> None:
-    assert Settings(ENVIRONMENT="development").INGESTION_API_KEY == INSECURE_DEFAULT_INGESTION_KEY
+    assert (
+        Settings(ENVIRONMENT="development").INGESTION_API_KEY
+        == INSECURE_DEFAULT_INGESTION_KEY
+    )
 
 
 def test_production_refuses_the_published_default() -> None:

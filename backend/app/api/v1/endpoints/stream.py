@@ -25,6 +25,7 @@ CARRIER_MAP: dict[str, str] = {
     "UK": "Vistara",
 }
 
+
 def load_real_fares_from_db(limit: int = 50) -> list[dict[str, Any]]:
     """Query authentic flight quotes persisted in raw_fares database."""
     try:
@@ -49,14 +50,8 @@ def load_real_fares_from_db(limit: int = 50) -> list[dict[str, Any]]:
             for r in records:
                 c_code = r.airline_code or "6E"
                 c_name = CARRIER_MAP.get(c_code, f"Airline {c_code}")
-                dep_dt = (
-                    r.departure_time.isoformat()
-                    if r.departure_time
-                    else now_iso
-                )
-                scraped_dt = (
-                    r.scraped_at.isoformat() if r.scraped_at else now_iso
-                )
+                dep_dt = r.departure_time.isoformat() if r.departure_time else now_iso
+                scraped_dt = r.scraped_at.isoformat() if r.scraped_at else now_iso
                 items.append(
                     {
                         "type": "fare_update",
@@ -109,14 +104,8 @@ def fetch_new_raw_fares_since(last_id: int, limit: int = 10) -> list[dict[str, A
             for r in records:
                 c_code = r.airline_code or "6E"
                 c_name = CARRIER_MAP.get(c_code, f"Airline {c_code}")
-                dep_dt = (
-                    r.departure_time.isoformat()
-                    if r.departure_time
-                    else now_iso
-                )
-                scraped_dt = (
-                    r.scraped_at.isoformat() if r.scraped_at else now_iso
-                )
+                dep_dt = r.departure_time.isoformat() if r.departure_time else now_iso
+                scraped_dt = r.scraped_at.isoformat() if r.scraped_at else now_iso
                 items.append(
                     {
                         "type": "fare_update",
@@ -142,6 +131,8 @@ def fetch_new_raw_fares_since(last_id: int, limit: int = 10) -> list[dict[str, A
     except Exception as exc:
         logger.debug("Failed polling new raw_fares: %s", exc)
         return []
+
+
 class LiveFareTickerItem(BaseModel):
     """Real-time fare ticker packet format."""
 
@@ -201,15 +192,22 @@ class ConnectionManager:
         await websocket.accept()
         async with self._lock:
             self.active_connections.add(websocket)
-        logger.info("WebSocket client connected. Total active: %d", len(self.active_connections))
+        logger.info(
+            "WebSocket client connected. Total active: %d", len(self.active_connections)
+        )
 
     async def disconnect(self, websocket: WebSocket) -> None:
         """Remove disconnected WebSocket."""
         async with self._lock:
             self.active_connections.discard(websocket)
-        logger.info("WebSocket client disconnected. Remaining active: %d", len(self.active_connections))
+        logger.info(
+            "WebSocket client disconnected. Remaining active: %d",
+            len(self.active_connections),
+        )
 
-    async def send_personal_message(self, message: dict[str, Any], websocket: WebSocket) -> None:
+    async def send_personal_message(
+        self, message: dict[str, Any], websocket: WebSocket
+    ) -> None:
         """Send JSON packet to specific client."""
         try:
             await websocket.send_text(json.dumps(message))
@@ -237,7 +235,9 @@ class ConnectionManager:
                 for dead_ws in dead_connections:
                     self.active_connections.discard(dead_ws)
 
-    def get_recent(self, limit: int = 50, route: str | None = None) -> list[dict[str, Any]]:
+    def get_recent(
+        self, limit: int = 50, route: str | None = None
+    ) -> list[dict[str, Any]]:
         """Retrieve recent buffer items with optional route filtering."""
         items = self.recent_fares
         if route:
@@ -281,9 +281,13 @@ async def websocket_fares_stream(websocket: WebSocket):
         if real_quotes:
             async with manager._lock:
                 existing_ids = {f.get("fare_id") for f in manager.recent_fares}
-                new_real = [f for f in real_quotes if f.get("fare_id") not in existing_ids]
+                new_real = [
+                    f for f in real_quotes if f.get("fare_id") not in existing_ids
+                ]
                 if new_real:
-                    manager.recent_fares = (manager.recent_fares + new_real)[-manager.max_buffer_size :]
+                    manager.recent_fares = (manager.recent_fares + new_real)[
+                        -manager.max_buffer_size :
+                    ]
 
         # 1. Send initial connection greeting
         welcome_packet = {
@@ -315,13 +319,21 @@ async def websocket_fares_stream(websocket: WebSocket):
         # 3. Message loop with heartbeat support and live update emission
         while True:
             try:
-                data_text = await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
+                data_text = await asyncio.wait_for(
+                    websocket.receive_text(), timeout=2.0
+                )
                 try:
                     data = json.loads(data_text)
                     msg_type = data.get("type", "")
-                    if msg_type in ("ping", "heartbeat") or data_text.strip().lower() == "ping":
+                    if (
+                        msg_type in ("ping", "heartbeat")
+                        or data_text.strip().lower() == "ping"
+                    ):
                         await manager.send_personal_message(
-                            {"type": "pong", "timestamp": datetime.now(UTC).isoformat()},
+                            {
+                                "type": "pong",
+                                "timestamp": datetime.now(UTC).isoformat(),
+                            },
                             websocket,
                         )
                     elif msg_type == "subscribe":
@@ -337,12 +349,17 @@ async def websocket_fares_stream(websocket: WebSocket):
                 except json.JSONDecodeError:
                     if data_text.strip().lower() == "ping":
                         await manager.send_personal_message(
-                            {"type": "pong", "timestamp": datetime.now(UTC).isoformat()},
+                            {
+                                "type": "pong",
+                                "timestamp": datetime.now(UTC).isoformat(),
+                            },
                             websocket,
                         )
             except TimeoutError:
                 # Check if new authentic quotes were inserted into raw_fares
-                new_db_quotes = fetch_new_raw_fares_since(last_id=max_seen_db_id, limit=5)
+                new_db_quotes = fetch_new_raw_fares_since(
+                    last_id=max_seen_db_id, limit=5
+                )
                 if new_db_quotes:
                     for quote in new_db_quotes:
                         await manager.broadcast(quote)

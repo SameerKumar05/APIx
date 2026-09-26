@@ -8,7 +8,7 @@ cron and a fixed now, the next run is that clock time.
 from __future__ import annotations
 
 import time
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -53,13 +53,17 @@ def _settings(directory: Path, *, enabled: bool = True) -> SessionSettings:
 
 def _state() -> StorageState:
     return {
-        "cookies": [{"name": "sid", "value": "abc", "domain": ".spicejet.com", "path": "/"}],
+        "cookies": [
+            {"name": "sid", "value": "abc", "domain": ".spicejet.com", "path": "/"}
+        ],
         "origins": [],
     }
 
 
 def test_captcha_page_is_blocked_by_captcha_and_keeps_no_records() -> None:
-    html = '<html><title>Just a moment...</title><div class="cf-turnstile"></div></html>'
+    html = (
+        '<html><title>Just a moment...</title><div class="cf-turnstile"></div></html>'
+    )
     marker = detect_challenge(html, "Just a moment...")
     assert marker == "just a moment"
     note_challenge("www.spicejet.com", marker or "")
@@ -86,7 +90,9 @@ def test_synthetic_fallback_after_captcha_is_dropped() -> None:
             records=[_fare()],
             metadata={
                 "tier": 3,
-                "tier1_errors": ["Tier 1 SpiceJet failure: blocked_by_captcha:www.spicejet.com"],
+                "tier1_errors": [
+                    "Tier 1 SpiceJet failure: blocked_by_captcha:www.spicejet.com"
+                ],
             },
         )
     )
@@ -96,7 +102,9 @@ def test_synthetic_fallback_after_captcha_is_dropped() -> None:
 
 
 def test_long_page_with_a_captcha_script_is_not_a_challenge() -> None:
-    html = "x" * 80_000 + '<script src="https://www.google.com/recaptcha/api.js"></script>'
+    html = (
+        "x" * 80_000 + '<script src="https://www.google.com/recaptcha/api.js"></script>'
+    )
     assert detect_challenge(html, "SpiceJet flights") is None
 
 
@@ -124,7 +132,14 @@ def test_expired_session_is_not_loaded(tmp_path: Path) -> None:
 def test_oversized_session_is_refused(tmp_path: Path) -> None:
     store = SessionStore(_settings(tmp_path))
     huge: StorageState = {
-        "cookies": [{"name": "sid", "value": "x" * 262145, "domain": ".spicejet.com", "path": "/"}],
+        "cookies": [
+            {
+                "name": "sid",
+                "value": "x" * 262145,
+                "domain": ".spicejet.com",
+                "path": "/",
+            }
+        ],
         "origins": [],
     }
     assert store.save("www.spicejet.com", huge) is False
@@ -148,7 +163,14 @@ def test_saved_session_does_not_authorise_a_denied_path(tmp_path: Path) -> None:
     saved = store.save(
         "www.makemytrip.com",
         {
-            "cookies": [{"name": "sid", "value": "abc", "domain": ".makemytrip.com", "path": "/"}],
+            "cookies": [
+                {
+                    "name": "sid",
+                    "value": "abc",
+                    "domain": ".makemytrip.com",
+                    "path": "/",
+                }
+            ],
             "origins": [],
         },
     )
@@ -158,8 +180,8 @@ def test_saved_session_does_not_authorise_a_denied_path(tmp_path: Path) -> None:
 
 
 def test_scheduler_next_run_is_0200_utc() -> None:
-    nxt = next_daily_run("0 2 * * *", datetime(2026, 9, 26, 1, 0, tzinfo=timezone.utc))
-    assert nxt == datetime(2026, 9, 26, 2, 0, tzinfo=timezone.utc)
+    nxt = next_daily_run("0 2 * * *", datetime(2026, 9, 26, 1, 0, tzinfo=UTC))
+    assert nxt == datetime(2026, 9, 26, 2, 0, tzinfo=UTC)
 
 
 def test_second_run_once_same_day_is_already_completed(tmp_path: Path) -> None:
@@ -201,14 +223,16 @@ def test_all_source_token_maps_to_multi_source() -> None:
 @pytest.mark.asyncio
 async def test_paused_scheduler_exposes_0200_next_run() -> None:
     sched = IngestionScheduler(
-        config=SchedulerConfig(cron_expr="0 2 * * *", jitter_min_seconds=0, jitter_max_seconds=0),
+        config=SchedulerConfig(
+            cron_expr="0 2 * * *", jitter_min_seconds=0, jitter_max_seconds=0
+        ),
         routes=[DEFAULT_ROUTES[0]],
         windows=[BOOKING_WINDOWS[0]],
     )
     sched.start(paused=True)
     try:
         job = sched.scheduler.get_jobs()[0]
-        assert job.next_run_time == next_daily_run("0 2 * * *", datetime.now(timezone.utc))
+        assert job.next_run_time == next_daily_run("0 2 * * *", datetime.now(UTC))
         assert job.next_run_time.hour == 2
         assert job.next_run_time.minute == 0
     finally:

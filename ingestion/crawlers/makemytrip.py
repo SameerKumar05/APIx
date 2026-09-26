@@ -10,31 +10,38 @@ Provides production-grade scraping for MakeMyTrip domestic flight queries:
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import random
 import re
 import time
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 try:
     from playwright.sync_api import (
         BrowserContext,
         Page,
         Playwright,
-        Request as PlaywrightRequest,
-        Response as PlaywrightResponse,
-        Route as PlaywrightRoute,
         sync_playwright,
     )
+    from playwright.sync_api import (
+        Request as PlaywrightRequest,
+    )
+    from playwright.sync_api import (
+        Response as PlaywrightResponse,
+    )
+    from playwright.sync_api import (
+        Route as PlaywrightRoute,
+    )
+
     HAS_PLAYWRIGHT_SYNC = True
 except ImportError:
     HAS_PLAYWRIGHT_SYNC = False
 
 try:
     import httpx
+
     HAS_HTTPX = True
 except ImportError:
     HAS_HTTPX = False
@@ -42,12 +49,9 @@ except ImportError:
 from backend.app.core.cleaning import reported_flight_status, sourced_duration_minutes
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
 from ingestion.config import (
-    BOOKING_WINDOW_MAP,
     DEFAULT_ROUTES,
     IngestionConfig,
     Route,
-    VALID_AIRLINE_CODES,
-    VALID_IATA_CODES,
 )
 from ingestion.crawlers.amadeus import AmadeusFlightClient
 from ingestion.crawlers.synthetic import SyntheticFlightGenerator
@@ -55,7 +59,7 @@ from ingestion.crawlers.synthetic import SyntheticFlightGenerator
 logger = logging.getLogger("ingestion.crawlers.makemytrip")
 
 # Standard desktop viewports for randomized fingerprinting
-STEALTH_VIEWPORTS: List[Dict[str, int]] = [
+STEALTH_VIEWPORTS: list[dict[str, int]] = [
     {"width": 1920, "height": 1080},
     {"width": 1440, "height": 900},
     {"width": 1536, "height": 864},
@@ -65,7 +69,7 @@ STEALTH_VIEWPORTS: List[Dict[str, int]] = [
 ]
 
 # Playwright browser stealth launch arguments
-PLAYWRIGHT_STEALTH_ARGS: List[str] = [
+PLAYWRIGHT_STEALTH_ARGS: list[str] = [
     "--disable-blink-features=AutomationControlled",
     "--disable-dev-shm-usage",
     "--no-sandbox",
@@ -85,7 +89,7 @@ PLAYWRIGHT_STEALTH_ARGS: List[str] = [
 ]
 
 # Known telemetry, ad, tracker, and metric domains to abort during scraping
-TRACKER_DOMAINS: List[str] = [
+TRACKER_DOMAINS: list[str] = [
     r"google-analytics\.com",
     r"googletagmanager\.com",
     r"doubleclick\.net",
@@ -174,7 +178,7 @@ STEALTH_INIT_SCRIPT = """
 """
 
 
-SYSTEM_CHROMIUM_CANDIDATES: List[str] = [
+SYSTEM_CHROMIUM_CANDIDATES: list[str] = [
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser",
     "/usr/bin/google-chrome",
@@ -182,7 +186,7 @@ SYSTEM_CHROMIUM_CANDIDATES: List[str] = [
 ]
 
 
-def resolve_launch_kwargs(config: Any) -> Dict[str, Any]:
+def resolve_launch_kwargs(config: Any) -> dict[str, Any]:
     """Pick the Chromium build to drive.
 
     Akamai fingerprints the HTTP/2 frame and rejects Playwright's bundled Chromium
@@ -190,7 +194,7 @@ def resolve_launch_kwargs(config: Any) -> Dict[str, Any]:
     browser. Measured on this host: bundled build fails, /usr/bin/chromium serves
     the page. So prefer a system Chromium and fall back to the bundled build.
     """
-    kwargs: Dict[str, Any] = {
+    kwargs: dict[str, Any] = {
         "headless": config.playwright_headless,
         "args": PLAYWRIGHT_STEALTH_ARGS,
     }
@@ -217,23 +221,27 @@ class MakeMyTripScraper(BaseScraper):
 
     def __init__(
         self,
-        config: Optional[IngestionConfig] = None,
-        amadeus_client: Optional[AmadeusFlightClient] = None,
-        synthetic_generator: Optional[SyntheticFlightGenerator] = None,
-        proxy: Optional[Union[str, Dict[str, str]]] = None,
+        config: IngestionConfig | None = None,
+        amadeus_client: AmadeusFlightClient | None = None,
+        synthetic_generator: SyntheticFlightGenerator | None = None,
+        proxy: str | dict[str, str] | None = None,
     ) -> None:
         super().__init__(config)
         self.amadeus_client = amadeus_client or AmadeusFlightClient(config=self.config)
-        self.synthetic_generator = synthetic_generator or SyntheticFlightGenerator(config=self.config)
+        self.synthetic_generator = synthetic_generator or SyntheticFlightGenerator(
+            config=self.config
+        )
         self.proxy = proxy or getattr(self.config, "proxy_url", None)
 
-    def get_playwright_context_options(self, proxy_override: Optional[Union[str, Dict[str, str]]] = None) -> Dict[str, Any]:
+    def get_playwright_context_options(
+        self, proxy_override: str | dict[str, str] | None = None
+    ) -> dict[str, Any]:
         """Generates randomized stealth browser context options with Indian locale and timezone."""
         viewport = random.choice(STEALTH_VIEWPORTS)
         user_agent = random.choice(self.config.user_agents)
         proxy_config = proxy_override or self.proxy
 
-        options: Dict[str, Any] = {
+        options: dict[str, Any] = {
             "viewport": viewport,
             "user_agent": user_agent,
             "locale": "en-IN",
@@ -299,22 +307,22 @@ class MakeMyTripScraper(BaseScraper):
 
     def parse_flight_json(
         self,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         origin: str,
         destination: str,
         window_code: str,
-        capture_dt: Optional[datetime] = None,
-    ) -> List[RawFareRecord]:
+        capture_dt: datetime | None = None,
+    ) -> list[RawFareRecord]:
         """Parses intercepted XHR JSON response from MakeMyTrip search API into RawFareRecords."""
-        records: List[RawFareRecord] = []
-        capture_time = capture_dt or datetime.now(timezone.utc)
+        records: list[RawFareRecord] = []
+        capture_time = capture_dt or datetime.now(UTC)
         booking_dt_str = capture_time.strftime("%Y-%m-%dT%H:%M:%S")
 
         norm_origin = self.normalize_iata(origin)
         norm_dest = self.normalize_iata(destination)
 
         # Handle diverse MakeMyTrip JSON response variations
-        flight_items: List[Dict[str, Any]] = []
+        flight_items: list[dict[str, Any]] = []
 
         if isinstance(payload, dict):
             # Check multiple common payload shapes
@@ -328,12 +336,16 @@ class MakeMyTripScraper(BaseScraper):
                     or data.get("flightDetails")
                     or []
                 )
-            elif "searchResult" in payload and isinstance(payload["searchResult"], dict):
+            elif "searchResult" in payload and isinstance(
+                payload["searchResult"], dict
+            ):
                 sr = payload["searchResult"]
                 flight_items = sr.get("flightDetails") or sr.get("flights") or []
             elif "itineraries" in payload and isinstance(payload["itineraries"], list):
                 flight_items = payload["itineraries"]
-            elif "flightDetails" in payload and isinstance(payload["flightDetails"], list):
+            elif "flightDetails" in payload and isinstance(
+                payload["flightDetails"], list
+            ):
                 flight_items = payload["flightDetails"]
             elif "legs" in payload and isinstance(payload["legs"], list):
                 flight_items = payload["legs"]
@@ -341,7 +353,9 @@ class MakeMyTripScraper(BaseScraper):
                 flight_items = payload["searchData"].get("flights") or []
 
         if not isinstance(flight_items, list):
-            logger.debug("MakeMyTrip: unexpected flight items structure: %s", type(flight_items))
+            logger.debug(
+                "MakeMyTrip: unexpected flight items structure: %s", type(flight_items)
+            )
             return records
 
         for item in flight_items:
@@ -365,15 +379,32 @@ class MakeMyTripScraper(BaseScraper):
 
                 # Segment-based extraction if item has segments/legs
                 segments = item.get("segments") or item.get("legs") or []
-                if not airline_code_raw and segments and isinstance(segments, list) and segments[0]:
+                if (
+                    not airline_code_raw
+                    and segments
+                    and isinstance(segments, list)
+                    and segments[0]
+                ):
                     first_seg = segments[0]
-                    airline_code_raw = first_seg.get("airlineCode") or first_seg.get("carrierCode") or ""
+                    airline_code_raw = (
+                        first_seg.get("airlineCode")
+                        or first_seg.get("carrierCode")
+                        or ""
+                    )
                     if not flight_no_raw:
-                        flight_no_raw = str(first_seg.get("flightNumber") or first_seg.get("flightNo") or "")
+                        flight_no_raw = str(
+                            first_seg.get("flightNumber")
+                            or first_seg.get("flightNo")
+                            or ""
+                        )
 
                 if not airline_code_raw and "-" in flight_no_raw:
                     airline_code_raw = flight_no_raw.split("-")[0]
-                elif not airline_code_raw and len(flight_no_raw) >= 2 and flight_no_raw[:2].isalpha():
+                elif (
+                    not airline_code_raw
+                    and len(flight_no_raw) >= 2
+                    and flight_no_raw[:2].isalpha()
+                ):
                     airline_code_raw = flight_no_raw[:2]
 
                 airline_code = self.normalize_airline_code(airline_code_raw or "6E")
@@ -381,7 +412,7 @@ class MakeMyTripScraper(BaseScraper):
                 # Flight designator formatting
                 clean_num = flight_no_raw.strip()
                 if clean_num.upper().startswith(airline_code):
-                    clean_num = clean_num[len(airline_code):].lstrip("- ")
+                    clean_num = clean_num[len(airline_code) :].lstrip("- ")
                 else:
                     clean_num = re.sub(r"^[A-Za-z]{2}[-\s]?", "", clean_num)
                 clean_num = clean_num.strip() or "101"
@@ -400,11 +431,23 @@ class MakeMyTripScraper(BaseScraper):
                     or item.get("at")
                 )
 
-                if (not dep_raw or not arr_raw) and segments and isinstance(segments, list):
+                if (
+                    (not dep_raw or not arr_raw)
+                    and segments
+                    and isinstance(segments, list)
+                ):
                     first_seg = segments[0]
                     last_seg = segments[-1]
-                    dep_raw = dep_raw or first_seg.get("departureTime") or first_seg.get("depTime")
-                    arr_raw = arr_raw or last_seg.get("arrivalTime") or last_seg.get("arrTime")
+                    dep_raw = (
+                        dep_raw
+                        or first_seg.get("departureTime")
+                        or first_seg.get("depTime")
+                    )
+                    arr_raw = (
+                        arr_raw
+                        or last_seg.get("arrivalTime")
+                        or last_seg.get("arrTime")
+                    )
 
                 dep_dt_str = self.normalize_datetime(dep_raw) if dep_raw else None
                 arr_dt_str = self.normalize_datetime(arr_raw) if arr_raw else None
@@ -423,7 +466,9 @@ class MakeMyTripScraper(BaseScraper):
                 )
 
                 if fare_raw is None:
-                    fare_details = item.get("fareDetails") or item.get("priceBreakup") or {}
+                    fare_details = (
+                        item.get("fareDetails") or item.get("priceBreakup") or {}
+                    )
                     fare_raw = (
                         fare_details.get("totalFare")
                         or fare_details.get("total")
@@ -444,7 +489,9 @@ class MakeMyTripScraper(BaseScraper):
 
                 # Duration and stops
                 duration = sourced_duration_minutes(
-                    item.get("duration") or item.get("durationMinutes") or item.get("dur"),
+                    item.get("duration")
+                    or item.get("durationMinutes")
+                    or item.get("dur"),
                     dep_dt_str,
                     arr_dt_str,
                 )
@@ -453,7 +500,9 @@ class MakeMyTripScraper(BaseScraper):
                 if stops < 0:
                     stops = 0
 
-                cabin_class = str(item.get("cabinClass") or item.get("cabin") or "economy").lower()
+                cabin_class = str(
+                    item.get("cabinClass") or item.get("cabin") or "economy"
+                ).lower()
                 if "econ" in cabin_class:
                     cabin_class = "economy"
                 elif "bus" in cabin_class:
@@ -499,7 +548,7 @@ class MakeMyTripScraper(BaseScraper):
         destination: str,
         target_date: date,
         window_code: str,
-    ) -> List[RawFareRecord]:
+    ) -> list[RawFareRecord]:
         """Launches Playwright with MakeMyTrip stealth configuration and captures flight search XHR JSON."""
         if not HAS_PLAYWRIGHT_SYNC:
             raise RuntimeError("playwright.sync_api is not installed")
@@ -510,8 +559,8 @@ class MakeMyTripScraper(BaseScraper):
         if denial is not None:
             logger.warning("robots.txt blocked %s scrape: %s", self.BASE_URL, denial)
             return []
-        collected_records: List[RawFareRecord] = []
-        capture_time = datetime.now(timezone.utc)
+        collected_records: list[RawFareRecord] = []
+        capture_time = datetime.now(UTC)
 
         with sync_playwright() as p:
             browser = p.chromium.launch(**resolve_launch_kwargs(self.config))
@@ -537,7 +586,10 @@ class MakeMyTripScraper(BaseScraper):
                         url = resp.url
                         if self.is_flight_api_url(url) and resp.status == 200:
                             content_type = resp.headers.get("content-type", "")
-                            if "application/json" in content_type or "text/plain" in content_type:
+                            if (
+                                "application/json" in content_type
+                                or "text/plain" in content_type
+                            ):
                                 data = resp.json()
                                 parsed = self.parse_flight_json(
                                     payload=data,
@@ -554,7 +606,9 @@ class MakeMyTripScraper(BaseScraper):
                                         url,
                                     )
                     except Exception as resp_err:
-                        logger.debug("Error in MMT response interception handler: %s", resp_err)
+                        logger.debug(
+                            "Error in MMT response interception handler: %s", resp_err
+                        )
 
                 page.on("response", handle_response)
 
@@ -598,7 +652,9 @@ class MakeMyTripScraper(BaseScraper):
 
         # Direct synthetic / mock mode bypass
         if mode == "synthetic":
-            res = self.synthetic_generator.scrape_route(norm_orig, norm_dest, target_date, window_code)
+            res = self.synthetic_generator.scrape_route(
+                norm_orig, norm_dest, target_date, window_code
+            )
             for r in res.records:
                 r.source = "makemytrip"
                 r.source_platform = "makemytrip"
@@ -607,24 +663,39 @@ class MakeMyTripScraper(BaseScraper):
             res.metadata["source"] = "makemytrip_tier3_synthetic"
             return res
         if mode == "mock":
-            res = self.amadeus_client.scrape_route(norm_orig, norm_dest, target_date, window_code)
+            res = self.amadeus_client.scrape_route(
+                norm_orig, norm_dest, target_date, window_code
+            )
             if res.success and res.records:
                 res.metadata["tier"] = 2
                 res.metadata["source"] = "makemytrip_tier2_amadeus_mock"
                 return res
-            res = self.synthetic_generator.scrape_route(norm_orig, norm_dest, target_date, window_code)
+            res = self.synthetic_generator.scrape_route(
+                norm_orig, norm_dest, target_date, window_code
+            )
             res.metadata["tier"] = 3
             res.metadata["source"] = "makemytrip_tier3_synthetic"
             return res
 
         # Tier 1: Live Playwright MakeMyTrip Scraper
-        tier1_errors: List[str] = []
+        tier1_errors: list[str] = []
         try:
-            logger.info("Tier 1: Scraping MakeMyTrip for %s-%s on %s", norm_orig, norm_dest, target_date)
-            records = self._scrape_with_playwright(norm_orig, norm_dest, target_date, window_code)
+            logger.info(
+                "Tier 1: Scraping MakeMyTrip for %s-%s on %s",
+                norm_orig,
+                norm_dest,
+                target_date,
+            )
+            records = self._scrape_with_playwright(
+                norm_orig, norm_dest, target_date, window_code
+            )
             if records:
                 elapsed_ms = round((time.time() - start_time) * 1000, 2)
-                logger.info("Tier 1 Success: %d records from MakeMyTrip in %.2fms", len(records), elapsed_ms)
+                logger.info(
+                    "Tier 1 Success: %d records from MakeMyTrip in %.2fms",
+                    len(records),
+                    elapsed_ms,
+                )
                 return ScrapeResult(
                     source="makemytrip",
                     success=True,
@@ -641,17 +712,26 @@ class MakeMyTripScraper(BaseScraper):
                         "window": window_code,
                     },
                 )
-            tier1_errors.append("Playwright navigation succeeded but no flight records intercepted")
+            tier1_errors.append(
+                "Playwright navigation succeeded but no flight records intercepted"
+            )
         except Exception as t1_exc:
             err_msg = f"Tier 1 MakeMyTrip Playwright failure: {t1_exc}"
             logger.warning(err_msg)
             tier1_errors.append(err_msg)
 
         # Tier 2: Amadeus GDS Fallback
-        tier2_errors: List[str] = []
+        tier2_errors: list[str] = []
         try:
-            logger.info("Tier 2 Fallback: Querying Amadeus GDS for %s-%s on %s", norm_orig, norm_dest, target_date)
-            t2_res = self.amadeus_client.scrape_route(norm_orig, norm_dest, target_date, window_code)
+            logger.info(
+                "Tier 2 Fallback: Querying Amadeus GDS for %s-%s on %s",
+                norm_orig,
+                norm_dest,
+                target_date,
+            )
+            t2_res = self.amadeus_client.scrape_route(
+                norm_orig, norm_dest, target_date, window_code
+            )
             if t2_res.success and t2_res.records:
                 elapsed_ms = round((time.time() - start_time) * 1000, 2)
                 t2_res.duration_ms = elapsed_ms
@@ -666,8 +746,15 @@ class MakeMyTripScraper(BaseScraper):
             tier2_errors.append(err_msg)
 
         # Tier 3: Deterministic DGCA Synthetic Generator
-        logger.info("Tier 3 Fallback: Generating DGCA-calibrated synthetic flights for %s-%s on %s", norm_orig, norm_dest, target_date)
-        t3_res = self.synthetic_generator.scrape_route(norm_orig, norm_dest, target_date, window_code)
+        logger.info(
+            "Tier 3 Fallback: Generating DGCA-calibrated synthetic flights for %s-%s on %s",
+            norm_orig,
+            norm_dest,
+            target_date,
+        )
+        t3_res = self.synthetic_generator.scrape_route(
+            norm_orig, norm_dest, target_date, window_code
+        )
         for r in t3_res.records:
             r.source = "makemytrip"
             r.source_platform = "makemytrip"
@@ -682,32 +769,34 @@ class MakeMyTripScraper(BaseScraper):
 
     def scrape_all(
         self,
-        routes: Optional[List[Route]] = None,
-        windows: Optional[List[BookingWindow]] = None,
-    ) -> List[ScrapeResult]:
+        routes: list[Route] | None = None,
+        windows: list[BookingWindow] | None = None,
+    ) -> list[ScrapeResult]:
         """Scrapes all routes and windows using MakeMyTrip 3-tier fallback pipeline."""
         target_routes = routes or DEFAULT_ROUTES
         target_windows = windows or BOOKING_WINDOWS
         today = date.today()
 
-        results: List[ScrapeResult] = []
+        results: list[ScrapeResult] = []
         for route in target_routes:
             for window in target_windows:
                 target_date = today + timedelta(days=window.days_advance)
-                res = self.scrape_route(route.origin, route.destination, target_date, window.code)
+                res = self.scrape_route(
+                    route.origin, route.destination, target_date, window.code
+                )
                 results.append(res)
         return results
 
     def scrape_all_routes(
         self,
-        routes: Optional[List[Route]] = None,
-        target_date: Optional[date] = None,
+        routes: list[Route] | None = None,
+        target_date: date | None = None,
         window_code: str = "T+7",
-    ) -> List[ScrapeResult]:
+    ) -> list[ScrapeResult]:
         """Scrapes all standard routes for a single booking window with fallback."""
         target_routes = routes or DEFAULT_ROUTES
         flight_date = target_date or (date.today() + timedelta(days=7))
-        results: List[ScrapeResult] = []
+        results: list[ScrapeResult] = []
 
         for r in target_routes:
             res = self.scrape_route(

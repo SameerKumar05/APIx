@@ -26,6 +26,7 @@ logger = logging.getLogger("backend.app.db.crawler_job_repo")
 # Job Enqueue & Querying
 # ============================================================================
 
+
 def enqueue_job(
     db: Session,
     crawler_name: str,
@@ -93,14 +94,13 @@ def enqueue_job(
 
 def get_job_by_id(db: Session, job_id: str) -> CrawlerJob | None:
     """Retrieve a job by its public job_id string."""
-    return db.scalars(
-        select(CrawlerJob).where(CrawlerJob.job_id == job_id)
-    ).first()
+    return db.scalars(select(CrawlerJob).where(CrawlerJob.job_id == job_id)).first()
 
 
 # ============================================================================
 # Atomic Claiming & Fencing (Dialect-Agnostic SQLite + PostgreSQL)
 # ============================================================================
+
 
 def claim_next_job(
     db: Session,
@@ -152,7 +152,13 @@ def claim_next_job(
         claimed = db.scalars(stmt).first()
         if claimed:
             db.commit()
-            logger.info("Worker %s claimed job %s (id=%d, attempt=%d)", worker_id, claimed.job_id, claimed.id, claimed.attempts)
+            logger.info(
+                "Worker %s claimed job %s (id=%d, attempt=%d)",
+                worker_id,
+                claimed.job_id,
+                claimed.id,
+                claimed.attempts,
+            )
             return claimed
         db.rollback()
         return None
@@ -237,12 +243,17 @@ def complete_job(
 # Stale Job Reaper & Dead-Letter Recovery
 # ============================================================================
 
+
 def reap_stale_jobs(db: Session) -> dict[str, int]:
     """Reclaim expired leases and dead-letter jobs whose deadline has passed."""
     now = datetime.now(UTC)
     active = CrawlerJob.status.in_(["CLAIMED", "RUNNING"])
-    deadline_passed = and_(CrawlerJob.deadline_at.is_not(None), CrawlerJob.deadline_at < now)
-    lease_expired = and_(CrawlerJob.lease_expires_at.is_not(None), CrawlerJob.lease_expires_at < now)
+    deadline_passed = and_(
+        CrawlerJob.deadline_at.is_not(None), CrawlerJob.deadline_at < now
+    )
+    lease_expired = and_(
+        CrawlerJob.lease_expires_at.is_not(None), CrawlerJob.lease_expires_at < now
+    )
 
     dead_deadline = db.execute(
         update(CrawlerJob)
@@ -286,7 +297,9 @@ def reap_stale_jobs(db: Session) -> dict[str, int]:
     dead = int(dead_deadline) + int(dead_attempts)
     db.commit()
     if requeued > 0 or dead > 0:
-        logger.info("Reaper sweep completed: %d re-queued, %d dead-lettered", requeued, dead)
+        logger.info(
+            "Reaper sweep completed: %d re-queued, %d dead-lettered", requeued, dead
+        )
     return {"requeued": int(requeued), "dead": dead}
 
 
@@ -316,6 +329,7 @@ def release_worker_leases(db: Session, worker_id: str) -> int:
 # ============================================================================
 # Worker Heartbeat & Liveness Management
 # ============================================================================
+
 
 def register_worker_heartbeat(
     db: Session,
@@ -419,9 +433,9 @@ def get_active_worker_count(
     now = datetime.now(UTC)
     cutoff = now - timedelta(seconds=threshold_seconds)
     from sqlalchemy import func
+
     count = db.scalar(
-        select(func.count(WorkerHeartbeat.id))
-        .where(
+        select(func.count(WorkerHeartbeat.id)).where(
             WorkerHeartbeat.status == "ALIVE",
             WorkerHeartbeat.last_heartbeat_at >= cutoff,
         )

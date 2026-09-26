@@ -71,7 +71,7 @@ def install_scrape_hooks(store: SessionStore, ledger: BackoffLedger) -> bool:
         return context
 
     setattr(hooked, _INSTALLED, True)
-    setattr(Browser, "new_context", hooked)
+    Browser.new_context = hooked
     return True
 
 
@@ -81,7 +81,12 @@ def _host_of(url: str) -> str:
     return origin_host(f"https://{url}")
 
 
-def _watch(context, store: SessionStore, ledger: BackoffLedger, playwright_error: type[Exception]) -> None:
+def _watch(
+    context,
+    store: SessionStore,
+    ledger: BackoffLedger,
+    playwright_error: type[Exception],
+) -> None:
     new_page = context.new_page
     close = context.close
     seen: list[str] = []
@@ -131,7 +136,13 @@ def _restore_cookies(context, store: SessionStore, host: str) -> None:
         context.add_cookies(cookies)
 
 
-def _note_if_challenge(page, host: str, ledger: BackoffLedger, playwright_error: type[Exception], now: float) -> None:
+def _note_if_challenge(
+    page,
+    host: str,
+    ledger: BackoffLedger,
+    playwright_error: type[Exception],
+    now: float,
+) -> None:
     try:
         html = page.content()
         title = page.title()
@@ -145,7 +156,9 @@ def _note_if_challenge(page, host: str, ledger: BackoffLedger, playwright_error:
     logger.warning("challenge page on %s marker=%s", host, marker)
 
 
-def _save_context(context, store: SessionStore, host: str, playwright_error: type[Exception]) -> None:
+def _save_context(
+    context, store: SessionStore, host: str, playwright_error: type[Exception]
+) -> None:
     try:
         raw = context.storage_state()
     except playwright_error:
@@ -193,5 +206,5 @@ def guard_scrape(scrape: Callable[..., ScrapeResult]) -> Callable[..., ScrapeRes
     def wrapped(*args, **kwargs) -> ScrapeResult:  # noqa: ANN001
         return consume_challenge(scrape(*args, **kwargs))
 
-    setattr(wrapped, "_apix_guarded", True)
+    wrapped._apix_guarded = True
     return wrapped

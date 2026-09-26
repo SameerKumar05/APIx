@@ -1,8 +1,8 @@
 import logging
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from collections.abc import AsyncIterator
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -83,7 +83,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             retry_after = max(1, int(self._window - (now - bucket[0])))
             response = JSONResponse(
                 status_code=429,
-                content={"detail": "Rate limit exceeded. Retry after the window resets."},
+                content={
+                    "detail": "Rate limit exceeded. Retry after the window resets."
+                },
             )
             response.headers["Retry-After"] = str(retry_after)
             response.headers["X-RateLimit-Limit"] = str(self._limit)
@@ -94,7 +96,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._hits[client] = bucket
         response = await call_next(request)
         response.headers["X-RateLimit-Limit"] = str(self._limit)
-        response.headers["X-RateLimit-Remaining"] = str(max(0, self._limit - len(bucket)))
+        response.headers["X-RateLimit-Remaining"] = str(
+            max(0, self._limit - len(bucket))
+        )
         return response
 
 
@@ -207,5 +211,6 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # Convenience root WebSocket mounts for streaming clients
 from backend.app.api.v1.endpoints.stream import router as stream_router
+
 app.include_router(stream_router, prefix="/stream", tags=["Streaming"])
 app.include_router(stream_router, prefix="/ws", tags=["Streaming"])
