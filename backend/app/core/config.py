@@ -1,5 +1,5 @@
 from typing import List, Union
-from pydantic import AnyHttpUrl, field_validator
+from pydantic import AnyHttpUrl, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,6 +7,18 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "APIx - Real-time Airfare Price Index"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
+    API_RATE_LIMIT_REQUESTS: int = Field(
+        default=120,
+        ge=0,
+        description=(
+            "Requests allowed per window per client on the public read API. The problem "
+            "statement asks for an API that NSO and RBI can consume, so it has to tolerate "
+            "polling without being trivially exhaustible. 0 disables the limiter."
+        ),
+    )
+    API_RATE_LIMIT_WINDOW_SECONDS: int = Field(
+        default=60, ge=1, description="Fixed window length for API rate limiting."
+    )
     DESCRIPTION: str = (
         "SIH 2026 PS 26056: Real-time Airfare Price Index for India "
         "(Augmenting Official CPI Transportation Sub-Index)"
