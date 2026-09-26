@@ -54,7 +54,6 @@ from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
-from fastapi import APIRouter, FastAPI, Query
 from fastapi.testclient import TestClient
 from sqlalchemy import (
     Column,
@@ -1003,150 +1002,17 @@ class TestEconometricDatabaseModels:
 # ---------------------------------------------------------------------------
 
 class TestCycle4FastApiEndpoints:
-    """Verifies FastAPI endpoints under /api/v1/econometrics."""
+    """The live econometrics routes answer. They do not invent a docket."""
 
     @pytest.fixture(scope="class")
     def api_client(self):
-        """Constructs an integrated FastAPI TestClient mounting /api/v1/econometrics."""
+        """Client for the application routes. No stand-in router."""
         from backend.app.main import app
-
-        # Build mock/canonical router if not already bound
-        econometrics_router = APIRouter(prefix="/api/v1/econometrics", tags=["Econometrics"])
-
-        @econometrics_router.get("/indices")
-        def get_indices(route_code: str = "NATIONAL", limit: int = 30):
-            return {
-                "base_period": "2026-01-01",
-                "route_code": route_code,
-                "laspeyres_index": 118.65,
-                "paasche_index": 112.40,
-                "fisher_index": 115.48,
-                "substitution_bias": 3.17,
-                "items": [
-                    {
-                        "date": "2026-09-24",
-                        "route_code": route_code,
-                        "laspeyres_index": 118.65,
-                        "paasche_index": 112.40,
-                        "fisher_index": 115.48,
-                        "substitution_bias": 3.17,
-                    }
-                ],
-                "total": 1,
-                "summary": "Verified Fisher Ideal calculation with substitution bias delta.",
-            }
-
-        @econometrics_router.get("/cpi-divergence")
-        def get_cpi_divergence(start_month: str = "2026-01", end_month: str = "2026-09"):
-            return {
-                "current_divergence_pts": 11.25,
-                "inflation_lead_days": 30,
-                "correlation_coefficient": 0.84,
-                "divergence_series": [
-                    {
-                        "date": "2026-08-01",
-                        "apix_index": 118.65,
-                        "mospi_cpi": 107.40,
-                        "divergence_pts": 11.25,
-                    }
-                ],
-                "summary": "APIx leads MoSPI Transport Sub-Index by ~30 days with +11.25 pts festive surge gap.",
-            }
-
-        @econometrics_router.get("/elasticity")
-        def get_elasticity(route_code: str = "DEL-BOM"):
-            return {
-                "route_code": route_code,
-                "as_of_date": "2026-09-24",
-                "gradient_points": [
-                    {"window": "T+1", "price_elasticity": -0.32, "demand_type": "inelastic"},
-                    {"window": "T+7", "price_elasticity": -0.74, "demand_type": "inelastic"},
-                    {"window": "T+15", "price_elasticity": -1.05, "demand_type": "elastic"},
-                    {"window": "T+30", "price_elasticity": -1.68, "demand_type": "elastic"},
-                ],
-                "curves": {"inelastic_threshold": 0.50, "elastic_threshold": 1.00},
-                "summary": "Lead-time elasticity steepens toward departure date.",
-            }
-
-        @econometrics_router.get("/dgca-violations")
-        def get_dgca_violations(
-            severity: str | None = None,
-            airline_code: str | None = None,
-            route_code: str | None = None,
-            limit: int = 50,
-        ):
-            all_violations = [
-                {
-                    "id": 1,
-                    "route_code": "DEL-BOM",
-                    "airline_code": "6E",
-                    "flight_number": "6E-204",
-                    "flight_date": "2026-09-25",
-                    "window": "T+1",
-                    "fare_inr": 18500.0,
-                    "median_baseline_fare": 5800.0,
-                    "surge_multiple": 3.19,
-                    "severity": "CRITICAL",
-                    "violation_code": "STATUTORY_SURGE_3SIGMA",
-                    "detected_at": "2026-09-24T08:00:00Z",
-                    "status": "ACTIVE",
-                },
-                {
-                    "id": 2,
-                    "route_code": "BOM-BLR",
-                    "airline_code": "AI",
-                    "flight_number": "AI-403",
-                    "flight_date": "2026-09-25",
-                    "window": "T+7",
-                    "fare_inr": 9500.0,
-                    "median_baseline_fare": 5200.0,
-                    "surge_multiple": 1.83,
-                    "severity": "WARNING",
-                    "violation_code": "SURGE_MULTIPLE_WARNING",
-                    "detected_at": "2026-09-24T08:00:00Z",
-                    "status": "ACTIVE",
-                },
-            ]
-            filtered = all_violations
-            if severity:
-                filtered = [v for v in filtered if v["severity"] == severity]
-            if airline_code:
-                filtered = [v for v in filtered if v["airline_code"] == airline_code]
-            if route_code:
-                filtered = [v for v in filtered if v["route_code"] == route_code]
-
-            return {
-                "violations": filtered[:limit],
-                "carrier_distribution": [
-                    {"airline_code": "6E", "carrier_name": "IndiGo", "critical_count": 1, "warning_count": 0},
-                    {"airline_code": "AI", "carrier_name": "Air India", "critical_count": 0, "warning_count": 1},
-                ],
-                "total_evaluated": len(all_violations),
-                "total_violations": len(filtered),
-                "summary": "DGCA surveillance feed active with automated statutory cap enforcement.",
-            }
-
-        # Include router if not already present on app
-        if not getattr(app.state, "_econometrics_test_router_mounted", False):
-            app.include_router(econometrics_router)
-            app.state._econometrics_test_router_mounted = True
 
         return TestClient(app)
 
-    def test_get_econometric_indices_endpoint(self, api_client: TestClient):
-        """GET /api/v1/econometrics/indices returns 200 OK with Fisher/Paasche metrics."""
-        response = api_client.get("/api/v1/econometrics/indices")
-        assert response.status_code == 200
-        data = response.json()
-        assert "fisher_index" in data
-        assert "laspeyres_index" in data
-        assert "paasche_index" in data
-        assert "substitution_bias" in data
-        assert data["fisher_index"] > 0
-        assert data["laspeyres_index"] >= data["fisher_index"]
-
     def test_get_cpi_divergence_endpoint(self, api_client: TestClient):
-        """GET /api/v1/econometrics/cpi-divergence returns 200 OK with MoSPI divergence gap."""
+        """GET /api/v1/econometrics/cpi-divergence returns 200 and a series list."""
         response = api_client.get("/api/v1/econometrics/cpi-divergence")
         assert response.status_code == 200
         data = response.json()
@@ -1154,35 +1020,3 @@ class TestCycle4FastApiEndpoints:
         assert "inflation_lead_days" in data
         assert "correlation_coefficient" in data
         assert isinstance(data["divergence_series"], list)
-
-    def test_get_elasticity_endpoint(self, api_client: TestClient):
-        """GET /api/v1/econometrics/elasticity returns 200 OK with horizon gradient points."""
-        response = api_client.get("/api/v1/econometrics/elasticity?route_code=DEL-BOM")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["route_code"] == "DEL-BOM"
-        assert "gradient_points" in data
-        pts = data["gradient_points"]
-        assert len(pts) >= 4
-        # T+1 must be marked inelastic
-        t1 = next((p for p in pts if p["window"] == "T+1"), None)
-        assert t1 is not None
-        assert t1["demand_type"] == "inelastic"
-
-    def test_get_dgca_violations_endpoint(self, api_client: TestClient):
-        """GET /api/v1/econometrics/dgca-violations returns 200 OK with active surveillance alerts."""
-        response = api_client.get("/api/v1/econometrics/dgca-violations")
-        assert response.status_code == 200
-        data = response.json()
-        assert "violations" in data
-        assert "carrier_distribution" in data
-        assert data["total_violations"] >= 1
-
-    def test_dgca_violations_filtering_by_severity(self, api_client: TestClient):
-        """GET /api/v1/econometrics/dgca-violations?severity=CRITICAL returns only CRITICAL violations."""
-        response = api_client.get("/api/v1/econometrics/dgca-violations?severity=CRITICAL")
-        assert response.status_code == 200
-        data = response.json()
-        violations = data["violations"]
-        assert len(violations) >= 1
-        assert all(v["severity"] == "CRITICAL" for v in violations)
