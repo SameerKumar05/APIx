@@ -248,7 +248,7 @@ Under the Aircraft Rules 1937, Rule 135(1-3), the Directorate General of Civil A
 | Storage Tier | Storage Medium | Retention Period | Data Scope & Format | Purpose |
 |:---|:---|:---:|:---|:---|
 | **Tier 1 (Hot)** | PostgreSQL / TimescaleDB | 30 Days (raw fares) / Permanent (indices) | Relational SQL schema, 16 tables on fresh startup (14 domain + `crawler_jobs` + `worker_heartbeats`) | Live dashboard queries, quant index computation, anomaly detection |
-| **Tier 2 (Warm)** | GitHub Actions Artifacts & S3/R2 Bucket | 30 Days (GHA) / 90 Days (Staging) | Compressed JSONL (`run_summary_YYYY-MM-DD.json.gz`), 40 discrete slots | Telemetry audit, provider SLA tracking, route-level fallback analysis |
+| **Tier 2 (Warm)** | GitHub Actions Artifacts & S3/R2 Bucket | 30 Days (GHA) / 90 Days (Staging) | Compressed JSONL (`run_summary_YYYY-MM-DD.json.gz`), 50 discrete slots | Telemetry audit, provider SLA tracking, route-level fallback analysis |
 | **Tier 3 (Cold / WORM)** | S3 Glacier Deep Archive | 7 Years (2,555 Days statutory) | Encrypted Apache Parquet with Write-Once-Read-Many (WORM) Object Lock | Court-admissible tariff compliance audits, MoSPI macroeconomic verification |
 
 ### 6.3 Tamper-Evident Cryptographic Provenance

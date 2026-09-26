@@ -9,7 +9,7 @@ The **APIx (Airfare Price Index)** system automates high-frequency, multi-source
 
 Traditional survey methods collect airfare data manually on a monthly cadence across limited booking windows, missing high-velocity dynamic pricing swings and predatory surges. APIx resolves this fundamental gap by ingesting real-time airfares across:
 1. **10 DGCA-Calibrated Domestic Trunk Routes** representing >65% of India's scheduled domestic passenger traffic.
-2. **4 Advance Booking Horizons** ($T+1, T+7, T+15, T+30, T+45$ days advance purchase).
+2. **5 Advance Booking Horizons** ($T+1, T+7, T+15, T+30, T+45$ days advance purchase).
 3. **Multi-Source Scraping Topologies** combining Online Travel Aggregators (OTAs), direct low-cost carrier (LCC) web portals, and Global Distribution System (GDS) APIs.
 4. **50 Discrete Ingestion Slots** executing on scheduled periodic cadences with distributed anti-bot jitter and proxy rotation.
 
@@ -76,27 +76,28 @@ In the concrete runtime execution engine (`ingestion/orchestrator.py`), Conceptu
 | **Synthetic Tier** | Tier 4 (DGCA Fallback) | **Tier 3: DGCA Synthetic Fallback** | `ingestion/crawlers/synthetic.py` | In-Memory Deterministic Mathematical Generator |
 
 #### 2.2 Coverage Matrix: 50 Discrete Ingestion Slots
-Every ingestion sweep evaluates exactly **40 discrete slots** ($10 \text{ routes} \times 4 \text{ booking horizons}$), mapping the high-density passenger corridors identified by DGCA domestic city-pair traffic surveys:
+Every ingestion sweep evaluates exactly **50 discrete slots** ($10 \text{ routes} \times 5 \text{ booking horizons}$), mapping the high-density passenger corridors identified by DGCA domestic city-pair traffic surveys:
 
 | Slot Range | Origin - Destination | Distance (km) | Typical Flight Time | DGCA Route Weight ($w_r$) | Evaluated Booking Horizons |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| Slots 01–04 | **DEL - BOM** | 1,148 km | 130 min | 0.175 | $T+1, T+7, T+15, T+30, T+45$ |
-| Slots 05–08 | **BOM - DEL** | 1,148 km | 130 min | 0.175 | $T+1, T+7, T+15, T+30, T+45$ |
-| Slots 09–12 | **DEL - BLR** | 1,740 km | 165 min | 0.125 | $T+1, T+7, T+15, T+30, T+45$ |
-| Slots 13–16 | **BLR - DEL** | 1,740 km | 165 min | 0.125 | $T+1, T+7, T+15, T+30, T+45$ |
-| Slots 17–20 | **BOM - BLR** | 842 km | 105 min | 0.090 | $T+1, T+7, T+15, T+30, T+45$ |
-| Slots 21–24 | **BLR - BOM** | 842 km | 105 min | 0.090 | $T+1, T+7, T+15, T+30, T+45$ |
-| Slots 25–28 | **DEL - CCU** | 1,305 km | 135 min | 0.065 | $T+1, T+7, T+15, T+30, T+45$ |
-| Slots 29–32 | **CCU - DEL** | 1,305 km | 135 min | 0.065 | $T+1, T+7, T+15, T+30, T+45$ |
-| Slots 33–36 | **DEL - HYD** | 1,253 km | 135 min | 0.045 | $T+1, T+7, T+15, T+30, T+45$ |
-| Slots 37–40 | **HYD - DEL** | 1,253 km | 135 min | 0.045 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 01–05 | **DEL - BOM** | 1,148 km | 130 min | 0.175 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 06–10 | **BOM - DEL** | 1,148 km | 130 min | 0.175 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 11–15 | **DEL - BLR** | 1,740 km | 165 min | 0.125 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 16–20 | **BLR - DEL** | 1,740 km | 165 min | 0.125 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 21–25 | **BOM - BLR** | 842 km | 105 min | 0.090 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 26–30 | **BLR - BOM** | 842 km | 105 min | 0.090 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 31–35 | **DEL - CCU** | 1,305 km | 135 min | 0.065 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 36–40 | **CCU - DEL** | 1,305 km | 135 min | 0.065 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 41–45 | **DEL - HYD** | 1,253 km | 135 min | 0.045 | $T+1, T+7, T+15, T+30, T+45$ |
+| Slots 46–50 | **HYD - DEL** | 1,253 km | 135 min | 0.045 | $T+1, T+7, T+15, T+30, T+45$ |
 
 #### 2.3 Advance Booking Horizons & Economic Calibration
 Advance purchase windows capture the steep non-linear price trajectory characteristic of airline yield management:
 - **$T+1$ (Last-Minute / Emergency Window, Weight: $0.20$):** Departure within 24–48 hours. Captures severe surge pricing, supply inelasticity, and distress travel ($\times 1.80 - \times 2.50$ baseline multiplier; calibrated default: $\times 2.15$).
-- **$T+7$ (Near-Term / Corporate Window, Weight: $0.35$):** Departure in 4–7 days. Captures short-notice business travel, commercial urgency, and corporate fare adjustments ($\times 1.30 - \times 1.65$ baseline multiplier; calibrated default: $\times 1.45$).
-- **$T+15$ (Medium-Term / Standard Window, Weight: $0.30$):** Departure in 8–15 days. Reflects planned personal and semi-flexible business travel ($\times 1.10 - \times 1.30$ baseline multiplier; calibrated default: $\times 1.18$).
-- **$T+30$ (Baseline / Advance Leisure Window, Weight: $0.15$):** Departure in 16–30 days. Reflects base fare bucket inventory and early-bird leisure purchases used for Laspeyres/Paasche base price indexing ($\times 0.95 - \times 1.05$ baseline multiplier; calibrated default: $\times 1.00$).
+- **$T+7$ (Near-Term / Corporate Window, Weight: $0.32$):** Departure in 4–7 days. Captures short-notice business travel, commercial urgency, and corporate fare adjustments ($\times 1.30 - \times 1.65$ baseline multiplier; calibrated default: $\times 1.45$).
+- **$T+15$ (Medium-Term / Standard Window, Weight: $0.26$):** Departure in 8–15 days. Reflects planned personal and semi-flexible business travel ($\times 1.10 - \times 1.30$ baseline multiplier; calibrated default: $\times 1.18$).
+- **$T+30$ (Baseline / Advance Leisure Window, Weight: $0.14$)
+- **$T+45$ (Far-Planned / Corporate Window, Weight: $0.08$):** Departure in 16–30 days. Reflects base fare bucket inventory and early-bird leisure purchases used for Laspeyres/Paasche base price indexing ($\times 0.95 - \times 1.05$ baseline multiplier; calibrated default: $\times 1.00$).
 
 ---
 
@@ -333,7 +334,7 @@ Where:
 The distributed scheduler is built upon `APScheduler` (`AsyncIOScheduler`), operating as an asynchronous daemon capable of running standalone or embedded within the APIx backend process. For trigger truth, the durable path is authoritative: the standalone worker `python -m ingestion.worker` polls `crawler_jobs` with atomic claims, holds `worker_heartbeats` leases, sweeps stale leases, and dispatches via `IngestionClient`. Current isolated suite covering this path is 226 passed with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`; older counts are historical.
 
 #### 8.1 Key Capabilities & Lifecycle Architecture
-- **Slot Job Registration:** Pre-registers all 40 discrete route-window combinations as individual jobs with unique deterministic identifiers (`slot_DEL_BOM_T+1`, `slot_BOM_DEL_T+7`, etc.).
+- **Slot Job Registration:** Pre-registers all 50 discrete route-window combinations as individual jobs with unique deterministic identifiers (`slot_DEL_BOM_T+1`, `slot_BOM_DEL_T+7`, etc.).
 - **Interval & Cron Triggers:**
   - Standard recurring sweep: Dispatches scheduled sweeps every 6 hours (`interval_minutes=360`).
   - Off-peak cron sweeps: Configurable via standard cron expressions (`0 2,8,14,20 * * *`).
@@ -342,7 +343,7 @@ The distributed scheduler is built upon `APScheduler` (`AsyncIOScheduler`), oper
 - **Thread Sandboxing:** Bridges synchronous Playwright/HTTP scraping operations into the asynchronous event loop via `asyncio.to_thread()`, ensuring network blocking does not stall FastAPI API workers or WebSocket telemetry broadcasters.
 - **Ad-Hoc Dispatches:**
   - `trigger_slot(origin, destination, window)`: Triggers immediate on-demand scraping for a single corridor.
-  - `trigger_all()`: Dispatches an immediate staggered sweep across all 40 slots.
+  - `trigger_all()`: Dispatches an immediate staggered sweep across all 50 slots.
 
 ---
 

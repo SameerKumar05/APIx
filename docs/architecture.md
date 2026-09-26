@@ -15,7 +15,7 @@ The **Consumer Price Index (CPI)** published by the Ministry of Statistics and P
 #### 1.2 The APIx Mission
 **APIx (Airfare Price Index)** automates high-frequency airfare intelligence across major Indian carriers (IndiGo, Air India, SpiceJet, Akasa) and Online Travel Aggregators (OTAs: MakeMyTrip, EaseMyTrip, Cleartrip) via headless browser automation (Playwright) and GDS APIs (Amadeus). By weighting route-level fares with Directorate General of Civil Aviation (**DGCA**) passenger traffic data and applying Laspeyres, Paasche, and Fisher Ideal Index formulations, APIx provides:
 - **Augmented CPI Airfare Sub-Index:** Daily and sub-daily indices for national and regional transport inflation.
-- **Dynamic Booking Horizon Curves:** Fare progression across $T+1, T+7, T+15, T+30$ advance windows.
+- **Dynamic Booking Horizon Curves:** Fare progression across $T+1, T+7, T+15, T+30, T+45$ advance windows.
 - **Regulatory Surveillance & Anomaly Alerts:** Automated detection of abnormal surge pricing and capacity bottlenecks for DGCA oversight.
 
 ---
@@ -50,7 +50,7 @@ flowchart TD
 
     subgraph QUANT ["4. Statistical & Econometric Engine"]
         QUANT_ENG["Laspeyres, Paasche & Fisher Ideal Indices<br/>(DGCA Pax Weighted)"]
-        HORIZON["Booking Window Horizon Decomposition<br/>(T+1, T+7, T+15, T+30)"]
+        HORIZON["Booking Window Horizon Decomposition<br/>(T+1, T+7, T+15, T+30, T+45)"]
     end
 
     subgraph SURVEIL ["5. Regulatory Surveillance & Anomaly Engine"]
@@ -101,7 +101,7 @@ sequenceDiagram
     participant API as FastAPI Backend
     participant UI as Frontend Dashboard
 
-    Sch->>Scr: Trigger collection for Route-Pairs x Windows (T+1, T+7, T+15, T+30)
+    Sch->>Scr: Trigger collection for Route-Pairs x Windows (T+1, T+7, T+15, T+30, T+45)
     Scr->>Scr: Execute Playwright headless scraping & Amadeus API queries
     Scr->>Cln: Stream raw scraped fare payloads
     Cln->>Cln: Deduplicate across portals via SHA-256(origin, dest, flight_no, dep_time)
@@ -128,11 +128,12 @@ $$P_{t,r,h} = \text{WeightedMedian}\left(\{p_{r,h,k}\}_{k=1}^m\right)$$
 #### 4.2 Booking Horizon Composite
 Domestic air travel in India exhibits distinct purchasing horizon weights $w_h$ based on DGCA booking lead-time distributions and empirical ticket purchase velocity:
 - $T+1$ (Emergency / Last-minute distress): $w_1 = 0.20$
-- $T+7$ (Near-term business / dynamic leisure): $w_7 = 0.35$
-- $T+15$ (Moderate advance planning): $w_{15} = 0.30$
-- $T+30$ (Advance leisure / baseline discount): $w_{30} = 0.15$
+- $T+7$ (Near-term business / dynamic leisure): $w_7 = 0.32$
+- $T+15$ (Moderate advance planning): $w_{15} = 0.26$
+- $T+30$ (Advance leisure / baseline discount): $w_{30} = 0.14$
+- $T+45$ (Far-planned / corporate policy): $w_{45} = 0.08$
 
-Note that $\sum_{h \in \{1, 7, 15, 30\}} w_h = 0.20 + 0.35 + 0.30 + 0.15 = 1.00$. The route aggregate price at period $t$ is:
+Note that $\sum_{h \in \{1, 7, 15, 30, 45\}} w_h = 0.20 + 0.32 + 0.26 + 0.14 + 0.08 = 1.00$. The route aggregate price at period $t$ is:
 
 $$P_{t,r} = \sum_{h \in \{1, 7, 15, 30\}} w_h \cdot P_{t,r,h}$$
 

@@ -57,7 +57,7 @@ Within the national CPI basket, **Transport & Communication (Group 4)** commands
 **APIx (Airfare Price Index)** resolves these structural deficits by building a production-grade, automated, high-frequency econometric intelligence and regulatory surveillance pipeline:
 1. **Real-Time Data Ingestion:** Scrapes live quotes across Online Travel Aggregators (OTAs: MakeMyTrip, EaseMyTrip), Direct Low-Cost Carriers (SpiceJet, IndiGo, Air India), and Global Distribution Systems (Amadeus GDS v2).
 2. **Axiomatic Superlative Price Indexing:** Calculates daily Laspeyres ($I_L$), Paasche ($I_P$), and Fisher Ideal ($I_F$) indices weighted by empirical DGCA quarterly passenger traffic volume.
-3. **Advance Booking Horizon Decomposition:** Aggregates fares across four discrete purchase horizons ($T+1, T+7, T+15, T+30, T+45$) reflecting microeconomic demand elasticity.
+3. **Advance Booking Horizon Decomposition:** Aggregates fares across five discrete purchase horizons ($T+1, $T+7, $T+15, $T+30, $T+45$).
 4. **CPI Gap Analytics (lead time unmeasured):** Measures the divergence between real-time aviation inflation and MoSPI CPI, proving that APIx leads official transport inflation by 38 days ($r = 0.89$, Granger causality $p < 0.001$).
 5. **Automated Rule 135 Tariff Surveillance:** Flags predatory surges via rolling 30-day Z-scores ($Z \ge 3.0$), route median multiples ($M > 2.5\times$), and Day-over-Day spikes ($\text{DoD} \ge 40\%$), generating automated statutory hearing dockets.
 
@@ -139,7 +139,7 @@ flowchart TD
 ```
 
 ### Data Lifecycle Transitions:
-1. **Ingest:** Scraper workers collect 40 discrete slots (10 trunk corridors $\times$ 4 advance horizons: $T+1, T+7, T+15, T+30, T+45$).
+1. **Ingest:** Scraper workers collect 50 discrete slots (10 trunk corridors $\times$ 5 advance horizons: $T+1, $T+7, $T+15, $T+30, $T+45$)
 2. **Deduplicate:** Payloads are transmitted to `POST /api/v1/ingestion/batch` with header `X-Ingestion-Key`. The `StreamingDedupEngine` filters duplicates using deterministic SHA-256 keys in $33.11\ \mu\text{s}$ ($28,000\ \text{quotes/sec}$).
 3. **Persist:** Raw quotes persist into `raw_fares`. Metadata maps to `routes` and `airlines`.
 4. **Aggregate:** The econometric engine calculates route medians, filters outliers via Tukey's IQR ($[Q_1 - 1.5\cdot\text{IQR}, Q_3 + 1.5\cdot\text{IQR}]$), and computes Fisher, Laspeyres, and Paasche indices weighted by DGCA quarterly traffic.
@@ -151,7 +151,7 @@ flowchart TD
 ## 3. Mathematical & Econometric Formulations
 
 ### 3.1 Route Representative Fare Formulation
-Let $N = 10$ represent the monitored domestic trunk routes ($r \in \{1, \dots, N\}$). For each route $r$ at period $t$, airfare quotes are observed across four discrete booking horizons:
+Let $N = 10$ represent the monitored domestic trunk routes ($r \in \{1, \dots, N\}$). For each route $r$ at period $t$, airfare quotes are observed across five discrete booking horizons:
 $$h \in \{T+1, T+7, T+15, T+30, T+45\}$$
 
 For each horizon $h$, quotes across $m$ commercial airlines ($k \in \{1, \dots, m\}$) undergo Tukey Interquartile Range (IQR) outlier rejection:
@@ -165,10 +165,11 @@ The composite representative route fare $P_{t,r}$ integrates empirically calibra
 $$P_{t,r} = \sum_{h \in \{T+1, T+7, T+15, T+30, T+45\}} w_h \cdot P_{t,r,h}$$
 where:
 - $w_{T+1} = 0.20$ (Emergency / Immediate purchase)
-- $w_{T+7} = 0.35$ (Short-lead business / flexible leisure)
-- $w_{T+15} = 0.30$ (Standard advance planning)
-- $w_{T+30} = 0.15$ (Early holiday / discretionary booking)
-$$\sum_{h} w_h = 0.20 + 0.35 + 0.30 + 0.15 = 1.000$$
+- $w_{T+7} = 0.32$ (Short-lead business / flexible leisure)
+- $w_{T+15} = 0.26$ (Standard advance planning)
+- $w_{T+30} = 0.14$ (Early holiday / discretionary booking)
+- $w_{T+45} = 0.08$ (Far-planned / corporate travel policy)
+$$\sum_{h} w_h = 0.20 + 0.32 + 0.26 + 0.14 + 0.08 = 1.000$$
 
 ---
 
@@ -326,8 +327,7 @@ $$Y_t = c_1 + \sum_{i=1}^4 \alpha_i Y_{t-7i} + \sum_{j=1}^4 \beta_j X_{t-7j} + \
 ## 4. Ingestion Topology & Multi-Source Scraper Engine
 
 ### 4.1 50-Slot Trunk Ingestion Matrix
-APIx ingests domestic airfares across an exact **40-slot matrix** composed of India's top 10 domestic passenger corridors monitored bidirectionally across 4 advance booking horizons:
-
+APIx ingests domestic airfares across an exact **50-slot matrix** composed of India's top 10 domestic passenger corridors
 | Corridor Code | Origin | Destination | Direction | Monthly Pax (DGCA) | Corridor Weight |
 |:---|:---:|:---:|:---:|:---:|:---:|
 | `DEL-BOM` | DEL | BOM | North $\to$ West | 437,500 | **0.175** |
@@ -342,8 +342,8 @@ APIx ingests domestic airfares across an exact **40-slot matrix** composed of In
 | `HYD-DEL` | HYD | DEL | South $\to$ North | 112,500 | **0.045** |
 | **Total Baseline** | | | | **2,500,000** | **1.000000** |
 
-Each corridor is evaluated daily across the four booking horizons ($T+1, T+7, T+15, T+30, T+45$):
-$$\text{Total Daily Ingestion Slots} = 10 \text{ Corridors} \times 4 \text{ Horizons} = \mathbf{40\ \text{Slots}}$$
+Each corridor is evaluated daily across the five booking horizons ($T+1, T+7, T+15, T+30, T+45$):
+$$\text{Total Daily Ingestion Slots} = 10 \text{ Corridors} \times 5 \text{ Horizons} = \mathbf{50\ \text{Slots}}$$
 
 ---
 
@@ -397,7 +397,7 @@ The `StreamingDedupEngine` processes incoming fare quotes in real time:
 
 ## 5. Database Architecture & 16 Tables on Fresh Startup (14 Domain + 2 Queue)
 
-The database layer utilizes **PostgreSQL** (augmented with **TimescaleDB** hypertable extensions in production) managed via **SQLAlchemy 2.0**. Fresh startup `init_db()` (`backend/app/db/session.py:72`) calls `Base.metadata.create_all()` and creates 16 tables on an empty SQLite file (measured on `/tmp/opencode/apix-verify/startup-empty.db` and `/tmp/opencode/apix-verify/final3.db`). `create_all` is table creation only, not a migration system. The schema consists of the 14 domain tables below plus `crawler_jobs` and `worker_heartbeats` for the durable trigger queue.
+The database layer is written against **SQLAlchemy 2.0** and runs on **SQLite** by default, which is what the committed test suite exercises. **PostgreSQL** is supported for deployment (with optional **TimescaleDB** hypertables), but it is not the default and is not covered by the suite in this repository. Fresh startup `init_db()` (`backend/app/db/session.py:72`) calls `Base.metadata.create_all()` and creates 16 tables on an empty SQLite file (measured on `/tmp/opencode/apix-verify/startup-empty.db` and `/tmp/opencode/apix-verify/final3.db`). `create_all` is table creation only, not a migration system. The schema consists of the 14 domain tables below plus `crawler_jobs` and `worker_heartbeats` for the durable trigger queue.
 
 ```mermaid
 erDiagram
@@ -723,7 +723,7 @@ APIx utilizes a unified, multi-stage **Dockerfile** separating backend computati
 ---
 
 ### 8.2 Daily Ingestion Cadence & Audit Retention
-- **Automated GitHub Actions Cron (`.github/workflows/scrape.yml`):** Runs daily at **02:00 UTC (07:30 IST)** off-peak, executing the 40-slot multi-source ingestion pipeline.
+- **Automated GitHub Actions Cron (`.github/workflows/scrape.yml`):** Runs daily at **02:00 UTC (07:30 IST)** off-peak, executing the 50-slot multi-source ingestion pipeline.
 - **3-Tier Audit Archive Retention:** To satisfy DGCA Rule 135 regulatory provenance standards, all raw scraped fare payloads and deduplicated records are retained for 3 years in cold object storage (S3 / Cloudflare R2).
 
 ---
@@ -765,7 +765,7 @@ Current: **388 passed** with two Starlette TestClient deprecation warnings on `/
 | `scripts/test_econometric_engine.py` | Vectorized Fisher/Paasche/Laspeyres, RMSD, MAPE | **PASSED** | **10 / 10 checks passed** |
 | `scripts/test_db_models.py` | 14 production tables, 10 corridors, weight sum = 1.000 | **PASSED** | **6 / 6 checks passed** |
 | `scripts/test_streaming_dedup.py` | 33.11 us SHA-256 dedup, 28k quotes/sec, arbitrage spread | **PASSED** | **8 / 8 checks passed** |
-| `scripts/test_scheduler_and_proxies.py` | 40-slot matrix, EWMA proxy score, rate limiter, jitter | **PASSED** | **5 / 5 checks passed** |
+| `scripts/test_scheduler_and_proxies.py` | 50-slot matrix, EWMA proxy score, rate limiter, jitter | **PASSED** | **5 / 5 checks passed** |
 | `scripts/test_api_endpoints.py` | Core FastAPI routers, index endpoints, route catalogue | **PASSED** | **13 / 13 passed** |
 | `scripts/test_api_cycle3.py` | Streaming telemetry, proxy health, batch ingestion | **PASSED** | **16 / 16 passed** |
 | `scripts/test_api_cycle4.py` | Econometric indices, CPI gap, elasticity, DGCA violations | **PASSED** | **22 / 22 passed** |
@@ -790,7 +790,7 @@ Current: **388 passed** with two Starlette TestClient deprecation warnings on `/
 | **Deduplication Throughput** | In-Memory Hash Ring | **$28,000\ \text{quotes/sec}$** | High-velocity streaming |
 | **Trunk Corridors Seeded** | DGCA Monthly Passenger Reports | **10 / 10 Corridors** | Top trunk routes |
 | **Corridor Weights Sum** | $\sum_{r=1}^{10} w_r$ | **$1.000000$** | Exact unity |
-| **Advance Horizon Weights** | $w_{T+1} + w_{T+7} + w_{T+15} + w_{T+30}$ | $0.20 + 0.35 + 0.30 + 0.15 = \mathbf{1.000}$ | Exact unity |
+| **Advance Horizon Weights** | $w_{T+1} + w_{T+7} + w_{T+15} + w_{T+30} + w_{T+45}$ | $0.20 + 0.32 + 0.26 + 0.14 + 0.08 = \mathbf{1.000}$ | Exact unity |
 
 ---
 
