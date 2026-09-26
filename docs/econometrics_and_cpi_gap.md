@@ -368,6 +368,10 @@ $$\sum_h w_h = 0.20 + 0.35 + 0.30 + 0.15 = 1.000$$
 
 ---
 
+The city-pair weights in `data/dgca_passenger_traffic_weights.csv` and the corridor literals in `backend/app/db/seed.py` are modelled. They are the output of `ingestion/loaders/dgca_traffic_loader.py::_generate_builtin_dgca_series` (base volume times a seasonal factor), not a DGCA download. The file declares `provenance=generated`. Do not describe them as official DGCA market share.
+
+The bundled CPI file `data/mospi_cpi_historical_2024_2026.json` is not an official series. It was withdrawn because its values contradicted NSO press notes. A comparison against it is not a MoSPI benchmark.
+
 ### 6. MoSPI CPI Transport Sub-Index vs APIx Divergence Tracking
 
 #### 6.1 Institutional Comparison: Official CPI vs APIx
@@ -379,7 +383,7 @@ $$\sum_h w_h = 0.20 + 0.35 + 0.30 + 0.15 = 1.000$$
 | **Route Coverage** | ~10 major city routes (manual) | Top 10 domestic trunk routes (representing >65% traffic) |
 | **Booking Horizons** | Unspecified / Single ad-hoc quote | 4 explicit discrete windows: $T+1, T+7, T+15, T+30$ |
 | **Aggregation Method** | Unweighted / fixed base arithmetic mean | Axiomatic Fisher Ideal ($I_F$) + Paasche + Laspeyres |
-| **Weights** | Base 2012 fixed expenditure shares | Dynamic DGCA passenger volume weights updated quarterly |
+| **Weights** | Base 2012 fixed expenditure shares | Modelled passenger-volume weights in this repo (not a DGCA release); replace with a file that declares `provenance=DGCA` |
 | **Publication Latency**| 12th of succeeding month (**~42 days latency**) | T+0 real-time streaming / T+1 verified publication |
 
 #### 6.2 Divergence Metrics
