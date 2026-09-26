@@ -681,6 +681,6 @@ class SpiceJetScraper(BaseScraper):
                 window_code=window_code,
             )
             results.append(res)
-            time.sleep(random.uniform(0.5, 1.5))
+            self.rate_limit_delay()
 
         return results

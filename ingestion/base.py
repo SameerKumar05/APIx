@@ -132,18 +132,33 @@ class BaseScraper(abc.ABC):
             return f"robots.txt unavailable ({policy.denial_reason})"
         if not policy.can_fetch(url, self.config.robots_user_agent):
             return f"robots.txt disallows {url}"
-        delay = policy.effective_delay(self.config, self.config.robots_user_agent)
-        if delay > 0:
-            time.sleep(delay)
+        self.rate_limit_delay()
         return None
 
+    def effective_rate_limit_delay(self) -> float:
+        """Seconds to wait before the next request to this origin.
+
+        Takes the stricter of our own configured delay and any crawl-delay the
+        origin publishes, so a permissive robots.txt cannot talk us into crawling
+        faster than our own ethics baseline.
+        """
+        delay = self.config.rate_limit_delay_seconds + random.uniform(
+            0.0, self.config.rate_limit_jitter_seconds
+        )
+        if self.config.respect_robots_txt:
+            policy = self.robots_policy()
+            if not policy.is_deny_all:
+                delay = max(
+                    delay, policy.effective_delay(self.config, self.config.robots_user_agent)
+                )
+        return delay
+
     def rate_limit_delay(self) -> None:
-        """Applies configured sleep with randomized jitter to prevent anti-bot blocks."""
-        delay = self.config.rate_limit_delay_seconds
-        jitter = random.uniform(0.0, self.config.rate_limit_jitter_seconds)
-        total_delay = delay + jitter
-        logger.debug("Applying rate limit delay of %.2fs", total_delay)
-        time.sleep(total_delay)
+        """Throttle before the next request. Single choke point for all tier 1 crawlers."""
+        total_delay = self.effective_rate_limit_delay()
+        if total_delay > 0:
+            logger.debug("Throttling %.2fs before request", total_delay)
+            time.sleep(total_delay)
 
     def retry_with_backoff(
         self,
