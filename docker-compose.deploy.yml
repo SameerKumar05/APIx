@@ -1,0 +1,65 @@
+# ==============================================================================
+# APIx GCE Deploy Overlay (volt-rust / /opt/apix)
+#
+# Overlay only — NEVER edit docker-compose.yml for deploy concerns.
+# Usage (project name isolates volumes/networks from any other stack):
+#   docker compose -p apix-deploy \
+#     -f docker-compose.yml -f docker-compose.deploy.yml \
+#     --env-file .env up -d db backend frontend
+#
+# Deliberately runs ONLY db/backend/frontend. worker/scheduler/scraper are
+# excluded: the VM's datacenter IP is blocked by airline sites and another
+# Playwright stack (Firecrawl) already holds ~1.7GB RAM.
+# Backend is reachable on host LOOPBACK ONLY (127.0.0.1:8000); a later step
+# proxies api.adityaai.dev to it via Caddy. Postgres has NO host binding.
+# ==============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # Pinned TimescaleDB, no published port, VM-sized postgres tuning
+  # --------------------------------------------------------------------------
+  db:
+    image: timescale/timescaledb:2.14.2-pg16
+    ports: !reset []
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=2GB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - max_connections=40
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Backend on loopback only, env-driven (never hardcoded), memory-capped
+  # --------------------------------------------------------------------------
+  backend:
+    ports: !override
+      - "127.0.0.1:8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-apix_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-apix_db}
+      DATABASE_URL_SYNC: postgresql+psycopg2://${POSTGRES_USER:-apix_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-apix_db}
+      ENVIRONMENT: ${ENVIRONMENT}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
+      SECRET_KEY: ${SECRET_KEY}
+      INGESTION_API_KEY: ${INGESTION_API_KEY}
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Frontend nginx on loopback only
+  # --------------------------------------------------------------------------
+  frontend:
+    ports: !override
+      # 3001, not 3000: on volt-rust *:3000 is held by the node process
+      # backing review.adityaai.dev, so the base file's 3000 cannot bind.
+      - "127.0.0.1:3001:80"
+    restart: unless-stopped

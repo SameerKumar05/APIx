@@ -54,7 +54,9 @@ CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "
 # ------------------------------------------------------------------------------
 # Stage 2: Frontend Vite Asset Builder
 # ------------------------------------------------------------------------------
-FROM oven/bun:1.2-alpine AS frontend-builder
+# frontend/bun.lock is lockfileVersion 2, which requires bun >= 1.3.
+# The previous 1.2-alpine pin failed with "error: Unknown lockfile version".
+FROM oven/bun:1.4-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 

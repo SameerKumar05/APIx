@@ -13,6 +13,7 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.deploy.template
 logs/
 *.log
 artifacts/
@@ -22,3 +23,6 @@ artifacts/
 .coverage
 .coverage.*
 htmlcov/
+
+# Vercel local project link state
+.vercel/
