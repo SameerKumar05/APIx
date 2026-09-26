@@ -42,15 +42,16 @@ class EconometricIndicesResponse(BaseModel):
     """Complete response payload for GET /api/v1/econometrics/indices."""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
-    base_period: str = Field(..., description="Reference baseline period (e.g. '2024-Q1' or '2026-01-01')")
-    laspeyres_index: float = Field(..., description="Current Laspeyres index value")
-    paasche_index: float = Field(..., description="Current Paasche index value")
-    fisher_index: float = Field(..., description="Current Fisher Ideal index value")
-    substitution_bias: float = Field(..., description="Current substitution bias in index points")
-    series: list[EconometricIndexPoint] = Field(..., description="Historical time-series of daily index points")
+    base_period: str | None = Field(None, description="Earliest observation date in the returned series")
+    laspeyres_index: float | None = Field(None, description="Current Laspeyres index value, or null when no rows exist")
+    paasche_index: float | None = Field(None, description="Current Paasche index value, or null when no rows exist")
+    fisher_index: float | None = Field(None, description="Current Fisher Ideal index value, or null when no rows exist")
+    substitution_bias: float | None = Field(None, description="Current substitution bias in index points, or null when no rows exist")
+    series: list[EconometricIndexPoint] = Field(default_factory=list, description="Historical time-series of daily index points")
     items: list[EconometricIndexPoint] | None = Field(None, description="Alias for series list for standard table views")
     total: int | None = Field(None, description="Total count of index points")
     summary: EconometricIndicesSummary | None = Field(None, description="Statistical summary metrics")
+    data_available: bool = Field(False, description="False when the database has no index rows for the query")
 
 
 # ==============================================================================
@@ -74,11 +75,12 @@ class CpiDivergenceSummary(BaseModel):
     """Statistical metrics of real-time airfare index divergence from official MoSPI CPI."""
     model_config = ConfigDict(from_attributes=True)
 
-    mean_divergence: float = Field(..., description="Average spread in index points over the evaluation window")
-    tracking_error: float = Field(..., description="Standard deviation of monthly index point differences")
-    correlation: float = Field(..., description="Pearson correlation coefficient between APIx and MoSPI series")
-    lead_lag_days: int = Field(..., description="Estimated lead time of APIx real-time prices vs MoSPI release")
-    optimal_lead_days: int = Field(..., description="Empirically calibrated optimal lead window maximizing cross-correlation")
+    mean_divergence: float | None = Field(None, description="Average spread in index points over the evaluation window")
+    tracking_error: float | None = Field(None, description="Standard deviation of monthly index point differences")
+    correlation: float | None = Field(None, description="Pearson correlation, or null when it cannot be computed")
+    lead_lag_days: int | None = Field(None, description="Estimated lead in days, or null when a lead cannot be identified")
+    optimal_lead_days: int | None = Field(None, description="Lead in days that maximizes cross-correlation, or null")
+    reason: str | None = Field(None, description="Why correlation or lead is null")
     last_updated: str | None = Field(None, description="ISO timestamp of divergence computation")
 
 
@@ -86,12 +88,14 @@ class CpiDivergenceResponse(BaseModel):
     """Complete response payload for GET /api/v1/econometrics/cpi-divergence and /cpi-gap."""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
-    current_divergence_pts: float = Field(..., description="Latest divergence spread in index points")
-    inflation_lead_days: int = Field(..., description="Days by which APIx index leads official MoSPI CPI publication")
-    correlation_coefficient: float = Field(..., description="Pearson correlation coefficient between series")
-    divergence_series: list[CpiDivergencePoint] = Field(..., description="Historical series of monthly divergence points")
+    current_divergence_pts: float | None = Field(None, description="Latest divergence spread in index points")
+    inflation_lead_days: int | None = Field(None, description="Days by which APIx leads MoSPI, or null when unidentified")
+    correlation_coefficient: float | None = Field(None, description="Pearson correlation, or null when it cannot be computed")
+    divergence_series: list[CpiDivergencePoint] = Field(default_factory=list, description="Historical series of monthly divergence points")
     series: list[CpiDivergencePoint] | None = Field(None, description="Alias for divergence_series")
     summary: CpiDivergenceSummary | None = Field(None, description="High-level divergence and correlation statistics")
+    data_available: bool = Field(False, description="False when no overlapping APIx and MoSPI observations exist")
+    reason: str | None = Field(None, description="Why correlation or lead is null")
 
 
 # ==============================================================================
@@ -105,9 +109,9 @@ class ElasticityGradientPoint(BaseModel):
     lead_window: str = Field(..., description="Advance booking window tag: 'T+30', 'T+15', 'T+7', 'T+1'")
     window: str | None = Field(None, description="Alias for lead_window")
     days_before_departure: int = Field(..., description="Days remaining until scheduled departure (1, 7, 15, 30)")
-    surge_multiplier: float = Field(..., description="Relative price multiplier versus 30-day baseline")
+    surge_multiplier: float | None = Field(None, description="Fare divided by the observed T+30 fare, when both exist")
     avg_fare_inr: float = Field(..., description="Average observed fare in INR at this horizon")
-    price_elasticity: float = Field(..., description="Estimated point elasticity of demand / price responsiveness")
+    price_elasticity: float | None = Field(None, description="Stored segment elasticity for this window, when the row has one")
     arc_elasticity: float | None = Field(None, description="Midpoint arc elasticity relative to adjacent window")
     demand_index: float | None = Field(None, description="Normalized passenger booking intensity index")
     demand_type: str | None = Field(None, description="'inelastic' | 'elastic'")
@@ -130,9 +134,10 @@ class ElasticityResponse(BaseModel):
 
     route_code: str | None = Field("NATIONAL", description="Evaluated corridor or 'NATIONAL'")
     as_of_date: str | None = Field(None, description="Date for which elasticity curve was evaluated")
-    gradient_points: list[ElasticityGradientPoint] = Field(..., description="Curve points from T+30 to T+1")
+    gradient_points: list[ElasticityGradientPoint] = Field(default_factory=list, description="Curve points from T+30 to T+1")
     curves: list[ElasticityGradientPoint] | None = Field(None, description="Alias for gradient_points")
     segments: ElasticitySegments | None = Field(None, description="Segment ratios and curve parameters")
+    data_available: bool = Field(False, description="False when no route_elasticity row exists")
 
 
 # ==============================================================================
@@ -173,7 +178,7 @@ class CarrierViolationDistribution(BaseModel):
     carrier_name: str = Field(..., description="Airline brand name")
     avg_surge_multiplier: float = Field(..., description="Mean surge multiple observed on flagged routes")
     violations_count: int = Field(..., description="Count of flagged statutory violations")
-    compliance_rate: float = Field(..., description="Overall statutory corridor compliance rate percentage (0-100%)")
+    compliance_rate: float | None = Field(None, description="Compliance rate only when a quote denominator exists in the database")
 
 
 class DgcaViolationsSummary(BaseModel):
@@ -191,11 +196,13 @@ class DgcaViolationsResponse(BaseModel):
     """Complete response payload for GET /api/v1/econometrics/dgca-violations."""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
-    violations: list[DgcaViolationItem] = Field(..., description="List of flagged statutory tariff violations")
-    carrier_distribution: list[CarrierViolationDistribution] = Field(..., description="Per-carrier compliance and violation statistics")
-    total_evaluated: int = Field(..., description="Total flight quotes evaluated in regulatory audit audit window")
+    violations: list[DgcaViolationItem] = Field(default_factory=list, description="List of flagged statutory tariff violations")
+    items: list[DgcaViolationItem] = Field(default_factory=list, description="Alias for violations")
+    carrier_distribution: list[CarrierViolationDistribution] = Field(default_factory=list, description="Per-carrier statistics computed from stored rows")
+    total_evaluated: int = Field(..., description="Count of matching violation rows. Zero when the table has none")
     total_violations: int = Field(..., description="Total statutory violations detected")
     summary: DgcaViolationsSummary | None = Field(None, description="Regulatory breakdown and severity summary")
+    data_available: bool = Field(False, description="False when no matching violation rows exist")
 
 
 # ==============================================================================

@@ -449,6 +449,7 @@ def get_cpi_divergence_analysis(
             "divergence_airfare_pct": gap_airfare_pct,
             "divergence_transport_pct": gap_transport_pct,
             "published_at": m.published_at.isoformat() if m.published_at else None,
+            "source": m.source,
         })
 
     return results
