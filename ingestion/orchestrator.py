@@ -3,7 +3,7 @@
 Coordinates automated, rate-limited, and jittered airfare data collection across:
 - 10 DGCA Domestic Trunk Routes (DEL, BOM, BLR, HYD, CCU)
 - 4 SIH Mandatory Advance Booking Windows (T+1, T+7, T+15, T+30)
-- Multi-Source Live Scrapers: MakeMyTrip, SpiceJet, EaseMyTrip, Amadeus GDS, and DGCA Synthetic Fallback
+- Multi-Source Scrapers: the 11 PS portals, Amadeus GDS, and DGCA Synthetic Fallback. A registered scraper is not a live fare.
 - Anti-bot jitter injection (randomized delays between requests)
 - Periodic browser context and session recycling
 - Micro-batch chunked network dispatch to APIx Backend Ingestion API
@@ -34,11 +34,20 @@ from ingestion.config import (
     IngestionConfig,
     Route,
 )
+from ingestion.crawlers.airindia import AirIndiaScraper
+from ingestion.crawlers.airindia_express import AirIndiaExpressScraper
+from ingestion.crawlers.akasa import AkasaScraper
 from ingestion.crawlers.amadeus import AmadeusFlightClient
+from ingestion.crawlers.cleartrip import CleartripScraper
 from ingestion.crawlers.easemytrip import EaseMyTripScraper
+from ingestion.crawlers.goibibo import GoibiboScraper
+from ingestion.crawlers.indigo import IndiGoScraper
+from ingestion.crawlers.ixigo import IxigoScraper
 from ingestion.crawlers.makemytrip import MakeMyTripScraper
 from ingestion.crawlers.spicejet import SpiceJetScraper
 from ingestion.crawlers.synthetic import SyntheticFlightGenerator
+from ingestion.crawlers.yatra import YatraScraper
+from ingestion.sources import PS_SOURCE_TYPES
 
 # Configure logging
 logging.basicConfig(
@@ -47,6 +56,27 @@ logging.basicConfig(
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
 logger = logging.getLogger("ingestion.orchestrator")
+
+PS_PORTAL_SOURCES: Tuple[str, ...] = tuple(PS_SOURCE_TYPES)
+
+
+def build_scraper_registry(config: IngestionConfig) -> Dict[str, BaseScraper]:
+    """Every registered scraper. PS portals are implemented; live fares are not implied."""
+    return {
+        "easemytrip": EaseMyTripScraper(config=config),
+        "makemytrip": MakeMyTripScraper(config=config),
+        "spicejet": SpiceJetScraper(config=config),
+        "indigo": IndiGoScraper(config=config),
+        "airindia": AirIndiaScraper(config=config),
+        "airindiaexpress": AirIndiaExpressScraper(config=config),
+        "akasa": AkasaScraper(config=config),
+        "yatra": YatraScraper(config=config),
+        "cleartrip": CleartripScraper(config=config),
+        "ixigo": IxigoScraper(config=config),
+        "goibibo": GoibiboScraper(config=config),
+        "amadeus": AmadeusFlightClient(config=config),
+        "synthetic": SyntheticFlightGenerator(config=config),
+    }
 
 # Booking window alias map for scheduling compatibility
 WINDOW_ALIAS_MAP: Dict[str, str] = {
@@ -131,14 +161,7 @@ class IngestionOrchestrator:
             or "easemytrip"
         )
 
-        # Initialize crawler registry
-        self.scrapers: Dict[str, BaseScraper] = {
-            "easemytrip": EaseMyTripScraper(config=self.config),
-            "makemytrip": MakeMyTripScraper(config=self.config),
-            "spicejet": SpiceJetScraper(config=self.config),
-            "amadeus": AmadeusFlightClient(config=self.config),
-            "synthetic": SyntheticFlightGenerator(config=self.config),
-        }
+        self.scrapers: Dict[str, BaseScraper] = build_scraper_registry(self.config)
 
         # Handle explicit single scraper injection
         if scraper is not None:
@@ -172,14 +195,7 @@ class IngestionOrchestrator:
             current_slot,
             self.session_recycle_every,
         )
-        # Re-initialize scrapers
-        self.scrapers = {
-            "easemytrip": EaseMyTripScraper(config=self.config),
-            "makemytrip": MakeMyTripScraper(config=self.config),
-            "spicejet": SpiceJetScraper(config=self.config),
-            "amadeus": AmadeusFlightClient(config=self.config),
-            "synthetic": SyntheticFlightGenerator(config=self.config),
-        }
+        self.scrapers = build_scraper_registry(self.config)
         if self.scraper_source in self.scrapers:
             self.scraper = self.scrapers[self.scraper_source]
         elif self.scraper_source == "custom":
@@ -259,7 +275,7 @@ class IngestionOrchestrator:
         start_time = time.time()
 
         # Primary sources to aggregate
-        sources = ["makemytrip", "spicejet", "easemytrip"]
+        sources = list(PS_PORTAL_SOURCES)
         aggregated_records: List[RawFareRecord] = []
         collected_errors: List[str] = []
         source_counts: Dict[str, int] = {}
@@ -589,7 +605,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--scraper",
-        choices=["multi_source", "makemytrip", "spicejet", "easemytrip", "amadeus", "synthetic"],
+        choices=["multi_source", *PS_PORTAL_SOURCES, "amadeus", "synthetic"],
         default=os.getenv("SCRAPER_SOURCE", "multi_source"),
         help="Active scraper source or multi_source aggregation (default: multi_source)",
     )
