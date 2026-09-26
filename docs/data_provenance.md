@@ -1,0 +1,138 @@
+# Data provenance and source status
+
+This document records exactly what APIx has and has not measured. It is the
+reference for the short summary in the [README](../README.md).
+
+The rule the project follows: **a number is only presented as a measurement when
+it was read from a real source.** Everything else is labelled, and the label is
+enforced in code rather than promised in prose.
+
+## Summary
+
+| Question | Answer |
+| --- | --- |
+| Has a live airfare ever been read? | **No.** Not one. |
+| Rows claiming to be live in the database | **0** |
+| Are scrapers implemented for all 11 PS-named portals? | Yes, as registered classes |
+| Do any of them currently produce a fare? | **No.** Every one is blocked or fare-less. |
+| Is the dashboard badge honest? | Yes. It reads `SIMULATED` and cannot read `LIVE` without a corroborated scrape. |
+| Is the route weighting official DGCA data? | **No.** It is modelled, and labelled as such. |
+
+`GET /api/v1/health` reports this machine-readably:
+
+```json
+{
+  "ps_named_sources_total": 11,
+  "ps_named_sources_implemented": 11,
+  "produces_live_fares": false,
+  "live_verified_sources": []
+}
+```
+
+Implemented means the scraper class is registered and will attempt a fetch. It
+does not mean a fare was read.
+
+## Per-source status
+
+Measured with `ingestion.robots.load_policy` as `APIxBot` on 2026-09-26, before
+issuing any search request.
+
+| Source | robots.txt | Outcome |
+| --- | --- | --- |
+| MakeMyTrip | HTTP 200, `Disallow: /flight/search*` for `*` | Declines. This is the path the scraper builds. |
+| Air India Express | HTTP 200, `Disallow: /flight-availability` | Declines. |
+| Cleartrip | HTTP 200, `Disallow: /flights/search*` | Declines. |
+| Ixigo | HTTP 200, `Disallow: /search/result/`, `Disallow: /flights/search` | Declines. |
+| IndiGo | Unreachable, `ReadTimeout` | Fails closed. curl also saw an HTTP/2 stream reset. |
+| Air India | Unreachable, `ReadTimeout` | Fails closed. |
+| Yatra | Unreachable, `ReadTimeout` | Fails closed. |
+| Goibibo | Unreachable, `ReadTimeout` | Fails closed. |
+| Akasa | HTTP 200, no `Disallow` | Homepage reachable, but no results URL and no fare read. |
+| SpiceJet | HTTP 200, no `Disallow` on the API path | Reachable, but publishes no structured fare. |
+| EaseMyTrip | HTTP 200 | Reachable, but no fare has been read. |
+
+A robots denial, HTTP 403, CAPTCHA, or a page without a fare yields **zero live
+records and an explicit reason**, then falls through to the synthetic tier with
+`is_synthetic=true`. No fare is ever invented to fill a gap.
+
+IndiGo and Air India also run partner-gated NDC portals
+(`developer.goindigo.in`, `ndc.airindia.com`). Those are distribution APIs, not
+the public booking pages these scrapers call, and no credentials were available.
+
+## What is genuinely reachable
+
+SpiceJet's availability endpoint answers and yields unambiguous flight identity:
+
+```
+GET https://www.spicejet.com/api/v3/search/availability
+HTTP 200, 17777 bytes, data.trips[]
+  -> SG 815, DEL 09:50 -> BOM 12:25
+```
+
+Two things stop that becoming a fare.
+
+**There is no structured fare field.** The price is embedded in an opaque key that
+decodes to fragments such as `USAV~5511~~0~665~` and
+`X!0:48004:1004:854:5994:2364:1524:895:280`. The mapping is undocumented, so no
+fare was guessed.
+
+**Akamai fronts MakeMyTrip.** Measured three ways: stock `curl` receives `403`,
+Playwright's bundled Chromium is reset with `net::ERR_HTTP2_PROTOCOL_ERROR`, and
+the distro build at `/usr/bin/chromium` returned HTTP 200 with 500864 bytes of
+real content. The scraper prefers a system Chromium through `resolve_launch_kwargs`
+with a `playwright_browser_executable` override, but that unblock is **not
+durable**: retested under repetition the same client returned 0 of 3 successes.
+Sustained probing tips the egress IP into a temporary Akamai throttle.
+
+`api.spicejet.com` is not blocked at all. It is NXDOMAIN on both 1.1.1.1 and
+8.8.8.8, meaning the hostname does not exist. No change of hosting provider can
+make a nonexistent hostname resolve.
+
+## How the badge is prevented from lying
+
+Four mechanisms, all enforced in code:
+
+1. **A missing provenance flag defaults to synthetic.** A record that omits
+   `is_synthetic` is persisted as `is_synthetic=true`.
+2. **The UI derives its state from the data**, reading `SIMULATED`, `MIXED`,
+   `LIVE SCRAPE`, or `PROVENANCE UNKNOWN`. There is no path that sets `LIVE`
+   independently of the rows.
+3. **`scripts/audit_provenance.py` fails closed.** It exits non-zero if any row
+   claims to be live without corroborating telemetry, a scraping run, proxy
+   evidence, and scrape-time diversity.
+4. **The header does not say LIVE.** The fare feed is labelled `FARE FEED`, and
+   the provenance badge is contract-tested in
+   `frontend/scripts/verify-mock-data.ts`.
+
+A prior defect, now fixed: `amadeus.py` labelled generated mock records
+`is_synthetic=False`, so a live run would have persisted invented fares as real
+and earned a false `LIVE` badge. 450 rows previously mislabelled were re-flagged.
+
+## Two things that are estimates, not measurements
+
+**Base fare versus taxes.** The columns exist and are separate, but when a source
+does not supply the split it is synthesised by a single documented constant,
+`ESTIMATED_BASE_FARE_RATIO = 0.78`. Do not present base-versus-tax figures as
+measured. UDF and convenience charges stay `NULL` unless a source reports them.
+
+**Route and carrier weights.** The corridor weights, the carrier market shares,
+and the advance-purchase weights are **modelled**, not published DGCA figures.
+`ingestion/loaders/dgca_traffic_loader.py` generates its built-in series and marks
+every record `is_synthetic=True`; a data file must declare its own provenance
+before the loader will treat it as official. DGCA does publish real monthly
+city-pair passenger traffic as free XLSX with no login, and pointing the loader
+at such a file is the intended upgrade path.
+
+## Evidence paths
+
+Paths like `evidence/live-ingestion-verification.json` refer to local verification
+artifacts from the audit campaign. They are intentionally **not committed**, so
+those references will not resolve from a fresh clone. Every quantitative claim
+here is reproducible from the committed test suite and `scripts/audit_provenance.py`.
+
+## What would close the gap
+
+Running the worker in live mode daily for 30 days. The back-test harness
+(`scripts/backtest_vs_mospi.py`) computes the estimator correctly and **exits
+non-zero rather than printing a verdict** until 30 days of Fisher index history
+exist. It is time, not code.
