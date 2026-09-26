@@ -219,8 +219,10 @@ run_step "22/23" "Master Pytest Full Test Suite (Cycles 1-4)" \
 # 23. Frontend SPA Types & Verification
 # ------------------------------------------------------------------------------
 if command -v bun >/dev/null 2>&1 && [ -d "$REPO_ROOT/frontend" ]; then
+    # The verification checks the production build output, so build first. Without
+    # this the step passed only on a machine that happened to have a stale dist/.
     run_step "23/23" "Frontend Types, Mock Contracts & Verification" \
-        "cd \"$REPO_ROOT/frontend\" && bun scripts/verify-mock-data.ts"
+        "cd \"$REPO_ROOT/frontend\" && bun run build && bun scripts/verify-mock-data.ts"
 elif [ -d "$REPO_ROOT/frontend" ]; then
     echo -e "${YELLOW}[STEP 23/23 SKIPPED] Bun not found; skipping frontend mock data execution.${RESET}\n"
 fi
