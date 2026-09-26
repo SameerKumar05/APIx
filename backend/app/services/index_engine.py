@@ -20,24 +20,32 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
-# Official DGCA domestic airline passenger market share weights (baseline 2026)
+# MODELLED domestic airline market shares, not a DGCA release. These mirror
+# AIRLINES in ingestion/config.py so the index and the seed data cannot disagree.
+# They sum to exactly 1.0; the previous values summed to 0.99, which quietly
+# under-weighted every carrier in the composite.
 DEFAULT_AIRLINE_MARKET_SHARES: Dict[str, float] = {
-    "6E": 0.62,  # IndiGo
-    "AI": 0.20,  # Air India
-    "IX": 0.08,  # Air India Express
-    "QP": 0.05,  # Akasa Air
-    "SG": 0.04,  # SpiceJet
+    "6E": 0.60,  # IndiGo
+    "AI": 0.15,  # Air India
+    "IX": 0.10,  # Air India Express
+    "QP": 0.10,  # Akasa Air
+    "SG": 0.05,  # SpiceJet
 }
 
-# Booking horizon advance purchase weights (DGCA lead-time distribution)
+# MODELLED advance-purchase weights, not a measured DGCA lead-time distribution.
+# These mirror DEFAULT_LEAD_TIME_PAX_SHARES in econometric_engine.py so the two
+# weight tables cannot drift. T+45 was absent here, which left the fifth booking
+# window contributing nothing to the composite fare.
 DEFAULT_BOOKING_WINDOW_WEIGHTS: Dict[str, float] = {
     "T1": 0.20,   # 1-day advance (urgent / business / emergency)
-    "T7": 0.35,   # 7-day advance (short-lead standard)
-    "T15": 0.30,  # 15-day advance (planned leisure)
-    "T30": 0.15,  # 30-day advance (early bird / holiday)
+    "T7": 0.32,   # 7-day advance (short-lead standard)
+    "T15": 0.26,  # 15-day advance (planned leisure)
+    "T30": 0.14,  # 30-day advance (early bird / holiday)
+    "T45": 0.08,  # 45-day advance (far-planned / corporate travel policy)
 }
 
-# Benchmark DGCA city-pair passenger traffic shares for top Indian routes
+# MODELLED city-pair traffic shares, not a DGCA release. Mirrors the seed data
+# in backend/app/db/seed.py so the two cannot disagree.
 DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES: Dict[str, float] = {
     "DEL-BOM": 0.175,
     "BOM-DEL": 0.175,
@@ -583,28 +591,26 @@ def calculate_route_composite_fare(
             sk = f"T{sk}"
         normalized_fares[sk] = float(v)
 
-    # If all 4 canonical windows are present
-    canonical_windows = ["T1", "T7", "T15", "T30"]
-    if all(w in normalized_fares for w in canonical_windows):
-        return (
-            target_weights["T1"] * normalized_fares["T1"]
-            + target_weights["T7"] * normalized_fares["T7"]
-            + target_weights["T15"] * normalized_fares["T15"]
-            + target_weights["T30"] * normalized_fares["T30"]
-        )
-
-    # If partial windows are provided, normalize available window weights
-    present_weights: Dict[str, float] = {}
-    for w in normalized_fares:
-        present_weights[w] = target_weights.get(w, 1.0 / len(normalized_fares))
-
+    # Weight by the windows we actually hold a fare for, renormalised to 1.0.
+    #
+    # A previous version fast-pathed the four original windows and returned their
+    # weighted sum unnormalised. Once T+45 took 0.08 of the weight those four
+    # totalled 0.92, so identical fares produced a composite 8% low and T+45 was
+    # never consulted at all. One intersection-and-renormalise path is correct for
+    # every subset of windows, so there is no longer a case to keep in sync.
+    present_weights: Dict[str, float] = {
+        window: target_weights.get(window, 0.0) for window in normalized_fares
+    }
     weight_sum = sum(present_weights.values())
     if weight_sum <= 0:
-        weight_sum = 1.0
+        # None of the supplied windows are weighted, so fall back to an even mix
+        # rather than returning an unweighted number.
+        weight_sum = float(len(normalized_fares))
+        present_weights = {window: 1.0 for window in normalized_fares}
 
     composite = sum(
-        (present_weights[w] / weight_sum) * normalized_fares[w]
-        for w in normalized_fares
+        (present_weights[window] / weight_sum) * normalized_fares[window]
+        for window in normalized_fares
     )
     return float(composite)
 
