@@ -517,3 +517,22 @@ This is a mitigation, not a guarantee. The upstream edge can still throttle the 
 ### Fare decomposition is an estimate, not a measurement
 
 `raw_fares` has separate `base_fare`, `taxes_and_fees` and `total_fare` columns, but when a source does not supply the split it is synthesised by a hardcoded ratio, and the two implementations disagree: `ingestion/base.py:68` uses 0.78 and `backend/app/db/ingestion_repo.py:150` uses 0.85. Every row in the current database is exactly 0.85 x total. Only `ingestion/crawlers/makemytrip.py` parses a real split, and no live scrape has yet supplied one. Do not present base-versus-tax figures as measured.
+
+## Schema migrations
+
+`init_db()` calls `Base.metadata.create_all()`, which creates missing tables. It does **not** add columns to
+tables that already exist. Any deployment against an existing database must therefore run the migration chain first:
+
+```bash
+DATABASE_URL="postgresql://..." alembic upgrade head
+```
+
+`migrations/env.py` resolves the URL from the `DATABASE_URL` environment variable and falls back to the app's
+`Settings.DATABASE_URL`, so it always targets the same database the app uses. It overrides any `sqlalchemy.url`
+set directly on an Alembic `Config`, which means scripts and tests must set the environment variable rather than
+the config object.
+
+Skipping this step is not a soft failure. The ORM selects every mapped column, so a database missing a column
+fails every read that hydrates a full row, not just the new feature. `tests/test_migration_drift.py` asserts that
+`alembic upgrade head` produces exactly the schema the ORM declares, and that upgrading a pre-populated table is
+additive.
