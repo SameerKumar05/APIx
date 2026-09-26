@@ -76,6 +76,18 @@ class DgcaTrafficRecord(BaseModel):
     distance_km: float = Field(..., gt=0, description="Great-circle flight distance in kilometers")
     period_rank: int | None = Field(default=None, ge=1, le=50, description="Volume ranking within month (1 = highest)")
     route_code: str = Field(default="", description="IATA corridor code e.g. DEL-BOM")
+    is_synthetic: bool = Field(
+        default=True,
+        description=(
+            "True when the volumes were modelled rather than read from a DGCA release. "
+            "Modelled weights are usable for development and for asserting index mechanics, "
+            "but they are not official statistics and must not be presented as such."
+        ),
+    )
+    source: str = Field(
+        default="",
+        description="Provenance string: the DGCA publication and retrieval date, or the generator name.",
+    )
 
     def model_post_init(self, __context: Any) -> None:
         if not self.route_code:
@@ -142,9 +154,16 @@ ANNUAL_GROWTH_RATE: float = 0.082
 
 
 def _generate_builtin_dgca_series() -> list[DgcaTrafficRecord]:
-    """Generate authoritative 27-month DGCA city-pair traffic series (2024-01 to 2026-03).
+    """Generate a MODELLED 27-month city-pair traffic series (2024-01 to 2026-03).
 
-    Ensures that for EVERY single month, normalized weights strictly sum to 1.000000.
+    This is not DGCA data. Volumes are derived from the base corridor figures in
+    TRUNK_CORRIDORS multiplied by a secular trend and seasonal factors, then the
+    share weights are normalised so each month sums to exactly 1.000000. Every
+    record it produces is marked ``is_synthetic=True`` so no downstream consumer
+    can mistake these weights for an official DGCA release.
+
+    DGCA does publish real monthly city-pair passenger traffic as free XLSX with no
+    login required. Point DgcaTrafficLoader at such a file to obtain sourced weights.
     """
     all_records: list[DgcaTrafficRecord] = []
 
@@ -219,6 +238,12 @@ def _generate_builtin_dgca_series() -> list[DgcaTrafficRecord]:
                 share_weight=weight,
                 distance_km=item["distance_km"],
                 period_rank=rank_idx,
+                is_synthetic=True,
+                source=(
+                    "MODELLED by ingestion/loaders/dgca_traffic_loader.py::_generate_builtin_dgca_series "
+                    "(base volumes x secular trend x seasonality, weights normalised to 1.0). "
+                    "Not a DGCA release."
+                ),
             )
             all_records.append(record)
 
@@ -237,8 +262,10 @@ class DgcaTrafficLoader:
         """Initialize DGCA Traffic Loader.
 
         Args:
-            data_path: Optional path to external CSV or JSON file containing DGCA traffic data.
-                       If None or file does not exist, defaults to authoritative built-in series.
+            data_path: Optional path to an external CSV or JSON file of DGCA city-pair traffic.
+                       When absent, the loader falls back to a MODELLED series whose records are
+                       flagged is_synthetic=True. Check loader.provenance before treating any
+                       weight as an official statistic.
         """
         self.data_path = Path(data_path) if data_path else None
         self._records: list[DgcaTrafficRecord] = []
@@ -251,9 +278,33 @@ class DgcaTrafficLoader:
             else:
                 self._records = self.parse_csv(self.data_path)
         else:
+            logger.warning(
+                "No DGCA traffic file supplied; falling back to MODELLED city-pair weights "
+                "(is_synthetic=True). These are not official DGCA statistics. DGCA publishes "
+                "monthly city-pair traffic as free XLSX with no login; pass data_path to use it."
+            )
             self._records = _generate_builtin_dgca_series()
 
         self._index_records()
+
+    @property
+    def provenance(self) -> dict[str, Any]:
+        """Where the loaded weights came from, and whether they are official.
+
+        Downstream consumers and the API should surface this so a modelled series is
+        never presented as a DGCA statistic.
+        """
+        synthetic = {r.is_synthetic for r in self._records}
+        sources = sorted({r.source for r in self._records if r.source})
+        return {
+            "is_synthetic": synthetic == {True},
+            "record_count": len(self._records),
+            "period_count": len(self._records_by_period),
+            "first_period": min((r.year_month for r in self._records), default=None),
+            "last_period": max((r.year_month for r in self._records), default=None),
+            "sources": sources,
+            "data_path": str(self.data_path) if self.data_path else None,
+        }
 
     def _index_records(self) -> None:
         """Organize records by period and precalculate corridor weight maps."""
@@ -384,7 +435,9 @@ class DgcaTrafficLoader:
                     share_weight=weight,
                     distance_km=item["distance_km"],
                     period_rank=rank,
-                )
+                
+                    is_synthetic=False,
+                    source=f"DGCA city-pair traffic file: {self.data_path}",)
                 records.append(rec)
 
         return records
@@ -461,7 +514,9 @@ class DgcaTrafficLoader:
                     share_weight=weight,
                     distance_km=item["distance_km"],
                     period_rank=rank,
-                )
+                
+                    is_synthetic=False,
+                    source=f"DGCA city-pair traffic file: {self.data_path}",)
                 records.append(rec)
 
         return records

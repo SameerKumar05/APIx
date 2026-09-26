@@ -212,3 +212,54 @@ class TestLoadersCliRunner(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDgcaWeightProvenance:
+    """Weights must never be mistakable for official DGCA statistics.
+
+    The built-in series is modelled from base volumes, not read from a DGCA
+    release, so every record it produces has to be flagged. These tests pin that
+    contract, because a silent fallback is how a fabricated statistic ships.
+    """
+
+    def test_modelled_fallback_is_flagged_synthetic(self) -> None:
+        from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
+
+        loader = DgcaTrafficLoader()
+        prov = loader.provenance
+        assert prov["is_synthetic"] is True, "fallback weights must be flagged"
+        assert prov["record_count"] > 0
+        assert prov["first_period"] and prov["last_period"]
+        assert all("MODELLED" in src for src in prov["sources"]), prov["sources"]
+
+    def test_every_record_carries_provenance(self) -> None:
+        from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
+
+        loader = DgcaTrafficLoader()
+        for record in loader._records:
+            assert record.is_synthetic is True
+            assert record.source, "record must name its provenance"
+
+    def test_real_file_is_not_flagged_synthetic(self, tmp_path) -> None:
+        from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
+
+        csv = tmp_path / "dgca.csv"
+        csv.write_text(
+            "year_month,origin,destination,pax_volume,distance_km\n"
+            "2026-01,DEL,BOM,437500,1148\n"
+            "2026-01,BOM,DEL,437500,1148\n",
+            encoding="utf-8",
+        )
+        loader = DgcaTrafficLoader(data_path=csv)
+        prov = loader.provenance
+        assert prov["is_synthetic"] is False
+        assert prov["data_path"] == str(csv)
+        assert all(r.is_synthetic is False for r in loader._records)
+        assert all("dgca.csv" in r.source for r in loader._records)
+
+    def test_weights_still_sum_to_one_per_period(self) -> None:
+        from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
+
+        loader = DgcaTrafficLoader()
+        for period, weights in loader._weights_by_period.items():
+            assert abs(sum(weights.values()) - 1.0) < 1e-5, period
