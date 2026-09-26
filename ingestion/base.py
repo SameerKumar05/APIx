@@ -16,7 +16,7 @@ import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from backend.app.core.cleaning import sourced_duration_minutes
 from backend.app.core.fare_components import (
@@ -29,6 +29,9 @@ from ingestion.config import (
     IngestionConfig,
     Route,
 )
+
+if TYPE_CHECKING:
+    from ingestion.robots import RobotsPolicy
 
 logger = logging.getLogger("ingestion.base")
 T = TypeVar("T")

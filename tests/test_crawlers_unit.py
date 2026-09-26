@@ -31,7 +31,12 @@ worktree_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if worktree_root not in sys.path:
     sys.path.insert(0, worktree_root)
 
-from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
+from ingestion.base import (
+    SYSTEM_CHROMIUM_CANDIDATES,
+    BaseScraper,
+    RawFareRecord,
+    ScrapeResult,
+)
 from ingestion.config import (
     BOOKING_WINDOWS,
     DEFAULT_ROUTES,

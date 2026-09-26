@@ -49,7 +49,9 @@ except ImportError:
 from backend.app.core.cleaning import reported_flight_status, sourced_duration_minutes
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
 from ingestion.config import (
+    BOOKING_WINDOWS,
     DEFAULT_ROUTES,
+    BookingWindow,
     IngestionConfig,
     Route,
 )
