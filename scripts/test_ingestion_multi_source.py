@@ -5,7 +5,7 @@ Validates Cycle 3 Deliverables:
 1. MakeMyTrip Scraper (MakeMyTripScraper) with dynamic route parameters and fallback.
 2. SpiceJet Direct Airline Crawler (SpiceJetScraper) with header randomization and route parsing.
 3. Multi-Source Ingestion Orchestrator (IngestionOrchestrator) aggregating MakeMyTrip, SpiceJet, and EaseMyTrip.
-4. Full 40-slot execution across all 10 DGCA trunk routes and 4 SIH booking windows.
+4. Full 50-slot execution across all 10 DGCA trunk routes and 5 SIH booking windows.
 5. Micro-batch dispatch to FastAPI Ingestion API (/api/v1/ingestion/batch) with 100% acceptance.
 6. Execution summary artifact generation at artifacts/multi_source_summary.json.
 7. Domain invariants: valid IATA airport codes, valid airline codes, non-negative fares, dedup hash uniqueness.
@@ -118,9 +118,9 @@ def run_multi_source_verification() -> int:
     )
 
     # --------------------------------------------------------------------------
-    # STEP 2: Verify Multi-Source Ingestion Orchestrator Execution across all 40 slots
+    # STEP 2: Verify Multi-Source Ingestion Orchestrator Execution across all 50 slots
     # --------------------------------------------------------------------------
-    print("\n[STEP 2/5] Executing Multi-Source Orchestration across all 40 Slots...")
+    print("\n[STEP 2/5] Executing Multi-Source Orchestration across all 50 Slots...")
     client = LocalTestClientIngestionClient(app, config=config)
     orchestrator = IngestionOrchestrator(
         config=config,
@@ -134,8 +134,8 @@ def run_multi_source_verification() -> int:
     summary: OrchestratorRunSummary = orchestrator.run_all_slots(dry_run=False)
 
     print(f"  -> Run ID:                   {summary.run_id}")
-    print(f"  -> Total Slots Scheduled:    {summary.total_slots} (Expected: 40)")
-    print(f"  -> Successful Slots:         {summary.successful_slots} (Expected: 40)")
+    print(f"  -> Total Slots Scheduled:    {summary.total_slots} (Expected: 50)")
+    print(f"  -> Successful Slots:         {summary.successful_slots} (Expected: 50)")
     print(f"  -> Failed Slots:             {summary.failed_slots} (Expected: 0)")
     print(f"  -> Total Records Collected:  {summary.total_records_collected}")
     print(f"  -> Total Batches Dispatched: {summary.total_batches_dispatched}")
@@ -143,23 +143,23 @@ def run_multi_source_verification() -> int:
     print(f"  -> Backend Status:           {summary.backend_status}")
     print(f"  -> Tier Distribution:        {summary.tier_distribution}")
 
-    assert summary.total_slots == 40, f"Expected 40 slots, got {summary.total_slots}"
+    assert summary.total_slots == 50, f"Expected 50 slots, got {summary.total_slots}"
     assert (
-        summary.successful_slots == 40
-    ), f"Expected 40 successful slots, got {summary.successful_slots}"
+        summary.successful_slots == 50
+    ), f"Expected 50 successful slots, got {summary.successful_slots}"
     assert (
         summary.failed_slots == 0
     ), f"Expected 0 failed slots, got {summary.failed_slots}"
     assert (
         summary.total_records_collected > 400
-    ), f"Expected >400 records across 40 slots, got {summary.total_records_collected}"
+    ), f"Expected >400 records across 50 slots, got {summary.total_records_collected}"
     assert (
         summary.batches_successful == summary.total_batches_dispatched
     ), "Not all batches succeeded"
     assert (
         summary.backend_status == "success"
     ), f"Backend status is not success: {summary.backend_status}"
-    print("  ✓ Multi-source 40-slot orchestration succeeded with 100% slot pass rate!")
+    print("  ✓ Multi-source 50-slot orchestration succeeded with 100% slot pass rate!")
 
     # --------------------------------------------------------------------------
     # STEP 3: Verify Multi-Source Distribution and Scraper Diversity
@@ -168,7 +168,7 @@ def run_multi_source_verification() -> int:
         "\n[STEP 3/5] Verifying Multi-Source Scraper Coverage and Slot Aggregation..."
     )
     slot_entries = summary.slots
-    assert len(slot_entries) == 40, f"Expected 40 slot entries, got {len(slot_entries)}"
+    assert len(slot_entries) == 50, f"Expected 50 slot entries, got {len(slot_entries)}"
 
     unique_routes = {s["route"] for s in slot_entries}
     unique_windows = {s["booking_window"] for s in slot_entries}
@@ -180,7 +180,8 @@ def run_multi_source_verification() -> int:
         "T+7",
         "T+15",
         "T+30",
-    }, f"Expected 4 booking windows, got {unique_windows}"
+        "T+45",
+    }, f"Expected 5 booking windows, got {unique_windows}"
 
     for slot in slot_entries:
         assert (

@@ -327,16 +327,16 @@ async def test_scheduler_orchestration() -> None:
         stagger_seconds=0.01, apply_jitter=False
     )
     assert (
-        len(sweep_results) == 4
-    ), f"Expected 4 sweep results, got {len(sweep_results)}"
+        len(sweep_results) == 5
+    ), f"Expected 5 sweep results, got {len(sweep_results)}"
     assert all(r["success"] is True for r in sweep_results)
     logger.info("✓ Multi-slot sweep successfully executed with 100% success rate")
 
     # 7. Execution history and audit logging
     sweep_status = sweep_scheduler.get_job_status()
     history = sweep_status["history_summary"]
-    assert history["total_executions"] == 4
-    assert history["total_successes"] == 4
+    assert history["total_executions"] == 5
+    assert history["total_successes"] == 5
     assert history["total_failures"] == 0
     assert history["success_rate_percent"] == 100.0
     logger.info("✓ Execution history and audit metrics verified: %s", history)
