@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from collections import defaultdict
 from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
@@ -17,11 +18,19 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
+from backend.app.core.cleaning import (
+    OUTLIER_LOOKBACK_DAYS,
+    exclusion_for_fare,
+    is_index_eligible,
+    is_payable_status,
+    resolve_duration_minutes,
+)
 from backend.app.core.fare_components import (
+    FareSplitBasis,
     canonical_booking_class,
     canonical_flight_status,
+    classify_fare_split,
     optional_amount,
-    split_base_and_taxes,
 )
 from backend.app.models.raw_fare import RawFare
 from backend.app.models.scraping import ScrapingRun
@@ -39,6 +48,91 @@ def _optional_component(data: Dict[str, Any], key: str) -> Optional[float]:
     if isinstance(value, (int, float, str)):
         return optional_amount(value)
     return float(value)
+
+
+def _optional_minutes(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        token = value.strip()
+        if token == "":
+            return None
+        try:
+            value = float(token)
+        except ValueError:
+            return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    return None
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _peer_fares(
+    db: Session,
+    origin: str,
+    destination: str,
+    booking_window: str,
+    as_of: datetime,
+) -> list[float]:
+    """Payable fares for this corridor and window inside the outlier lookback."""
+    stmt = select(
+        RawFare.total_fare,
+        RawFare.flight_status,
+        RawFare.index_exclusion_reason,
+        RawFare.scraped_at,
+    ).where(
+        RawFare.origin == origin,
+        RawFare.destination == destination,
+        RawFare.booking_window == booking_window,
+    )
+    as_of_utc = _as_utc(as_of)
+    cutoff = as_of_utc - timedelta(days=OUTLIER_LOOKBACK_DAYS)
+    peers: list[float] = []
+    for total_fare, status, reason, scraped_at in db.execute(stmt):
+        if scraped_at is None or not is_index_eligible(status, reason):
+            continue
+        scraped = _as_utc(scraped_at)
+        if cutoff <= scraped <= as_of_utc:
+            peers.append(float(total_fare))
+    return peers
+
+
+def _assign_exclusions(db: Session, records: list[dict[str, Any]]) -> None:
+    """Flag outliers and non-payable quotes. Every record is still inserted.
+
+    Persisting with index_exclusion_reason is the audit trail. Deleting the row
+    would hide the quote and make it impossible to show why it missed the index.
+    """
+    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for rec in records:
+        key = (str(rec["origin"]), str(rec["destination"]), str(rec["booking_window"]))
+        groups[key].append(rec)
+
+    for (origin, destination, window), group in groups.items():
+        as_of = max(_as_utc(rec["scraped_at"]) for rec in group)
+        db_peers = _peer_fares(db, origin, destination, window, as_of)
+        payable_indexes = [
+            index
+            for index, rec in enumerate(group)
+            if is_payable_status(rec.get("flight_status"))
+        ]
+        payable_fares = [float(group[index]["total_fare"]) for index in payable_indexes]
+        for index, rec in enumerate(group):
+            others = [
+                fare
+                for peer_index, fare in zip(payable_indexes, payable_fares, strict=True)
+                if peer_index != index
+            ]
+            rec["index_exclusion_reason"] = exclusion_for_fare(
+                float(rec["total_fare"]),
+                rec.get("flight_status"),
+                [*db_peers, *others],
+            )
 
 
 def _optional_token(
@@ -185,13 +279,25 @@ def _normalize_fare_record(
     else:
         fdate = now_utc.date()
 
-    # Pricing. The ratio is an estimate and runs only when both parts are absent.
     total_fare = float(data.get("total_fare") or data.get("fare_inr") or 0.0)
-    base_fare, taxes_and_fees = split_base_and_taxes(
-        total_fare,
-        _optional_component(data, "base_fare"),
-        _optional_component(data, "taxes_and_fees"),
-    )
+    base_in = _optional_component(data, "base_fare")
+    tax_in = _optional_component(data, "taxes_and_fees")
+    incoming_basis = data.get("fare_split_basis")
+    known_bases = {item.value for item in FareSplitBasis}
+    if (
+        isinstance(incoming_basis, str)
+        and incoming_basis in known_bases
+        and base_in is not None
+        and tax_in is not None
+    ):
+        base_fare = base_in
+        taxes_and_fees = tax_in
+        fare_split_basis = incoming_basis
+    else:
+        split = classify_fare_split(total_fare, base_in, tax_in)
+        base_fare = split.base_fare
+        taxes_and_fees = split.taxes_and_fees
+        fare_split_basis = split.basis.value
     booking_class = _optional_token(data, "booking_class", canonical_booking_class)
     udf_fee = _optional_component(data, "udf_fee")
     convenience_fee = _optional_component(data, "convenience_fee")
@@ -217,11 +323,11 @@ def _normalize_fare_record(
             flight_date=fdate,
         )
 
-    duration_minutes = data.get("duration_minutes")
-    if duration_minutes is not None:
-        duration_minutes = int(duration_minutes)
-    elif dep_dt and arr_dt:
-        duration_minutes = max(0, int((arr_dt - dep_dt).total_seconds() // 60))
+    duration_minutes = resolve_duration_minutes(
+        _optional_minutes(data.get("duration_minutes")),
+        dep_dt,
+        arr_dt,
+    )
 
     return {
         "batch_id": batch_id,
@@ -242,6 +348,8 @@ def _normalize_fare_record(
         "udf_fee": udf_fee,
         "convenience_fee": convenience_fee,
         "flight_status": flight_status,
+        "index_exclusion_reason": None,
+        "fare_split_basis": fare_split_basis,
         "total_fare": total_fare,
         "source_platform": source_platform,
         "scraped_at": scraped_dt,
@@ -297,6 +405,8 @@ def bulk_insert_raw_fares(
             continue
         seen_hashes.add(h)
         normalized_records.append(norm)
+
+    _assign_exclusions(db, normalized_records)
 
     inserted_count = 0
     bind = db.get_bind()
@@ -635,10 +745,14 @@ def get_raw_fares_for_calculation(
         .order_by(RawFare.total_fare.asc())
     )
 
+    eligible = [
+        row
+        for row in db.scalars(stmt).all()
+        if is_index_eligible(row.flight_status, row.index_exclusion_reason)
+    ]
     if limit is not None:
-        stmt = stmt.limit(limit)
-
-    return list(db.scalars(stmt).all())
+        return eligible[:limit]
+    return eligible
 
 
 def count_raw_fares(

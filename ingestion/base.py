@@ -16,10 +16,11 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypeVar, Union
 
+from backend.app.core.cleaning import sourced_duration_minutes
 from backend.app.core.fare_components import (
     canonical_booking_class,
     canonical_flight_status,
-    split_base_and_taxes,
+    classify_fare_split,
 )
 from ingestion.config import (
     AIRLINE_MAP,
@@ -63,6 +64,7 @@ class RawFareRecord:
     udf_fee: Optional[float] = None  # INR. NULL unless the source supplied it.
     convenience_fee: Optional[float] = None  # INR. NULL unless the source supplied it.
     flight_status: Optional[str] = None  # scheduled / cancelled / sold_out, or None.
+    fare_split_basis: Optional[str] = None  # measured / residual / estimated.
 
     def __post_init__(self) -> None:
         # Align secondary / compatibility fields
@@ -72,13 +74,24 @@ class RawFareRecord:
             self.total_fare = self.fare_inr
         if self.source_platform is None:
             self.source_platform = self.source
-        self.base_fare, self.taxes_and_fees = split_base_and_taxes(
+        split = classify_fare_split(
             self.total_fare,
             self.base_fare,
             self.taxes_and_fees,
         )
+        self.base_fare = split.base_fare
+        self.taxes_and_fees = split.taxes_and_fees
+        self.fare_split_basis = split.basis.value
         self.booking_class = canonical_booking_class(self.booking_class)
         self.flight_status = canonical_flight_status(self.flight_status)
+        if not self.departure_datetime:
+            self.duration_minutes = None
+        else:
+            self.duration_minutes = sourced_duration_minutes(
+                self.duration_minutes,
+                self.departure_datetime,
+                self.arrival_datetime,
+            )
 
     @property
     def origin_iata(self) -> str:

@@ -32,6 +32,10 @@ class RawFareRecord(BaseModel):
         None,
         description="scheduled, cancelled, or sold_out. Null when the source did not report a status.",
     )
+    fare_split_basis: Optional[str] = Field(
+        None,
+        description="measured, residual, or estimated. Null when the writer did not classify the split.",
+    )
     stops: int = Field(0, ge=0, description="Number of layovers/stops (0 for direct flights)")
     source: str = Field("ota_scraper", description="Data source provider (e.g., makemytrip, easemytrip, airline_direct)")
     booking_window: Optional[Union[int, str]] = Field(None, description="Lead time in days or window code (e.g. 7 or 'T+7')")
