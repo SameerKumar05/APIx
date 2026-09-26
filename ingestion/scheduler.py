@@ -302,6 +302,7 @@ class IngestionScheduler:
                 window=b_window,
                 slot_index=slot_idx,
                 base_date=base_date,
+                proxy=proxy_url,
             )
 
             records_count = len(scrape_res.records)

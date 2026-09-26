@@ -22,7 +22,7 @@ import random
 import re
 import time
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 # Optional Playwright import for headless browser automation
 try:
@@ -188,16 +188,20 @@ class EaseMyTripScraper(BaseScraper):
         config: Optional[IngestionConfig] = None,
         amadeus_client: Optional[AmadeusFlightClient] = None,
         synthetic_generator: Optional[SyntheticFlightGenerator] = None,
+        proxy: Optional[Union[str, Dict[str, str]]] = None,
     ) -> None:
         super().__init__(config)
+        self.proxy = proxy or getattr(self.config, "proxy_url", None)
         self.amadeus_client = amadeus_client or AmadeusFlightClient(config=self.config)
         self.synthetic_generator = synthetic_generator or SyntheticFlightGenerator(config=self.config)
 
-    def get_playwright_context_options(self) -> Dict[str, Any]:
+    def get_playwright_context_options(
+        self, proxy_override: Optional[Union[str, Dict[str, str]]] = None
+    ) -> Dict[str, Any]:
         """Generates randomized stealth browser context options with Indian locale and timezone."""
         viewport = random.choice(STEALTH_VIEWPORTS)
         user_agent = random.choice(self.config.user_agents)
-        return {
+        options: Dict[str, Any] = {
             "viewport": viewport,
             "user_agent": user_agent,
             "locale": "en-IN",
@@ -218,6 +222,13 @@ class EaseMyTripScraper(BaseScraper):
                 "Upgrade-Insecure-Requests": "1",
             },
         }
+        proxy_config = proxy_override or self.proxy
+        if proxy_config:
+            if isinstance(proxy_config, str):
+                options["proxy"] = {"server": proxy_config}
+            elif isinstance(proxy_config, dict):
+                options["proxy"] = proxy_config
+        return options
 
     def build_search_url(self, origin: str, destination: str, flight_date: date) -> str:
         """Constructs EaseMyTrip domestic search query URL.

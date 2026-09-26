@@ -193,6 +193,7 @@ class IngestionOrchestrator:
         window: BookingWindow,
         slot_index: int,
         base_date: Optional[date] = None,
+        proxy: Optional[str] = None,
     ) -> Tuple[ScrapeResult, SlotResultSummary]:
         """Executes a single route-window slot and returns the result with summary."""
         target_date = (base_date or date.today()) + timedelta(days=window.days_advance)
@@ -214,6 +215,11 @@ class IngestionOrchestrator:
 
         # Single designated scraper execution
         scraper_instance = self.scrapers.get(self.scraper_source, self.scraper)
+        if proxy:
+            # The slot loop is sequential, so binding the proxy to the instance for
+            # this call is safe. Threading it as a scrape_route argument would be
+            # cleaner but every crawler would need the signature change.
+            scraper_instance.proxy = proxy
         scrape_res = scraper_instance.scrape_route(
             origin=route.origin,
             destination=route.destination,
@@ -338,6 +344,7 @@ class IngestionOrchestrator:
         window_code: Union[str, BookingWindow] = "T+1",
         target_date: Optional[date] = None,
         scraper_source: Optional[str] = None,
+        proxy: Optional[str] = None,
     ) -> ScrapeResult:
         """Convenience method for scheduler and ad-hoc jobs to scrape a single slot.
 
@@ -372,6 +379,11 @@ class IngestionOrchestrator:
             return scrape_res
 
         scraper_inst = self.scrapers.get(active_source, self.scraper)
+        if proxy:
+            # The slot loop is sequential, so binding the proxy to the instance for
+            # this call is safe. Threading it as a scrape_route argument would be
+            # cleaner but every crawler would need the signature change.
+            scraper_inst.proxy = proxy
         return scraper_inst.scrape_route(
             origin=orig_str,
             destination=dest_str,
