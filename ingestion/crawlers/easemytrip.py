@@ -51,6 +51,7 @@ try:
 except ImportError:
     HAS_PLAYWRIGHT_ASYNC = False
 
+from backend.app.core.cleaning import reported_flight_status, sourced_duration_minutes
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
 from ingestion.config import (
     BOOKING_WINDOW_MAP,
@@ -313,7 +314,12 @@ class EaseMyTripScraper(BaseScraper):
                 fare_inr = self.normalize_fare(fare_raw)
 
                 # Duration and stops
-                duration = int(item.get("Duration") or item.get("duration_minutes") or item.get("dur", 120))
+                duration = sourced_duration_minutes(
+                    item.get("Duration") or item.get("duration_minutes") or item.get("dur"),
+                    dep_dt_str,
+                    arr_dt_str,
+                )
+                flight_status = reported_flight_status(item)
                 stops = int(item.get("Stops") or item.get("stops") or 0)
 
                 record = RawFareRecord(
@@ -331,6 +337,7 @@ class EaseMyTripScraper(BaseScraper):
                     booking_window=window_code,
                     flight_date=dep_dt_str.split("T")[0],
                     duration_minutes=duration,
+                    flight_status=flight_status,
                     is_synthetic=False,
                     source_platform="easemytrip",
                 )

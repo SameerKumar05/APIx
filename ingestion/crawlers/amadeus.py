@@ -26,6 +26,7 @@ except ImportError:
     httpx = None  # type: ignore
     HAS_HTTPX = False
 
+from backend.app.core.cleaning import reported_flight_status, sourced_duration_minutes
 from backend.app.core.fare_components import ESTIMATED_BASE_FARE_RATIO
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
 from ingestion.config import (
@@ -241,8 +242,16 @@ class AmadeusFlightClient(BaseScraper):
                 arr_datetime_str = self.normalize_datetime(arr_at_raw)
 
                 # Duration in minutes
-                duration_str = primary_itinerary.get("duration", "PT2H0M")
-                duration_minutes = parse_iso_duration(duration_str)
+                duration_str = primary_itinerary.get("duration")
+                if duration_str:
+                    duration_minutes = parse_iso_duration(duration_str)
+                else:
+                    duration_minutes = sourced_duration_minutes(
+                        None,
+                        dep_datetime_str,
+                        arr_datetime_str,
+                    )
+                flight_status = reported_flight_status(offer)
 
                 # Number of stops
                 num_stops = max(0, len(segments) - 1)
@@ -286,6 +295,7 @@ class AmadeusFlightClient(BaseScraper):
                     booking_window=window_code,
                     flight_date=dep_datetime_str.split("T")[0],
                     duration_minutes=duration_minutes,
+                    flight_status=flight_status,
                     base_fare=base_fare_inr,
                     total_fare=fare_inr,
                     is_synthetic=payload_is_generated,

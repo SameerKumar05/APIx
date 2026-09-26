@@ -39,6 +39,7 @@ try:
 except ImportError:
     HAS_HTTPX = False
 
+from backend.app.core.cleaning import reported_flight_status, sourced_duration_minutes
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
 from ingestion.config import (
     BOOKING_WINDOW_MAP,
@@ -320,12 +321,14 @@ class SpiceJetScraper(BaseScraper):
                 fare_inr = self.normalize_fare(fare_raw)
 
                 # Duration and stops
-                duration = int(
+                duration = sourced_duration_minutes(
                     item.get("duration")
                     or item.get("durationMinutes")
-                    or first_seg.get("duration")
-                    or 120
+                    or first_seg.get("duration"),
+                    dep_dt_str,
+                    arr_dt_str,
                 )
+                flight_status = reported_flight_status(item) or reported_flight_status(first_seg)
                 stops = int(item.get("stops", len(segments) - 1 if segments else 0))
                 if stops < 0:
                     stops = 0
@@ -345,6 +348,7 @@ class SpiceJetScraper(BaseScraper):
                     booking_window=window_code,
                     flight_date=dep_dt_str.split("T")[0],
                     duration_minutes=duration,
+                    flight_status=flight_status,
                     is_synthetic=False,
                     source_platform="spicejet",
                 )

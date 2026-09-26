@@ -39,6 +39,7 @@ try:
 except ImportError:
     HAS_HTTPX = False
 
+from backend.app.core.cleaning import reported_flight_status, sourced_duration_minutes
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
 from ingestion.config import (
     BOOKING_WINDOW_MAP,
@@ -442,7 +443,12 @@ class MakeMyTripScraper(BaseScraper):
                         taxes_val = float(fd.get("tax") or fd.get("taxes") or 0.0)
 
                 # Duration and stops
-                duration = int(item.get("duration") or item.get("durationMinutes") or item.get("dur", 120))
+                duration = sourced_duration_minutes(
+                    item.get("duration") or item.get("durationMinutes") or item.get("dur"),
+                    dep_dt_str,
+                    arr_dt_str,
+                )
+                flight_status = reported_flight_status(item)
                 stops = int(item.get("stops", len(segments) - 1 if segments else 0))
                 if stops < 0:
                     stops = 0
@@ -470,6 +476,7 @@ class MakeMyTripScraper(BaseScraper):
                     duration_minutes=duration,
                     base_fare=base_fare_val,
                     taxes_and_fees=taxes_val,
+                    flight_status=flight_status,
                     is_synthetic=False,
                     source_platform="makemytrip",
                 )
