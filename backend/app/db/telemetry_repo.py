@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from backend.app.models.telemetry import ProxyHealthRecord, ScraperTelemetry
@@ -790,7 +791,7 @@ def cleanup_old_telemetry(
     stmt_telemetry = delete(ScraperTelemetry).where(
         ScraperTelemetry.created_at < cutoff_datetime
     )
-    res_t = db.execute(stmt_telemetry)
+    res_t = cast("CursorResult[Any]", db.execute(stmt_telemetry))
     telemetry_pruned = (
         res_t.rowcount if res_t.rowcount is not None and res_t.rowcount >= 0 else 0
     )
@@ -799,7 +800,7 @@ def cleanup_old_telemetry(
     stmt_proxy = delete(ProxyHealthRecord).where(
         ProxyHealthRecord.created_at < cutoff_datetime
     )
-    res_p = db.execute(stmt_proxy)
+    res_p = cast("CursorResult[Any]", db.execute(stmt_proxy))
     proxy_pruned = (
         res_p.rowcount if res_p.rowcount is not None and res_p.rowcount >= 0 else 0
     )

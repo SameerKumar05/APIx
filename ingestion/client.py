@@ -91,7 +91,8 @@ class IngestionClient:
 
         with urllib.request.urlopen(req, timeout=self.config.timeout_seconds) as resp:
             resp_body = resp.read().decode("utf-8")
-            return json.loads(resp_body)
+            decoded: dict[str, Any] = json.loads(resp_body)
+            return decoded
 
     def _post_with_httpx(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Dispatches batch using httpx."""
@@ -103,7 +104,8 @@ class IngestionClient:
         with httpx.Client(timeout=self.config.timeout_seconds) as client:
             response = client.post(self.batch_endpoint, json=payload, headers=headers)
             response.raise_for_status()
-            return response.json()
+            body: dict[str, Any] = response.json()
+            return body
 
     def post_batch(
         self,
@@ -193,7 +195,8 @@ class IngestionClient:
                 self.batch_endpoint, json=payload, headers=headers
             )
             response.raise_for_status()
-            return response.json()
+            body: dict[str, Any] = response.json()
+            return body
 
     def post_records_chunked(
         self,

@@ -147,7 +147,7 @@ def bulk_upsert_econometric_indices(
             l_idx = rec.laspeyres_index
             p_idx = rec.paasche_index
             f_idx = rec.fisher_ideal_index
-            sb = rec.substitution_bias
+            sb: float | None = rec.substitution_bias
             cm = rec.calculation_method
         elif isinstance(rec, dict):
             d = rec["date"]
@@ -825,7 +825,9 @@ def get_dgca_violations_summary(
         .where(DgcaViolation.detected_at >= cutoff)
         .group_by(DgcaViolation.severity)
     )
-    severity_counts = dict(db.execute(sev_stmt).all())
+    severity_counts: dict[str, int] = {
+        row[0]: row[1] for row in db.execute(sev_stmt).all()
+    }
 
     # Breakdown by airline
     airline_stmt = (
@@ -833,7 +835,9 @@ def get_dgca_violations_summary(
         .where(DgcaViolation.detected_at >= cutoff)
         .group_by(DgcaViolation.airline_code)
     )
-    airline_counts = dict(db.execute(airline_stmt).all())
+    airline_counts: dict[str, int] = {
+        row[0]: row[1] for row in db.execute(airline_stmt).all()
+    }
 
     # Breakdown by status
     status_stmt = (
@@ -841,7 +845,9 @@ def get_dgca_violations_summary(
         .where(DgcaViolation.detected_at >= cutoff)
         .group_by(DgcaViolation.status)
     )
-    status_counts = dict(db.execute(status_stmt).all())
+    status_counts: dict[str, int] = {
+        row[0]: row[1] for row in db.execute(status_stmt).all()
+    }
 
     return {
         "period_days": days,

@@ -13,7 +13,7 @@ import os
 import random
 import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Set
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -155,7 +155,8 @@ class BaseScraper(abc.ABC):
         if proxy is None:
             return None
         if hasattr(proxy, "to_playwright_proxy"):
-            return proxy.to_playwright_proxy()
+            proxy_dict: dict[str, str] = proxy.to_playwright_proxy()
+            return proxy_dict
         if isinstance(proxy, str):
             if not proxy:
                 return None
@@ -238,7 +239,7 @@ class BaseScraper(abc.ABC):
         operation: Callable[[], T],
         max_retries: int | None = None,
         backoff_factor: float | None = None,
-        exceptions: tuple[type, ...] = (Exception,),
+        exceptions: tuple[type[BaseException], ...] = (Exception,),
     ) -> T:
         """Executes an operation with exponential backoff and jitter."""
         retries = max_retries if max_retries is not None else self.config.max_retries
@@ -332,9 +333,9 @@ class BaseScraper(abc.ABC):
     def validate_record(
         self,
         record: RawFareRecord,
-        allowed_origins: set[str] | None = None,
-        allowed_destinations: set[str] | None = None,
-        allowed_airlines: set[str] | None = None,
+        allowed_origins: Set[str] | None = None,
+        allowed_destinations: Set[str] | None = None,
+        allowed_airlines: Set[str] | None = None,
     ) -> tuple[bool, list[str]]:
         """Validates a RawFareRecord against strict business rules.
 

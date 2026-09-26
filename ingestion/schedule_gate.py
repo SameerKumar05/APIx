@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import TextIO
+from typing import TextIO, cast
 
 from apscheduler.triggers.cron import CronTrigger
 
@@ -67,7 +67,7 @@ def next_daily_run(cron_expr: str, now: datetime) -> datetime:
     nxt = trigger.get_next_fire_time(None, now)
     if nxt is None:
         raise ScheduleError(cron_expr)
-    return nxt
+    return cast("datetime", nxt)
 
 
 def normalize_scraper_source(raw: str) -> str:

@@ -11,9 +11,10 @@ import json
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import and_, or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -192,7 +193,7 @@ def heartbeat_job(
             lease_expires_at=now + timedelta(seconds=lease_seconds),
         )
     )
-    result = db.execute(stmt)
+    result = cast("CursorResult[Any]", db.execute(stmt))
     db.commit()
     renewed = result.rowcount > 0
     if not renewed:
@@ -234,7 +235,7 @@ def complete_job(
             error_message=error_message,
         )
     )
-    result = db.execute(stmt)
+    result = cast("CursorResult[Any]", db.execute(stmt))
     db.commit()
     return result.rowcount > 0
 
@@ -255,43 +256,54 @@ def reap_stale_jobs(db: Session) -> dict[str, int]:
         CrawlerJob.lease_expires_at.is_not(None), CrawlerJob.lease_expires_at < now
     )
 
-    dead_deadline = db.execute(
-        update(CrawlerJob)
-        .where(active, deadline_passed)
-        .values(
-            status="DEAD",
-            completed_at=now,
-            error_message="Dead-lettered: execution deadline exceeded",
-        )
-        .execution_options(synchronize_session="fetch")
+    dead_deadline = cast(
+        "CursorResult[Any]",
+        db.execute(
+            update(CrawlerJob)
+            .where(active, deadline_passed)
+            .values(
+                status="DEAD",
+                completed_at=now,
+                error_message="Dead-lettered: execution deadline exceeded",
+            )
+            .execution_options(synchronize_session="fetch")
+        ),
     ).rowcount
-    dead_attempts = db.execute(
-        update(CrawlerJob)
-        .where(active, lease_expired, CrawlerJob.attempts >= CrawlerJob.max_attempts)
-        .values(
-            status="DEAD",
-            completed_at=now,
-            error_message="Dead-lettered: max retry attempts exceeded",
-        )
-        .execution_options(synchronize_session="fetch")
+    dead_attempts = cast(
+        "CursorResult[Any]",
+        db.execute(
+            update(CrawlerJob)
+            .where(
+                active, lease_expired, CrawlerJob.attempts >= CrawlerJob.max_attempts
+            )
+            .values(
+                status="DEAD",
+                completed_at=now,
+                error_message="Dead-lettered: max retry attempts exceeded",
+            )
+            .execution_options(synchronize_session="fetch")
+        ),
     ).rowcount
-    requeued = db.execute(
-        update(CrawlerJob)
-        .where(
-            active,
-            lease_expired,
-            CrawlerJob.attempts < CrawlerJob.max_attempts,
-            or_(CrawlerJob.deadline_at.is_(None), CrawlerJob.deadline_at >= now),
-        )
-        .values(
-            status="PENDING",
-            worker_id=None,
-            lease_token=None,
-            heartbeat_at=None,
-            lease_expires_at=None,
-            error_message="Worker lease expired; re-queued by reaper",
-        )
-        .execution_options(synchronize_session="fetch")
+    requeued = cast(
+        "CursorResult[Any]",
+        db.execute(
+            update(CrawlerJob)
+            .where(
+                active,
+                lease_expired,
+                CrawlerJob.attempts < CrawlerJob.max_attempts,
+                or_(CrawlerJob.deadline_at.is_(None), CrawlerJob.deadline_at >= now),
+            )
+            .values(
+                status="PENDING",
+                worker_id=None,
+                lease_token=None,
+                heartbeat_at=None,
+                lease_expires_at=None,
+                error_message="Worker lease expired; re-queued by reaper",
+            )
+            .execution_options(synchronize_session="fetch")
+        ),
     ).rowcount
 
     dead = int(dead_deadline) + int(dead_attempts)
@@ -305,20 +317,23 @@ def reap_stale_jobs(db: Session) -> dict[str, int]:
 
 def release_worker_leases(db: Session, worker_id: str) -> int:
     """Return this worker's claimed jobs to the queue on graceful shutdown."""
-    released = db.execute(
-        update(CrawlerJob)
-        .where(
-            CrawlerJob.worker_id == worker_id,
-            CrawlerJob.status.in_(["CLAIMED", "RUNNING"]),
-        )
-        .values(
-            status="PENDING",
-            worker_id=None,
-            lease_token=None,
-            heartbeat_at=None,
-            lease_expires_at=None,
-            error_message="Released on worker shutdown",
-        )
+    released = cast(
+        "CursorResult[Any]",
+        db.execute(
+            update(CrawlerJob)
+            .where(
+                CrawlerJob.worker_id == worker_id,
+                CrawlerJob.status.in_(["CLAIMED", "RUNNING"]),
+            )
+            .values(
+                status="PENDING",
+                worker_id=None,
+                lease_token=None,
+                heartbeat_at=None,
+                lease_expires_at=None,
+                error_message="Released on worker shutdown",
+            )
+        ),
     ).rowcount
     db.commit()
     if released:
@@ -391,7 +406,7 @@ def update_worker_heartbeat(
             jobs_failed=WorkerHeartbeat.jobs_failed + jobs_failed_increment,
         )
     )
-    result = db.execute(stmt)
+    result = cast("CursorResult[Any]", db.execute(stmt))
     db.commit()
     return result.rowcount > 0
 

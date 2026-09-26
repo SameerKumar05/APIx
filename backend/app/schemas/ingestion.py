@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -105,7 +105,7 @@ class RawFareRecord(BaseModel):
             if clean.isdigit():
                 return int(clean)
             return clean
-        return v
+        return cast("int | str | None", v)
 
 
 class IngestionBatchRequest(BaseModel):

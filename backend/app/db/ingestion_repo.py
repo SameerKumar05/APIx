@@ -13,9 +13,10 @@ import logging
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, func, or_, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from backend.app.core.cleaning import (
@@ -443,7 +444,7 @@ def bulk_insert_raw_fares(
                 .on_conflict_do_nothing(index_elements=["hash_id"])
             )
 
-        res = db.execute(stmt)
+        res = cast("CursorResult[Any]", db.execute(stmt))
         # res.rowcount returns the number of newly inserted rows
         if res.rowcount is not None and res.rowcount >= 0:
             inserted_count += res.rowcount
@@ -645,7 +646,10 @@ def cleanup_old_raw_fares(
             RawFare.flight_date < cutoff_date,
         )
     )
-    res = db.execute(stmt.execution_options(synchronize_session="fetch"))
+    res = cast(
+        "CursorResult[Any]",
+        db.execute(stmt.execution_options(synchronize_session="fetch")),
+    )
     pruned_count = res.rowcount if res.rowcount is not None and res.rowcount >= 0 else 0
 
     if commit:
