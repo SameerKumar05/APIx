@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from fastapi.testclient import TestClient
 
+from backend.app.api.v1.endpoints.stream import manager as stream_manager
 from backend.app.core.config import settings
 from backend.app.db.crawler_job_repo import register_worker_heartbeat
 from backend.app.db.session import Base, SessionLocal, engine
@@ -64,6 +65,27 @@ with SessionLocal() as arb_db:
             )
         )
     arb_db.commit()
+
+# /stream/recent reads an in-memory buffer that only a live WebSocket feed
+# populates. Populate the singleton directly so the endpoint has something to
+# return; each entry must satisfy LiveFareTickerItem.
+stream_manager.recent_fares = [
+    {
+        "fare_id": f"cycle3-stream-{i}",
+        "airline_code": "6E",
+        "airline_name": "IndiGo",
+        "flight_number": f"6E-{200 + i}",
+        "origin": "DEL",
+        "destination": "BOM",
+        "route_code": "DEL-BOM",
+        "fare_inr": 4500.0 + i * 100,
+        "source": "synthetic",
+        "departure_datetime": "2026-09-20T07:30:00",
+        "booking_datetime": "2026-09-13T07:30:00",
+        "timestamp": "2026-09-20T07:30:00",
+    }
+    for i in range(6)
+]
 
 client = TestClient(app)
 
