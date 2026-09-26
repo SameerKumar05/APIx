@@ -19,3 +19,6 @@ artifacts/
 *.db
 *.sqlite
 *.sqlite3
+.coverage
+.coverage.*
+htmlcov/

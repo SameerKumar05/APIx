@@ -7,6 +7,7 @@
  * 4. Production build artifact generation (HTML, JS, CSS in dist/).
  */
 
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 import fs from 'node:fs';
@@ -233,8 +234,23 @@ async function runCycle2Verification() {
   if (!tickerHtml || tickerHtml.length < 200) {
     throw new Error('LiveTicker rendered empty or truncated markup');
   }
-  if (!tickerHtml.includes('LIVE FARE FEED')) {
+  // The header no longer says LIVE. Calling a simulated feed "LIVE FARE FEED"
+  // was itself a false claim, so the contract now pins the honest header and the
+  // provenance badge, which is a stronger check than the one it replaces.
+  if (!tickerHtml.includes('FARE FEED')) {
     throw new Error('LiveTicker missing required stream status header');
+  }
+  // The provenance badge only renders when fares arrive over the WebSocket, which
+  // a server-side render cannot exercise. Assert the four states against the
+  // component source instead, so the honest labelling cannot be dropped silently.
+  const tickerSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/components/LiveTicker.tsx'),
+    'utf-8',
+  );
+  for (const state of ['SIMULATED', 'MIXED', 'LIVE SCRAPE', 'PROVENANCE UNKNOWN']) {
+    if (!tickerSource.includes(state)) {
+      throw new Error(`LiveTicker is missing the ${state} provenance state`);
+    }
   }
   console.log(`  ✓ LiveTicker rendered cleanly (${tickerHtml.length} bytes HTML).`);
 
