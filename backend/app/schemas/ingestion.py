@@ -14,6 +14,24 @@ class RawFareRecord(BaseModel):
     booking_datetime: datetime = Field(..., description="Timestamp when the fare query/booking was recorded")
     fare_inr: float = Field(..., gt=0, description="Total one-way base fare in INR (inclusive of mandatory fees)")
     cabin_class: str = Field("economy", description="Cabin class (economy, premium_economy, business)")
+    booking_class: Optional[str] = Field(
+        None,
+        description="Airline booking/fare-basis code (Y, B, M, X). Distinct from cabin_class.",
+    )
+    udf_fee: Optional[float] = Field(
+        None,
+        ge=0,
+        description="User development fee in INR. Null when the source did not supply it.",
+    )
+    convenience_fee: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Convenience charge in INR. Null when the source did not supply it.",
+    )
+    flight_status: Optional[str] = Field(
+        None,
+        description="scheduled, cancelled, or sold_out. Null when the source did not report a status.",
+    )
     stops: int = Field(0, ge=0, description="Number of layovers/stops (0 for direct flights)")
     source: str = Field("ota_scraper", description="Data source provider (e.g., makemytrip, easemytrip, airline_direct)")
     booking_window: Optional[Union[int, str]] = Field(None, description="Lead time in days or window code (e.g. 7 or 'T+7')")
