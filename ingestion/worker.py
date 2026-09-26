@@ -36,6 +36,7 @@ from backend.app.db.session import SessionLocal
 from backend.app.db.telemetry_repo import log_scraper_telemetry
 from backend.app.models.crawler_job import CrawlerJob
 from ingestion.base import RawFareRecord
+from ingestion.captcha import BLOCKED_BY_CAPTCHA, consume_challenge, telemetry_status_for
 from ingestion.client import IngestionClient
 from ingestion.config import (
     BOOKING_WINDOW_MAP,
@@ -46,6 +47,7 @@ from ingestion.config import (
     Route,
 )
 from ingestion.orchestrator import IngestionOrchestrator
+from ingestion.scrape_hooks import arm_orchestrator
 
 logger = logging.getLogger("ingestion.worker")
 
@@ -225,6 +227,9 @@ class CrawlerWorker:
         errors: list[str] = []
         start_time = time.time()
         slot_idx = 0
+        captcha_hits = 0
+        if self.config.ingestion_mode == "live":
+            arm_orchestrator(self.orchestrator)
 
         try:
             for r in routes:
@@ -235,15 +240,26 @@ class CrawlerWorker:
                             raise RuntimeError(f"Lease lost for job {job_id_str}")
 
                     scraper_override = crawler if crawler not in ("all", "default") else None
-                    scrape_res = self.orchestrator.scrape_slot(
-                        origin=r,
-                        window_code=w,
-                        scraper_source=scraper_override,
+                    scrape_res = consume_challenge(
+                        self.orchestrator.scrape_slot(
+                            origin=r,
+                            window_code=w,
+                            scraper_source=scraper_override,
+                        )
                     )
-
-                    if scrape_res.success and scrape_res.records:
+                    if scrape_res.metadata.get("outcome") == BLOCKED_BY_CAPTCHA:
+                        captcha_hits += 1
+                        errors.append(BLOCKED_BY_CAPTCHA)
+                        logger.warning(
+                            "job %s slot %s-%s %s blocked_by_captcha",
+                            job_id_str,
+                            r.origin,
+                            r.destination,
+                            w.code,
+                        )
+                    elif scrape_res.success and scrape_res.records:
                         all_records.extend(scrape_res.records)
-                    if scrape_res.errors:
+                    if scrape_res.errors and scrape_res.metadata.get("outcome") != BLOCKED_BY_CAPTCHA:
                         errors.extend(scrape_res.errors)
 
                     slot_idx += 1
@@ -259,12 +275,16 @@ class CrawlerWorker:
                 dispatched_batches = len(batch_responses)
 
             elapsed_ms = round((time.time() - start_time) * 1000.0, 2)
+            telemetry_status = telemetry_status_for(records=len(all_records), captcha_hits=captcha_hits)
+            job_status = "FAILED" if telemetry_status == "CAPTCHA" else "COMPLETED"
             summary_dict = {
                 "records_collected": len(all_records),
                 "batches_dispatched": dispatched_batches,
                 "duration_ms": elapsed_ms,
                 "errors": errors,
                 "slots_processed": slot_idx,
+                "outcome": BLOCKED_BY_CAPTCHA if telemetry_status == "CAPTCHA" else telemetry_status,
+                "captcha_hits": captcha_hits,
             }
 
             with self.session_factory() as db:
@@ -273,10 +293,10 @@ class CrawlerWorker:
                     crawler_name=crawler,
                     route=route_str or "ALL",
                     booking_window=window_str or "T+1",
-                    status="SUCCESS" if len(all_records) > 0 else "PARTIAL",
+                    status=telemetry_status,
                     response_time_ms=elapsed_ms,
-                    records_extracted=len(all_records),
-                    error_details="; ".join(errors) if errors else None,
+                    records_extracted=0 if telemetry_status == "CAPTCHA" else len(all_records),
+                    error_details=BLOCKED_BY_CAPTCHA if telemetry_status == "CAPTCHA" else ("; ".join(errors) if errors else None),
                 )
 
                 completed = complete_job(
@@ -284,10 +304,14 @@ class CrawlerWorker:
                     job_id=job_pk,
                     worker_id=self.worker_id,
                     lease_token=lease_tok,
-                    status="COMPLETED",
+                    status=job_status,
                     result_summary=summary_dict,
+                    error_message=BLOCKED_BY_CAPTCHA if telemetry_status == "CAPTCHA" else None,
                 )
-                if completed:
+                if completed and job_status == "FAILED":
+                    update_worker_heartbeat(db, self.worker_id, current_job_id=None, jobs_failed_increment=1)
+                    logger.warning("Job %s blocked_by_captcha; no records ingested", job_id_str)
+                elif completed:
                     update_worker_heartbeat(db, self.worker_id, current_job_id=None, jobs_completed_increment=1)
                     logger.info("Job %s completed successfully: %d fares in %.1fms", job_id_str, len(all_records), elapsed_ms)
                 else:
