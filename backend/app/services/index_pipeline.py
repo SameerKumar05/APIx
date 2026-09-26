@@ -281,8 +281,8 @@ def evaluate_anomaly_condition(
     if baseline_mean is None or baseline_mean <= 0:
         # Without historical baseline, check DoD surge if previous_fare exists
         if previous_fare is not None and previous_fare > 0:
-            dod_surge = calculate_dod_surge(current_fare, previous_fare)
-            if dod_surge >= 0.40:
+            surge_pct: float = calculate_dod_surge(current_fare, previous_fare)
+            if surge_pct >= 0.40:
                 return AnomalyAlert(
                     route_id=route_id,
                     origin=origin,
@@ -295,9 +295,9 @@ def evaluate_anomaly_condition(
                     detected_fare=float(current_fare),
                     baseline_fare=float(previous_fare),
                     z_score=None,
-                    pct_change=round(dod_surge * 100.0, 2),
+                    pct_change=round(surge_pct * 100.0, 2),
                     description=(
-                        f"Day-over-Day surge of {dod_surge * 100:.1f}% on {origin}-{destination} "
+                        f"Day-over-Day surge of {surge_pct * 100:.1f}% on {origin}-{destination} "
                         f"({booking_window}) exceeds 40.0% regulatory threshold."
                     ),
                     status="OPEN",
@@ -310,7 +310,7 @@ def evaluate_anomaly_condition(
     z_score = calculate_z_score(current_fare, baseline_mean, std_to_use)
 
     # Calculate DoD surge if previous day fare is available
-    dod_surge = None
+    dod_surge: float | None = None
     if previous_fare is not None and previous_fare > 0:
         dod_surge = calculate_dod_surge(current_fare, previous_fare)
 

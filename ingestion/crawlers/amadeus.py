@@ -262,7 +262,7 @@ class AmadeusFlightClient(BaseScraper):
                 # Duration in minutes
                 duration_str = primary_itinerary.get("duration")
                 if duration_str:
-                    duration_minutes = parse_iso_duration(duration_str)
+                    duration_minutes: int | None = parse_iso_duration(duration_str)
                 else:
                     duration_minutes = sourced_duration_minutes(
                         None,

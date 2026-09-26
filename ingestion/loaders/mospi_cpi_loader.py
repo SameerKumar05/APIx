@@ -14,7 +14,7 @@ import logging
 from datetime import UTC, date, datetime
 from datetime import date as DateType
 from pathlib import Path
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from pydantic import BaseModel, Field
 from sqlalchemy import Date, DateTime, Float, Integer, String, select
@@ -626,36 +626,41 @@ class MospiCpiLoader:
     def _seed_database_fallback(self, session: Session) -> int:
         """Fallback seeding directly querying or creating mospi_cpi_series table."""
         # Check if MospiCpiSeries is imported in backend.app.models
-        try:
+        if TYPE_CHECKING:
             from backend.app.models.econometrics import MospiCpiSeries
-        except (ImportError, ModuleNotFoundError):
-            # Define minimal Standalone MospiCpiSeries
-            class StandaloneMospiCpi(Base):
-                __tablename__ = "mospi_cpi_series"
-                __table_args__ = ({"extend_existing": True},)
+        else:
+            try:
+                from backend.app.models.econometrics import MospiCpiSeries
+            except (ImportError, ModuleNotFoundError):
+                # Define minimal Standalone MospiCpiSeries
+                class StandaloneMospiCpi(Base):
+                    __tablename__ = "mospi_cpi_series"
+                    __table_args__ = ({"extend_existing": True},)
 
-                id: Mapped[int] = mapped_column(
-                    Integer, primary_key=True, autoincrement=True
-                )
-                year_month: Mapped[str] = mapped_column(
-                    String(7), nullable=False, unique=True, index=True
-                )
-                cpi_transport_index: Mapped[float] = mapped_column(
-                    Float, nullable=False
-                )
-                airfare_sub_index: Mapped[float] = mapped_column(Float, nullable=False)
-                headline_cpi: Mapped[float] = mapped_column(Float, nullable=False)
-                published_at: Mapped[date] = mapped_column(Date, nullable=False)
-                source: Mapped[str] = mapped_column(
-                    String(100), nullable=False, default="undeclared"
-                )
-                created_at: Mapped[datetime] = mapped_column(
-                    DateTime(timezone=True),
-                    nullable=False,
-                    default=lambda: datetime.now(UTC),
-                )
+                    id: Mapped[int] = mapped_column(
+                        Integer, primary_key=True, autoincrement=True
+                    )
+                    year_month: Mapped[str] = mapped_column(
+                        String(7), nullable=False, unique=True, index=True
+                    )
+                    cpi_transport_index: Mapped[float] = mapped_column(
+                        Float, nullable=False
+                    )
+                    airfare_sub_index: Mapped[float] = mapped_column(
+                        Float, nullable=False
+                    )
+                    headline_cpi: Mapped[float] = mapped_column(Float, nullable=False)
+                    published_at: Mapped[date] = mapped_column(Date, nullable=False)
+                    source: Mapped[str] = mapped_column(
+                        String(100), nullable=False, default="undeclared"
+                    )
+                    created_at: Mapped[datetime] = mapped_column(
+                        DateTime(timezone=True),
+                        nullable=False,
+                        default=lambda: datetime.now(UTC),
+                    )
 
-            MospiCpiSeries = StandaloneMospiCpi
+                MospiCpiSeries = StandaloneMospiCpi
 
         # Create table if not present
         Base.metadata.create_all(bind=session.get_bind())

@@ -140,7 +140,9 @@ class FlightBufferState:
 
         self.min_fare = min_p
         self.best_quote = best_q
-        self.best_source_portal = best_q.source_portal if best_q else "unknown"
+        self.best_source_portal = (
+            best_q.source_portal if best_q and best_q.source_portal else "unknown"
+        )
 
         is_new_min = False
         if prev_min is None or (self.min_fare < prev_min - 1e-6):
@@ -562,7 +564,9 @@ class StreamingDedupEngine:
                 keys_to_remove.append(key)
 
         for key in keys_to_remove:
-            state = self._buffer.pop(key, None)
+            if key not in self._buffer:
+                continue
+            state = self._buffer.pop(key)
             if state:
                 self._hash_to_key.pop(state.hash_id, None)
                 self._window_evictions_count += 1

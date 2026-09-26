@@ -10,9 +10,10 @@ import hashlib
 import json
 import os
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, TypedDict
+from typing import Any, Final, TypedDict
 from urllib.parse import urlparse
 
 DEFAULT_MAX_AGE_SECONDS: Final = 43_200
@@ -111,7 +112,7 @@ def origin_host(value: str) -> str:
     return host
 
 
-def parse_storage_state(payload: StorageState) -> StorageState:
+def parse_storage_state(payload: Mapping[str, Any]) -> StorageState:
     """Accept a Playwright storage_state document or raise."""
     cookies = payload["cookies"]
     origins = payload["origins"]

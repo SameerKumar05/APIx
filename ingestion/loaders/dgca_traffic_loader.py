@@ -17,7 +17,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 from sqlalchemy import DateTime, Float, Integer, String, UniqueConstraint, select
@@ -935,43 +935,46 @@ class DgcaTrafficLoader:
         update_active_routes: bool,
     ) -> dict[str, int]:
         """Fallback seeding directly into dgca_traffic_weights table and routes table."""
-        try:
+        if TYPE_CHECKING:
             from backend.app.models.econometrics import DgcaTrafficWeight
-        except (ImportError, ModuleNotFoundError):
+        else:
+            try:
+                from backend.app.models.econometrics import DgcaTrafficWeight
+            except (ImportError, ModuleNotFoundError):
 
-            class StandaloneDgcaTrafficWeight(Base):
-                __tablename__ = "dgca_traffic_weights"
-                __table_args__ = (
-                    UniqueConstraint(
-                        "route_code",
-                        "year_month",
-                        name="uq_dgca_traffic_weights_route_period",
-                    ),
-                    {"extend_existing": True},
-                )
+                class StandaloneDgcaTrafficWeight(Base):
+                    __tablename__ = "dgca_traffic_weights"
+                    __table_args__ = (
+                        UniqueConstraint(
+                            "route_code",
+                            "year_month",
+                            name="uq_dgca_traffic_weights_route_period",
+                        ),
+                        {"extend_existing": True},
+                    )
 
-                id: Mapped[int] = mapped_column(
-                    Integer, primary_key=True, autoincrement=True
-                )
-                route_code: Mapped[str] = mapped_column(
-                    String(20), nullable=False, index=True
-                )
-                year_month: Mapped[str] = mapped_column(
-                    String(7), nullable=False, index=True
-                )
-                pax_volume: Mapped[int] = mapped_column(
-                    Integer, nullable=False, default=0
-                )
-                share_weight: Mapped[float] = mapped_column(
-                    Float, nullable=False, default=0.0
-                )
-                created_at: Mapped[datetime] = mapped_column(
-                    DateTime(timezone=True),
-                    nullable=False,
-                    default=lambda: datetime.now(UTC),
-                )
+                    id: Mapped[int] = mapped_column(
+                        Integer, primary_key=True, autoincrement=True
+                    )
+                    route_code: Mapped[str] = mapped_column(
+                        String(20), nullable=False, index=True
+                    )
+                    year_month: Mapped[str] = mapped_column(
+                        String(7), nullable=False, index=True
+                    )
+                    pax_volume: Mapped[int] = mapped_column(
+                        Integer, nullable=False, default=0
+                    )
+                    share_weight: Mapped[float] = mapped_column(
+                        Float, nullable=False, default=0.0
+                    )
+                    created_at: Mapped[datetime] = mapped_column(
+                        DateTime(timezone=True),
+                        nullable=False,
+                        default=lambda: datetime.now(UTC),
+                    )
 
-            DgcaTrafficWeight = StandaloneDgcaTrafficWeight
+                DgcaTrafficWeight = StandaloneDgcaTrafficWeight
 
         # Ensure table exists
         Base.metadata.create_all(bind=session.get_bind())
@@ -1004,11 +1007,11 @@ class DgcaTrafficLoader:
             latest_ym = self.get_latest_period()
             latest_recs = self.get_period_traffic(latest_ym)
             for r in latest_recs:
-                stmt = select(Route).where(
+                route_stmt = select(Route).where(
                     Route.origin == r.origin,
                     Route.destination == r.destination,
                 )
-                route_obj = session.execute(stmt).scalar_one_or_none()
+                route_obj = session.execute(route_stmt).scalar_one_or_none()
                 if route_obj:
                     route_obj.dgca_monthly_pax = r.pax_volume
                     route_obj.weight = r.share_weight
