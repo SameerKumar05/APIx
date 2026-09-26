@@ -429,7 +429,7 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                 const critAlerts = routeAlerts.filter((a) => a.severity === 'CRITICAL');
                 const highAlerts = routeAlerts.filter((a) => a.severity === 'HIGH');
                 const hasAnomalies = routeAlerts.length > 0 || ((route.anomaly_count ?? 0) > 0);
-                const isSurge = route.change_24h > 1.0;
+                const isSurge = (route.change_24h ?? 0) > 1.0;
 
                 const fareValue = (typeof route.median_fare_inr === 'number' && route.median_fare_inr > 0)
                   ? route.median_fare_inr
@@ -512,7 +512,11 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                     {/* 24h & 7d Changes (Right) */}
                     <td className="py-3 px-4 text-right font-mono tabular-nums">
                       <div className="font-medium text-neutral-200">
-                        {(route.change_24h ?? 0) >= 0 ? `+${(route.change_24h ?? 0).toFixed(1)}%` : `${(route.change_24h ?? 0).toFixed(1)}%`}
+                        {route.change_24h == null
+                          ? '—'
+                          : route.change_24h >= 0
+                            ? `+${route.change_24h.toFixed(1)}%`
+                            : `${route.change_24h.toFixed(1)}%`}
                       </div>
                       <div className="text-[10px] text-neutral-500 mt-0.5">
                         {route.change_7d !== undefined && route.change_7d !== null
@@ -631,7 +635,7 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                       : '—'}
                   </div>
                   <span className="text-[10px] text-neutral-500">
-                    24-hour delta: {selectedRoute.change_24h !== undefined ? `${selectedRoute.change_24h}%` : '0%'}
+                    24-hour delta: {selectedRoute.change_24h == null ? '—' : `${selectedRoute.change_24h}%`}
                   </span>
                 </div>
 
