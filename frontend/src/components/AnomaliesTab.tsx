@@ -432,10 +432,18 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {dgcaValidation.violations.map((v) => {
-                const isBreach = v.compliance_status === 'BREACH';
+              {dgcaValidation.data_available === false || dgcaValidation.evaluation_status === 'not_evaluated' ? (
+                <tr>
+                  <td colSpan={6} className="py-6 px-3 text-center text-slate-400 font-sans">
+                    Not evaluated. No DGCA violation rows are stored.
+                  </td>
+                </tr>
+              ) : dgcaValidation.violations.map((v) => {
+                const isBreach = v.compliance_status === 'BREACH' || v.compliance_status === 'BREACH_DETECTED';
                 const isWarning = v.compliance_status === 'WARNING';
-                const utilization = (v.observed_max_fare_inr / v.statutory_band_cap_inr) * 100;
+                const utilization = v.statutory_band_cap_inr > 0
+                  ? (v.observed_max_fare_inr / v.statutory_band_cap_inr) * 100
+                  : null;
 
                 return (
                   <tr key={v.route_code} className="hover:bg-slate-800/40 transition-colors">
@@ -453,14 +461,14 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2">
                         <span className={`w-12 font-bold ${isBreach ? 'text-rose-400' : 'text-slate-300'}`}>
-                          {utilization.toFixed(1)}%
+                          {utilization == null ? '—' : `${utilization.toFixed(1)}%`}
                         </span>
                         <div className="w-20 bg-slate-800 rounded-full h-1.5 overflow-hidden">
                           <div
                             className={`h-1.5 rounded-full ${
                               isBreach ? 'bg-rose-500' : isWarning ? 'bg-amber-400' : 'bg-emerald-400'
                             }`}
-                            style={{ width: `${Math.min(100, utilization)}%` }}
+                            style={{ width: `${utilization == null ? 0 : Math.min(100, utilization)}%` }}
                           ></div>
                         </div>
                       </div>

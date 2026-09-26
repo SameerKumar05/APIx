@@ -49,7 +49,7 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
         medianFare: p.median_fare_inr,
         p10Fare: p.p10_fare_inr,
         p90Fare: p.p90_fare_inr,
-        elasticity: Number(p.elasticity_factor.toFixed(2)),
+        elasticity: p.elasticity_factor == null ? null : Number(p.elasticity_factor.toFixed(2)),
         samples: p.sample_count,
         spread: p.p90_fare_inr - p.p10_fare_inr,
       }));
@@ -103,6 +103,12 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
         </div>
       </div>
 
+      {leadTimeCurve.data_available === false && (
+        <p className="text-xs text-neutral-500 font-mono">
+          No fare observations are stored for this curve.
+        </p>
+      )}
+
       {/* Booking Window Multipliers Grid (T+1 to T+60) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 font-mono">
         {leadTimeCurve.curve_points.map((pt) => {
@@ -125,7 +131,7 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
                 {pt.days_before_departure}d out
               </div>
               <div className="mt-1.5 text-lg font-semibold text-white tabular-nums">
-                {pt.elasticity_factor.toFixed(2)}x
+                {pt.elasticity_factor == null ? '—' : `${pt.elasticity_factor.toFixed(2)}x`}
               </div>
               <div className="text-xs text-neutral-400 mt-1 tabular-nums">
                 {pt.median_fare_inr !== undefined && pt.median_fare_inr !== null ? `₹${pt.median_fare_inr.toLocaleString('en-IN')}` : '—'}
@@ -478,6 +484,16 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
         {/* Matrix View 2: Day of Week x Departure Hour Slot Matrix */}
         {matrixView === 'day_hour' && (
           <div className="space-y-3">
+            {heatmap.data_available === false && (
+              <p className="text-xs text-neutral-500 font-mono">
+                No departure-timed fare observations are stored for this matrix.
+              </p>
+            )}
+            {heatmap.data_available === false && (
+              <p className="text-xs text-neutral-500 font-mono">
+                No departure-timed fare observations are stored for this matrix.
+              </p>
+            )}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-neutral-400">
               <div className="flex items-center gap-2">
                 <span className="font-mono">{selectedRoute} Departure Slot Intensity Matrix:</span>
@@ -534,7 +550,7 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
                           (m) => m.day_of_week === dow && m.hour_of_day === hr
                         );
 
-                        if (!cell) {
+                        if (!cell || cell.fare_index == null) {
                           return (
                             <div
                               key={hr}
