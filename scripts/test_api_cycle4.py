@@ -44,6 +44,8 @@ Base.metadata.create_all(bind=engine)
 # freshly created database. Fares escalate toward departure so the gradient has the
 # descending-demand shape the assertions below check.
 with SessionLocal() as fare_db:
+    fare_db.query(RawFare).filter(RawFare.hash_id.like("cycle4-%")).delete(synchronize_session=False)
+    fare_db.commit()
     for window, fare in (
         ("T+30", 4000.0),
         ("T+15", 4500.0),
@@ -101,6 +103,11 @@ with SessionLocal() as fare_db:
 # The elasticity endpoint returns an empty gradient when no RouteElasticity row
 # exists, so the curve needs one. Elasticities are negative: demand slopes down.
 with SessionLocal() as el_db:
+    el_db.query(RouteElasticity).filter(
+        RouteElasticity.route_code.in_(["NATIONAL", "BOM-BLR", "ELA-STL"]),
+        RouteElasticity.calculation_date == date.today(),
+    ).delete(synchronize_session=False)
+    el_db.commit()
     for target in ("NATIONAL", "BOM-BLR", "ELA-STL"):
         el_db.add(
             RouteElasticity(
