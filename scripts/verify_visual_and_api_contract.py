@@ -248,20 +248,28 @@ def run_verification() -> int:
             r1 = client.get("/api/v1/indices/national/latest")
             assert r1.status_code == 200, f"Expected 200, got {r1.status_code}"
             d1 = r1.json()
-            print(f"  ✓ /api/v1/indices/national/latest: index_value={d1['index_value']}, base_period={d1['base_period']}")
+            print(
+                f"  ✓ /api/v1/indices/national/latest: index_value={d1['index_value']}, base_period={d1['base_period']}"
+            )
 
             r1_hist = client.get("/api/v1/indices/national/history?days=30")
             assert r1_hist.status_code == 200
             d1_hist = r1_hist.json()
-            print(f"  ✓ /api/v1/indices/national/history: points={len(d1_hist['points'])}, total_points={d1_hist['total_points']}")
+            print(
+                f"  ✓ /api/v1/indices/national/history: points={len(d1_hist['points'])}, total_points={d1_hist['total_points']}"
+            )
 
             r1_routes = client.get("/api/v1/indices/routes")
             assert r1_routes.status_code == 200
             d1_routes = r1_routes.json()
-            print(f"  ✓ /api/v1/indices/routes: total_routes={d1_routes['total_routes']}, routes_count={len(d1_routes['routes'])}")
+            print(
+                f"  ✓ /api/v1/indices/routes: total_routes={d1_routes['total_routes']}, routes_count={len(d1_routes['routes'])}"
+            )
 
             # Check 2: Visual 2 - Sector-wise heatmap (corridors x booking windows matrix including T+45)
-            print("\n[CHECK 2] Visual 2: Sector-Wise Heatmap Matrix (Routes x Booking Windows)")
+            print(
+                "\n[CHECK 2] Visual 2: Sector-Wise Heatmap Matrix (Routes x Booking Windows)"
+            )
             r2 = client.get("/api/v1/analytics/sector-heatmap")
             assert r2.status_code == 200
             d2 = r2.json()
@@ -269,9 +277,15 @@ def run_verification() -> int:
             assert "T+45" in d2["windows"]
             assert len(d2["sectors"]) >= 1
             s0 = d2["sectors"][0]
-            print(f"  ✓ /api/v1/analytics/sector-heatmap: total_routes={d2['total_routes']}, windows={d2['windows']}")
-            print(f"    Corridor {s0['route_code']}: T+45={s0['windows'].get('T+45')} INR, T+30={s0['windows'].get('T+30')} INR, T+1={s0['windows'].get('T+1')} INR")
-            print(f"    Surge Multiplier={s0['surge_multiplier']}x, base_fare={s0['base_fare_inr']} INR, urgent_fare={s0['urgent_fare_inr']} INR")
+            print(
+                f"  ✓ /api/v1/analytics/sector-heatmap: total_routes={d2['total_routes']}, windows={d2['windows']}"
+            )
+            print(
+                f"    Corridor {s0['route_code']}: T+45={s0['windows'].get('T+45')} INR, T+30={s0['windows'].get('T+30')} INR, T+1={s0['windows'].get('T+1')} INR"
+            )
+            print(
+                f"    Surge Multiplier={s0['surge_multiplier']}x, base_fare={s0['base_fare_inr']} INR, urgent_fare={s0['urgent_fare_inr']} INR"
+            )
 
             r2_alias = client.get("/api/v1/indices/sector-heatmap")
             assert r2_alias.status_code == 200
@@ -284,38 +298,56 @@ def run_verification() -> int:
             d3 = r3.json()
             assert d3["data_available"] is True
             days_list = [pt["days_before_departure"] for pt in d3["curve_points"]]
-            assert 45 in days_list, f"Expected 45 (T+45) in curve points, got {days_list}"
-            print(f"  ✓ /api/v1/analytics/lead-time-curve: route={d3['route_code']}, days={days_list}")
+            assert (
+                45 in days_list
+            ), f"Expected 45 (T+45) in curve points, got {days_list}"
+            print(
+                f"  ✓ /api/v1/analytics/lead-time-curve: route={d3['route_code']}, days={days_list}"
+            )
             for pt in d3["curve_points"]:
-                print(f"    T+{pt['days_before_departure']:02d}: avg_fare={pt['avg_fare_inr']} INR, median={pt['median_fare_inr']} INR, elasticity={pt['elasticity_factor']}x")
+                print(
+                    f"    T+{pt['days_before_departure']:02d}: avg_fare={pt['avg_fare_inr']} INR, median={pt['median_fare_inr']} INR, elasticity={pt['elasticity_factor']}x"
+                )
 
             r3_econ = client.get("/api/v1/econometrics/elasticity?route_code=DEL-BOM")
             assert r3_econ.status_code == 200
             d3_econ = r3_econ.json()
-            print(f"  ✓ /api/v1/econometrics/elasticity: route={d3_econ['route_code']}, curves_count={len(d3_econ.get('curves', []))}")
+            print(
+                f"  ✓ /api/v1/econometrics/elasticity: route={d3_econ['route_code']}, curves_count={len(d3_econ.get('curves', []))}"
+            )
 
             # Check 4: Visual 4 - Econometric comparisons (Fisher, Laspeyres, Paasche, CPI Gap)
             print("\n[CHECK 4] Visual 4: Econometric Comparisons & MoSPI CPI Gap")
             r4 = client.get("/api/v1/econometrics/indices?route_code=NATIONAL")
             assert r4.status_code == 200
             d4 = r4.json()
-            print(f"  ✓ /api/v1/econometrics/indices: Fisher={d4['fisher_index']}, Laspeyres={d4['laspeyres_index']}, Paasche={d4['paasche_index']}")
-            print(f"    Substitution Bias={d4['substitution_bias']} pts, Base Period={d4.get('base_period')}")
+            print(
+                f"  ✓ /api/v1/econometrics/indices: Fisher={d4['fisher_index']}, Laspeyres={d4['laspeyres_index']}, Paasche={d4['paasche_index']}"
+            )
+            print(
+                f"    Substitution Bias={d4['substitution_bias']} pts, Base Period={d4.get('base_period')}"
+            )
 
             r4_cpi = client.get("/api/v1/econometrics/cpi-divergence")
             assert r4_cpi.status_code == 200
             d4_cpi = r4_cpi.json()
             assert len(d4_cpi["divergence_series"]) >= 1
-            print(f"  ✓ /api/v1/econometrics/cpi-divergence: series_points={len(d4_cpi['divergence_series'])}, lead_days={d4_cpi.get('inflation_lead_days')}")
+            print(
+                f"  ✓ /api/v1/econometrics/cpi-divergence: series_points={len(d4_cpi['divergence_series'])}, lead_days={d4_cpi.get('inflation_lead_days')}"
+            )
             for p in d4_cpi["divergence_series"]:
-                print(f"    Month {p['date']}: APIx={p['apix_index']}, MoSPI Transport={p['mospi_cpi']}, Gap={p['gap']} pts")
+                print(
+                    f"    Month {p['date']}: APIx={p['apix_index']}, MoSPI Transport={p['mospi_cpi']}, Gap={p['gap']} pts"
+                )
 
             # Check 5: Contract & Governance - OpenAPI, Rate Limits, CORS, Auth
             print("\n[CHECK 5] NSO/RBI API Contract & Governance")
             r5_open = client.get("/api/v1/openapi.json")
             assert r5_open.status_code == 200
             open_schema = r5_open.json()
-            print(f"  ✓ OpenAPI Schema at /api/v1/openapi.json: version={open_schema['openapi']}, title='{open_schema['info']['title']}'")
+            print(
+                f"  ✓ OpenAPI Schema at /api/v1/openapi.json: version={open_schema['openapi']}, title='{open_schema['info']['title']}'"
+            )
             print(f"    Endpoints cataloged: {len(open_schema['paths'])} routes")
 
             # Rate limit headers check
@@ -323,7 +355,9 @@ def run_verification() -> int:
             assert "x-ratelimit-remaining" in r1.headers
             limit_val = int(r1.headers["x-ratelimit-limit"])
             assert limit_val == settings.API_RATE_LIMIT_REQUESTS
-            print(f"  ✓ Rate limit headers: X-RateLimit-Limit={limit_val} (120 req/60s contract), X-RateLimit-Remaining={r1.headers['x-ratelimit-remaining']}")
+            print(
+                f"  ✓ Rate limit headers: X-RateLimit-Limit={limit_val} (120 req/60s contract), X-RateLimit-Remaining={r1.headers['x-ratelimit-remaining']}"
+            )
 
             # CORS check
             try:
@@ -336,10 +370,14 @@ def run_verification() -> int:
             # Auth boundary check
             r5_auth = client.post("/api/v1/econometrics/recalculate")
             assert r5_auth.status_code == 401
-            print(f"  ✓ Protected administrative mutation rejected without key (HTTP {r5_auth.status_code} Unauthorized)")
+            print(
+                f"  ✓ Protected administrative mutation rejected without key (HTTP {r5_auth.status_code} Unauthorized)"
+            )
 
             print("\n=================================================================")
-            print("ALL CHECKS PASSED: 4-Visual Coverage & NSO/RBI API Contract Verified")
+            print(
+                "ALL CHECKS PASSED: 4-Visual Coverage & NSO/RBI API Contract Verified"
+            )
             print("=================================================================")
             return 0
     finally:

@@ -501,19 +501,25 @@ def test_calibrated_carrier_and_route_fare_splitting() -> None:
     assert short_haul.base_fare == 7200.0
 
     # 3. Joint carrier and route calibration: Air India (+0.03 offset) on DEL-BLR (0.81 baseline) -> 0.84
-    ai_long = classify_fare_split(total, airline_code="AI", origin="DEL", destination="BLR")
+    ai_long = classify_fare_split(
+        total, airline_code="AI", origin="DEL", destination="BLR"
+    )
     assert ai_long.basis == FareSplitBasis.CALIBRATED
     assert ai_long.base_fare == 8400.0
     assert ai_long.taxes_and_fees == 1600.0
 
     # 4. Joint carrier and route calibration: SpiceJet (-0.04 offset) on BLR-HYD (0.72 baseline) -> 0.68
-    sg_short = classify_fare_split(total, airline_code="SG", origin="BLR", destination="HYD")
+    sg_short = classify_fare_split(
+        total, airline_code="SG", origin="BLR", destination="HYD"
+    )
     assert sg_short.basis == FareSplitBasis.CALIBRATED
     assert sg_short.base_fare == 6800.0
     assert sg_short.taxes_and_fees == 3200.0
 
     # 5. Generic fallback when neither carrier nor route is recognized: 0.78, basis ESTIMATED
-    fallback = classify_fare_split(total, airline_code="UNKNOWN", origin="XXX", destination="YYY")
+    fallback = classify_fare_split(
+        total, airline_code="UNKNOWN", origin="XXX", destination="YYY"
+    )
     assert fallback.basis == FareSplitBasis.ESTIMATED
     assert fallback.base_fare == round(total * DEFAULT_BASE_FARE_RATIO, 2)
 
@@ -523,50 +529,68 @@ def test_total_recomposition_integrity_check() -> None:
     from backend.app.core.fare_components import check_fare_recomposition
 
     # 1. Exact match when all components exist
-    assert check_fare_recomposition(
-        total_fare=5000.0,
-        base_fare=3500.0,
-        taxes_and_fees=1000.0,
-        udf_fee=300.0,
-        convenience_fee=200.0,
-    ) is True
+    assert (
+        check_fare_recomposition(
+            total_fare=5000.0,
+            base_fare=3500.0,
+            taxes_and_fees=1000.0,
+            udf_fee=300.0,
+            convenience_fee=200.0,
+        )
+        is True
+    )
 
     # 2. Within relative tolerance (0.5% of 5000 is 25 INR): delta = 15 INR -> True
-    assert check_fare_recomposition(
-        total_fare=5000.0,
-        base_fare=3500.0,
-        taxes_and_fees=1000.0,
-        udf_fee=315.0,
-        convenience_fee=200.0,
-    ) is True
+    assert (
+        check_fare_recomposition(
+            total_fare=5000.0,
+            base_fare=3500.0,
+            taxes_and_fees=1000.0,
+            udf_fee=315.0,
+            convenience_fee=200.0,
+        )
+        is True
+    )
 
     # 3. Beyond relative tolerance: delta = 50 INR (> 25 INR) -> False
-    assert check_fare_recomposition(
-        total_fare=5000.0,
-        base_fare=3500.0,
-        taxes_and_fees=1000.0,
-        udf_fee=350.0,
-        convenience_fee=200.0,
-    ) is False
+    assert (
+        check_fare_recomposition(
+            total_fare=5000.0,
+            base_fare=3500.0,
+            taxes_and_fees=1000.0,
+            udf_fee=350.0,
+            convenience_fee=200.0,
+        )
+        is False
+    )
 
     # 4. Small fare governed by absolute tolerance (1.0 INR): delta = 0.75 INR -> True, 2.0 INR -> False
-    assert check_fare_recomposition(
-        total_fare=100.0,
-        base_fare=70.0,
-        taxes_and_fees=30.75,
-    ) is True
-    assert check_fare_recomposition(
-        total_fare=100.0,
-        base_fare=70.0,
-        taxes_and_fees=32.0,
-    ) is False
+    assert (
+        check_fare_recomposition(
+            total_fare=100.0,
+            base_fare=70.0,
+            taxes_and_fees=30.75,
+        )
+        is True
+    )
+    assert (
+        check_fare_recomposition(
+            total_fare=100.0,
+            base_fare=70.0,
+            taxes_and_fees=32.0,
+        )
+        is False
+    )
 
     # 5. Incomplete components (None) do not false-alarm
-    assert check_fare_recomposition(
-        total_fare=5000.0,
-        base_fare=None,
-        taxes_and_fees=None,
-    ) is True
+    assert (
+        check_fare_recomposition(
+            total_fare=5000.0,
+            base_fare=None,
+            taxes_and_fees=None,
+        )
+        is True
+    )
 
 
 def test_recomposition_mismatch_quarantined_at_ingestion(db_session: Session) -> None:
@@ -608,7 +632,9 @@ def test_recomposition_mismatch_quarantined_at_ingestion(db_session: Session) ->
         "source_platform": "makemytrip",
     }
 
-    result = bulk_insert_raw_fares(db_session, [valid_quote, corrupted_quote], batch_id="recomp_batch")
+    result = bulk_insert_raw_fares(
+        db_session, [valid_quote, corrupted_quote], batch_id="recomp_batch"
+    )
     assert result["inserted"] == 2
 
     rows = {row.flight_number: row for row in db_session.scalars(select(RawFare)).all()}

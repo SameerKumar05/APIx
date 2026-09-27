@@ -431,7 +431,12 @@ def calculate_lead_time_elasticity(
         f_val = norm_fares.get(single_w, 5000.0)
         return LeadTimeElasticityResult(
             curves={
-                single_w: {"fare": f_val, "pax_share": norm_pax.get(single_w, DEFAULT_LEAD_TIME_PAX_SHARES.get(single_w, 0.20))}
+                single_w: {
+                    "fare": f_val,
+                    "pax_share": norm_pax.get(
+                        single_w, DEFAULT_LEAD_TIME_PAX_SHARES.get(single_w, 0.20)
+                    ),
+                }
             },
             arc_elasticities={},
             overall_elasticity=-1.0,
@@ -445,7 +450,9 @@ def calculate_lead_time_elasticity(
     for w in active_windows:
         curves[w] = {
             "fare": round(norm_fares[w], 2),
-            "pax_share": round(norm_pax.get(w, DEFAULT_LEAD_TIME_PAX_SHARES.get(w, 0.20)), 4),
+            "pax_share": round(
+                norm_pax.get(w, DEFAULT_LEAD_TIME_PAX_SHARES.get(w, 0.20)), 4
+            ),
             "advance_days": CANONICAL_WINDOW_DAYS.get(w, 7),
         }
 

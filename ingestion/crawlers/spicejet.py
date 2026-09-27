@@ -15,7 +15,6 @@ import random
 import re
 import time
 from datetime import UTC, date, datetime, timedelta
-from importlib.util import find_spec
 from typing import Any
 
 from backend.app.core.cleaning import reported_flight_status, sourced_duration_minutes
@@ -41,6 +40,7 @@ except ImportError:
 
 try:
     import httpx
+
     HAS_HTTPX = True
 except ImportError:
     httpx = None  # type: ignore[assignment]
@@ -525,6 +525,7 @@ class SpiceJetScraper(BaseScraper):
                 browser.close()
 
         return collected_records
+
     def _extract_live_fares(
         self,
         origin: str,
@@ -547,7 +548,9 @@ class SpiceJetScraper(BaseScraper):
         if HAS_HTTPX and httpx is not None:
             try:
                 headers = self.get_randomized_headers()
-                with httpx.Client(timeout=min(self.config.timeout_seconds, 6.0)) as client:
+                with httpx.Client(
+                    timeout=min(self.config.timeout_seconds, 6.0)
+                ) as client:
                     api_url = (
                         f"{self.BASE_URL}/api/v3/search/availability"
                         f"?origin={norm_orig}&destination={norm_dest}"
@@ -599,37 +602,156 @@ class SpiceJetScraper(BaseScraper):
 
         corridor_profiles: dict[tuple[str, str], list[dict[str, Any]]] = {
             ("DEL", "BOM"): [
-                {"flight": "SG-8101", "dep": "06:15", "arr": "08:35", "dur": 140, "base": 4250.0, "tax": 860.0},
-                {"flight": "SG-815", "dep": "09:50", "arr": "12:25", "dur": 155, "base": 4800.0, "tax": 920.0},
-                {"flight": "SG-8709", "dep": "18:40", "arr": "21:05", "dur": 145, "base": 5100.0, "tax": 950.0},
-                {"flight": "SG-8169", "dep": "20:30", "arr": "23:00", "dur": 150, "base": 4500.0, "tax": 890.0},
+                {
+                    "flight": "SG-8101",
+                    "dep": "06:15",
+                    "arr": "08:35",
+                    "dur": 140,
+                    "base": 4250.0,
+                    "tax": 860.0,
+                },
+                {
+                    "flight": "SG-815",
+                    "dep": "09:50",
+                    "arr": "12:25",
+                    "dur": 155,
+                    "base": 4800.0,
+                    "tax": 920.0,
+                },
+                {
+                    "flight": "SG-8709",
+                    "dep": "18:40",
+                    "arr": "21:05",
+                    "dur": 145,
+                    "base": 5100.0,
+                    "tax": 950.0,
+                },
+                {
+                    "flight": "SG-8169",
+                    "dep": "20:30",
+                    "arr": "23:00",
+                    "dur": 150,
+                    "base": 4500.0,
+                    "tax": 890.0,
+                },
             ],
             ("BOM", "DEL"): [
-                {"flight": "SG-8102", "dep": "09:15", "arr": "11:35", "dur": 140, "base": 4350.0, "tax": 880.0},
-                {"flight": "SG-816", "dep": "13:10", "arr": "15:35", "dur": 145, "base": 4750.0, "tax": 910.0},
-                {"flight": "SG-8710", "dep": "21:45", "arr": "00:10", "dur": 145, "base": 4950.0, "tax": 930.0},
+                {
+                    "flight": "SG-8102",
+                    "dep": "09:15",
+                    "arr": "11:35",
+                    "dur": 140,
+                    "base": 4350.0,
+                    "tax": 880.0,
+                },
+                {
+                    "flight": "SG-816",
+                    "dep": "13:10",
+                    "arr": "15:35",
+                    "dur": 145,
+                    "base": 4750.0,
+                    "tax": 910.0,
+                },
+                {
+                    "flight": "SG-8710",
+                    "dep": "21:45",
+                    "arr": "00:10",
+                    "dur": 145,
+                    "base": 4950.0,
+                    "tax": 930.0,
+                },
             ],
             ("DEL", "BLR"): [
-                {"flight": "SG-8131", "dep": "07:20", "arr": "10:10", "dur": 170, "base": 5200.0, "tax": 980.0},
-                {"flight": "SG-8135", "dep": "17:15", "arr": "20:05", "dur": 170, "base": 5600.0, "tax": 1020.0},
+                {
+                    "flight": "SG-8131",
+                    "dep": "07:20",
+                    "arr": "10:10",
+                    "dur": 170,
+                    "base": 5200.0,
+                    "tax": 980.0,
+                },
+                {
+                    "flight": "SG-8135",
+                    "dep": "17:15",
+                    "arr": "20:05",
+                    "dur": 170,
+                    "base": 5600.0,
+                    "tax": 1020.0,
+                },
             ],
             ("BLR", "DEL"): [
-                {"flight": "SG-8132", "dep": "10:55", "arr": "13:45", "dur": 170, "base": 5150.0, "tax": 970.0},
-                {"flight": "SG-8136", "dep": "20:45", "arr": "23:35", "dur": 170, "base": 5500.0, "tax": 1010.0},
+                {
+                    "flight": "SG-8132",
+                    "dep": "10:55",
+                    "arr": "13:45",
+                    "dur": 170,
+                    "base": 5150.0,
+                    "tax": 970.0,
+                },
+                {
+                    "flight": "SG-8136",
+                    "dep": "20:45",
+                    "arr": "23:35",
+                    "dur": 170,
+                    "base": 5500.0,
+                    "tax": 1010.0,
+                },
             ],
             ("BOM", "BLR"): [
-                {"flight": "SG-8411", "dep": "08:10", "arr": "09:55", "dur": 105, "base": 3400.0, "tax": 780.0},
-                {"flight": "SG-8417", "dep": "19:00", "arr": "20:45", "dur": 105, "base": 3750.0, "tax": 820.0},
+                {
+                    "flight": "SG-8411",
+                    "dep": "08:10",
+                    "arr": "09:55",
+                    "dur": 105,
+                    "base": 3400.0,
+                    "tax": 780.0,
+                },
+                {
+                    "flight": "SG-8417",
+                    "dep": "19:00",
+                    "arr": "20:45",
+                    "dur": 105,
+                    "base": 3750.0,
+                    "tax": 820.0,
+                },
             ],
             ("BLR", "BOM"): [
-                {"flight": "SG-8412", "dep": "10:35", "arr": "12:20", "dur": 105, "base": 3450.0, "tax": 790.0},
-                {"flight": "SG-8418", "dep": "21:25", "arr": "23:10", "dur": 105, "base": 3800.0, "tax": 830.0},
+                {
+                    "flight": "SG-8412",
+                    "dep": "10:35",
+                    "arr": "12:20",
+                    "dur": 105,
+                    "base": 3450.0,
+                    "tax": 790.0,
+                },
+                {
+                    "flight": "SG-8418",
+                    "dep": "21:25",
+                    "arr": "23:10",
+                    "dur": 105,
+                    "base": 3800.0,
+                    "tax": 830.0,
+                },
             ],
         }
 
         default_profile = [
-            {"flight": "SG-8101", "dep": "07:00", "arr": "09:15", "dur": 135, "base": 4200.0, "tax": 850.0},
-            {"flight": "SG-8709", "dep": "16:30", "arr": "18:45", "dur": 135, "base": 4600.0, "tax": 890.0},
+            {
+                "flight": "SG-8101",
+                "dep": "07:00",
+                "arr": "09:15",
+                "dur": 135,
+                "base": 4200.0,
+                "tax": 850.0,
+            },
+            {
+                "flight": "SG-8709",
+                "dep": "16:30",
+                "arr": "18:45",
+                "dur": 135,
+                "base": 4600.0,
+                "tax": 890.0,
+            },
         ]
 
         flight_list = corridor_profiles.get((norm_orig, norm_dest), default_profile)
@@ -681,7 +803,6 @@ class SpiceJetScraper(BaseScraper):
                 records.append(record)
 
         return records
-
 
     def scrape_route(
         self,

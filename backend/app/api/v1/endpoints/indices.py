@@ -192,12 +192,15 @@ async def get_national_index_history(
 ) -> NationalIndexHistoryResponse:
     cutoff = date.today() - timedelta(days=days)
     clean_window = (booking_window or "COMPOSITE").strip().upper()
-    base_query = db.query(NationalDailyIndex).filter(NationalDailyIndex.index_date >= cutoff)
+    base_query = db.query(NationalDailyIndex).filter(
+        NationalDailyIndex.index_date >= cutoff
+    )
     if clean_window != "ALL":
-        base_query = base_query.filter(func.upper(NationalDailyIndex.booking_window) == clean_window)
+        base_query = base_query.filter(
+            func.upper(NationalDailyIndex.booking_window) == clean_window
+        )
     records = (
-        base_query
-        .filter(
+        base_query.filter(
             func.lower(func.coalesce(NationalDailyIndex.index_type, "")) == "fisher"
         )
         .order_by(NationalDailyIndex.index_date.asc())
@@ -205,9 +208,9 @@ async def get_national_index_history(
     )
     if not records:
         records = (
-            base_query
-            .filter(
-                func.lower(func.coalesce(NationalDailyIndex.index_type, "")) == "laspeyres"
+            base_query.filter(
+                func.lower(func.coalesce(NationalDailyIndex.index_type, ""))
+                == "laspeyres"
             )
             .order_by(NationalDailyIndex.index_date.asc())
             .all()
@@ -397,7 +400,9 @@ async def get_route_history(
             if frequency in ("weekly", "monthly"):
                 buckets: dict[str, list[RouteDailyIndex]] = {}
                 for r in route_indices:
-                    buckets.setdefault(_bucket_key(r.index_date, frequency), []).append(r)
+                    buckets.setdefault(_bucket_key(r.index_date, frequency), []).append(
+                        r
+                    )
 
                 points: list[NationalIndexPoint] = []
                 previous_value: float | None = None
@@ -413,7 +418,9 @@ async def get_route_history(
                     change = (
                         0.0
                         if previous_value in (None, 0)
-                        else round((index_value - previous_value) / previous_value * 100.0, 2)
+                        else round(
+                            (index_value - previous_value) / previous_value * 100.0, 2
+                        )
                     )
                     points.append(
                         NationalIndexPoint(
@@ -449,7 +456,8 @@ async def get_route_history(
                     prev = route_indices[idx - 1] if idx > 0 else None
                     change_24h = (
                         round(
-                            ((r.index_value - prev.index_value) / prev.index_value) * 100.0,
+                            ((r.index_value - prev.index_value) / prev.index_value)
+                            * 100.0,
                             2,
                         )
                         if prev is not None and prev.index_value

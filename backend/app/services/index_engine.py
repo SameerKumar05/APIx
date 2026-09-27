@@ -666,7 +666,9 @@ def calculate_true_laspeyres_index(
         P_F * Q_F = (Sum P_{r,t} * Q_{r,t}) / (Sum P_{r,0} * Q_{r,0}) = V_t / V_0.
     """
     if not current_fares or not base_fares or not base_quantities:
-        raise ValueError("Current fares, base fares, and base quantities cannot be empty")
+        raise ValueError(
+            "Current fares, base fares, and base quantities cannot be empty"
+        )
 
     common_routes = [
         r for r in current_fares if r in base_fares and r in base_quantities

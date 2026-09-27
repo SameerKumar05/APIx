@@ -202,6 +202,7 @@ def check_fare_recomposition(
 
     return delta <= allowed
 
+
 @dataclass(frozen=True, slots=True)
 class FareSplit:
     """Base and tax amounts plus the basis that produced them."""
@@ -272,5 +273,3 @@ def split_base_and_taxes(
         destination=destination,
     )
     return split.base_fare, split.taxes_and_fees
-
-

@@ -307,7 +307,9 @@ class TestDgcaWeightProvenance:
         assert again._records[0].provenance == "DGCA"
         assert again._records[0].pax_volume == 100
 
-    def test_committed_weights_file_carries_calibrated_baseline_provenance(self) -> None:
+    def test_committed_weights_file_carries_calibrated_baseline_provenance(
+        self,
+    ) -> None:
         from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
 
         csv = (

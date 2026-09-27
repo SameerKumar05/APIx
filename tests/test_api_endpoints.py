@@ -434,6 +434,7 @@ def test_route_history_frequency_aggregation(api_client: TestClient) -> None:
     )
     assert res_invalid.status_code == 422
 
+
 def test_lead_time_curve(api_client: TestClient) -> None:
     response = api_client.get("/api/v1/analytics/lead-time-curve?route_code=DEL-BOM")
     assert response.status_code == 200

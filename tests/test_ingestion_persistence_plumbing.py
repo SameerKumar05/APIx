@@ -48,7 +48,9 @@ class LocalTestClientIngestionClient(IngestionClient):
             json=payload,
         )
         if resp.status_code != 200:
-            raise RuntimeError(f"FastAPI TestClient returned {resp.status_code}: {resp.text}")
+            raise RuntimeError(
+                f"FastAPI TestClient returned {resp.status_code}: {resp.text}"
+            )
         return resp.json()
 
     def _post_with_httpx(self, payload: dict) -> dict:
@@ -141,26 +143,37 @@ def test_batch_ingestion_deduplication_is_idempotent() -> None:
         window_code="T+1",
     )
 
-    batch_id_first = f"test-plumbing-dedup-1-{datetime.now(UTC).strftime('%Y%m%d%H%M%S%f')}"
+    batch_id_first = (
+        f"test-plumbing-dedup-1-{datetime.now(UTC).strftime('%Y%m%d%H%M%S%f')}"
+    )
     resp1 = client.post_batch(fixtures, source="spicejet", batch_id=batch_id_first)
     assert resp1.get("status") in ("success", "partial")
     assert resp1.get("inserted_count") == len(fixtures)
 
     with sqlite3.connect(db_path) as con:
         cur = con.cursor()
-        cur.execute("SELECT count(*) FROM raw_fares WHERE origin = 'BOM' AND destination = 'DEL'")
+        cur.execute(
+            "SELECT count(*) FROM raw_fares WHERE origin = 'BOM' AND destination = 'DEL'"
+        )
         count_first = cur.fetchone()[0]
 
-    batch_id_second = f"test-plumbing-dedup-2-{datetime.now(UTC).strftime('%Y%m%d%H%M%S%f')}"
+    batch_id_second = (
+        f"test-plumbing-dedup-2-{datetime.now(UTC).strftime('%Y%m%d%H%M%S%f')}"
+    )
     resp2 = client.post_batch(fixtures, source="spicejet", batch_id=batch_id_second)
     assert resp2.get("status") in ("success", "partial")
 
     with sqlite3.connect(db_path) as con:
         cur = con.cursor()
-        cur.execute("SELECT count(*) FROM raw_fares WHERE origin = 'BOM' AND destination = 'DEL'")
+        cur.execute(
+            "SELECT count(*) FROM raw_fares WHERE origin = 'BOM' AND destination = 'DEL'"
+        )
         count_second = cur.fetchone()[0]
 
-    assert count_second == count_first, f"Expected idempotent storage without row duplication, got {count_second} vs {count_first}"
+    assert (
+        count_second == count_first
+    ), f"Expected idempotent storage without row duplication, got {count_second} vs {count_first}"
+
 
 def test_upsert_raw_fares_conditional_update() -> None:
     """Verifies that conditional upsert logic updates synthetic fares upon fare revision."""
@@ -196,7 +209,9 @@ def test_upsert_raw_fares_conditional_update() -> None:
     )
 
     with Session(engine) as session:
-        stats1 = bulk_insert_raw_fares(session, [initial_record], batch_id=batch_id, commit=True)
+        stats1 = bulk_insert_raw_fares(
+            session, [initial_record], batch_id=batch_id, commit=True
+        )
         assert stats1.get("inserted") == 1
 
         revised_record = RawFareRecord(
@@ -222,10 +237,14 @@ def test_upsert_raw_fares_conditional_update() -> None:
             source_platform="staged_fixture",
         )
 
-        stats2 = bulk_insert_raw_fares(session, [revised_record], batch_id=batch_id, commit=True)
+        stats2 = bulk_insert_raw_fares(
+            session, [revised_record], batch_id=batch_id, commit=True
+        )
         assert stats2.get("received") == 1
 
-        stmt = select(RawFare).where(RawFare.flight_number == "SG-8999", RawFare.batch_id == batch_id)
+        stmt = select(RawFare).where(
+            RawFare.flight_number == "SG-8999", RawFare.batch_id == batch_id
+        )
         updated_row = session.scalars(stmt).first()
         assert updated_row is not None
         assert updated_row.total_fare == 5250.0
@@ -269,8 +288,15 @@ def test_crawler_honestly_reports_fallback_without_fabricating_live_quotes() -> 
     assert len(res.records) > 0
 
     fake_live_quotes = [r for r in res.records if not r.is_synthetic]
-    assert len(fake_live_quotes) == 0, f"Found {len(fake_live_quotes)} records claiming is_synthetic=False in fallback"
+    assert (
+        len(fake_live_quotes) == 0
+    ), f"Found {len(fake_live_quotes)} records claiming is_synthetic=False in fallback"
 
     for r in res.records:
         assert r.is_synthetic is True
-        assert r.source_platform in ("staged_fixture", "synthetic_dgca", "synthetic", "amadeus")
+        assert r.source_platform in (
+            "staged_fixture",
+            "synthetic_dgca",
+            "synthetic",
+            "amadeus",
+        )

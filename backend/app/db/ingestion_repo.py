@@ -130,11 +130,15 @@ def _assign_exclusions(db: Session, records: list[dict[str, Any]]) -> None:
                 rec.get("convenience_fee"),
             )
         ]
-        valid_peer_fares = [float(group[index]["total_fare"]) for index in valid_peer_indexes]
+        valid_peer_fares = [
+            float(group[index]["total_fare"]) for index in valid_peer_indexes
+        ]
         for index, rec in enumerate(group):
             others = [
                 fare
-                for peer_index, fare in zip(valid_peer_indexes, valid_peer_fares, strict=True)
+                for peer_index, fare in zip(
+                    valid_peer_indexes, valid_peer_fares, strict=True
+                )
                 if peer_index != index
             ]
             rec["index_exclusion_reason"] = exclusion_for_fare(
@@ -303,7 +307,8 @@ def _normalize_fare_record(
     incoming_basis = data.get("fare_split_basis")
     known_bases = {item.value for item in FareSplitBasis}
     is_obsolete_calibration = (
-        incoming_basis in (FareSplitBasis.CALIBRATED.value, FareSplitBasis.ESTIMATED.value)
+        incoming_basis
+        in (FareSplitBasis.CALIBRATED.value, FareSplitBasis.ESTIMATED.value)
         and base_in is not None
         and tax_in is not None
         and abs(total_fare - (base_in + tax_in)) > 1.0
@@ -458,7 +463,9 @@ def bulk_insert_raw_fares(
                 select(RawFare.hash_id).where(RawFare.hash_id.in_(all_hashes))
             ).all()
         )
-    inserted_count = sum(1 for r in normalized_records if r["hash_id"] not in existing_hashes)
+    inserted_count = sum(
+        1 for r in normalized_records if r["hash_id"] not in existing_hashes
+    )
 
     bind = db.get_bind()
     dialect_name = bind.dialect.name if bind else "sqlite"

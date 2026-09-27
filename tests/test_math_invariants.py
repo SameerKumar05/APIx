@@ -21,14 +21,17 @@ from __future__ import annotations
 import math
 import random
 from datetime import date, timedelta
+
 import pytest
 
+from backend.app.api.v1.endpoints.indices import _bucket_key
 from backend.app.services.anomaly_detector import (
     AnomalySeverity,
     calculate_dod_surge,
     calculate_z_score,
     detect_anomaly,
 )
+from backend.app.services.econometric_engine import calculate_lead_time_elasticity
 from backend.app.services.index_engine import (
     DEFAULT_BOOKING_WINDOW_WEIGHTS,
     DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES,
@@ -42,8 +45,6 @@ from backend.app.services.index_engine import (
     filter_outliers_tukey,
     weighted_median_values,
 )
-from backend.app.api.v1.endpoints.indices import _bucket_key
-from backend.app.services.econometric_engine import calculate_lead_time_elasticity
 
 # ===========================================================================
 # 1. Invariant 1: Equal Price Distribution Weighted Median Identity
@@ -476,7 +477,6 @@ class TestBookingWindowCompositeFormula:
         composite = calculate_route_composite_fare(window_fares)
         assert math.isclose(composite, expected_composite, abs_tol=1e-9)
 
-
     def test_five_window_composite_exact_weights(self) -> None:
         """Route composite fare follows exact 5-window weighting:
         P_r = 0.20*T1 + 0.32*T7 + 0.26*T15 + 0.14*T30 + 0.08*T45
@@ -579,6 +579,7 @@ class TestBookingWindowCompositeFormula:
         assert "T+45_to_T+30" in res.arc_elasticities
         assert res.lead_time_premium_pct > 0.0
         assert res.urgency_multiplier > 1.0
+
 
 # ===========================================================================
 # 8. Invariant 8: Traffic Weight Monotonicity and Sensitivity
@@ -740,7 +741,9 @@ class TestWeeklyIndexRollupInvariants:
         ]
 
         week_key = _bucket_key(start_date, "weekly")
-        bucket_vals = [val for d, val in records if _bucket_key(d, "weekly") == week_key]
+        bucket_vals = [
+            val for d, val in records if _bucket_key(d, "weekly") == week_key
+        ]
 
         weekly_index = sum(bucket_vals) / len(bucket_vals)
         expected_mean = sum(daily_indices) / len(daily_indices)
@@ -760,7 +763,7 @@ class TestWeeklyIndexRollupInvariants:
             key = _bucket_key(d, "weekly")
             buckets.setdefault(key, []).append(val)
 
-        for key, vals in buckets.items():
+        for _key, vals in buckets.items():
             weekly_mean = sum(vals) / len(vals)
             assert min(vals) <= weekly_mean <= max(vals)
 
@@ -768,23 +771,19 @@ class TestWeeklyIndexRollupInvariants:
         """If daily index is constant, weekly rollup reproduces the scalar value exactly."""
         scalar_val = 112.45
         start_date = date(2026, 1, 1)
-        daily_data = [
-            (start_date + timedelta(days=i), scalar_val)
-            for i in range(21)
-        ]
+        daily_data = [(start_date + timedelta(days=i), scalar_val) for i in range(21)]
 
         buckets: dict[str, list[float]] = {}
         for d, val in daily_data:
             key = _bucket_key(d, "weekly")
             buckets.setdefault(key, []).append(val)
 
-        for key, vals in buckets.items():
+        for _key, vals in buckets.items():
             weekly_mean = sum(vals) / len(vals)
             assert math.isclose(weekly_mean, scalar_val, abs_tol=1e-9)
 
     def test_linear_trend_midpoint_identity(self) -> None:
         """For a 7-day linear ramp starting on Monday, the weekly index equals the Thursday (midpoint) value."""
-        start_date = date(2026, 2, 2)  # Monday
         base = 100.0
         slope = 1.5
         daily_indices = [base + slope * i for i in range(7)]

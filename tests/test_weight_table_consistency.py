@@ -104,29 +104,33 @@ def test_pipeline_window_weights_match_index_engine() -> None:
         assert PIPELINE_WINDOW_WEIGHTS[f"T+{code[1:]}"] == pytest.approx(weight)
 
 
-REQUIRED_14_CORRIDORS = frozenset({
-    "DEL-BOM",
-    "BOM-DEL",
-    "BLR-DEL",
-    "DEL-BLR",
-    "BOM-BLR",
-    "BLR-BOM",
-    "DEL-CCU",
-    "CCU-DEL",
-    "DEL-HYD",
-    "HYD-DEL",
-    "DEL-MAA",
-    "MAA-DEL",
-    "BLR-HYD",
-    "HYD-BLR",
-})
+REQUIRED_14_CORRIDORS = frozenset(
+    {
+        "DEL-BOM",
+        "BOM-DEL",
+        "BLR-DEL",
+        "DEL-BLR",
+        "BOM-BLR",
+        "BLR-BOM",
+        "DEL-CCU",
+        "CCU-DEL",
+        "DEL-HYD",
+        "HYD-DEL",
+        "DEL-MAA",
+        "MAA-DEL",
+        "BLR-HYD",
+        "HYD-BLR",
+    }
+)
 
 
 def test_route_traffic_shares_contain_all_14_psd_corridors() -> None:
     """Route basket must contain all 14 directional corridors required by SIH PS 26056."""
     assert set(DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES.keys()) == REQUIRED_14_CORRIDORS
     assert len(DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES) == 14
-    assert sum(DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES.values()) == pytest.approx(1.0, abs=1e-9)
+    assert sum(DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES.values()) == pytest.approx(
+        1.0, abs=1e-9
+    )
 
 
 def test_all_route_weight_tables_agree_and_cover_14_corridors() -> None:
@@ -171,6 +175,7 @@ def test_base_period_fares_defined_for_all_corridors() -> None:
 
 def test_dgca_traffic_weights_table_provenance() -> None:
     from pathlib import Path
+
     from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
 
     data_dir = Path(__file__).resolve().parents[1] / "data"

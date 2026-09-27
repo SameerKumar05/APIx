@@ -38,6 +38,7 @@ In sparse windows:
    preserving data provenance and index reproducibility.
 
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence

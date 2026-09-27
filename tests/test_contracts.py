@@ -386,6 +386,7 @@ class TestMasterDataAlignment:
             "HYD-BLR",
         }
         assert ingestion_route_codes == expected_pairs
+
     def test_dgca_route_weights_sum_to_one(self) -> None:
         """Route traffic weights must sum to 1.000 (100% of monitored basket) in all layers."""
         # 1. Ingestion config route weights

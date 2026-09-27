@@ -150,20 +150,14 @@ def test_engine_true_laspeyres_matches_textbook_laspeyres() -> None:
 def test_engine_true_laspeyres_satisfies_fisher_factor_reversal() -> None:
     """When True Laspeyres is paired with Paasche, the Fisher pair satisfies factor reversal identically."""
     price_fisher = calculate_fisher_index(
-        calculate_true_laspeyres_index(
-            CURRENT_PRICES, BASE_PRICES, BASE_QUANTITIES
-        ),
-        calculate_paasche_index(
-            CURRENT_PRICES, BASE_PRICES, CURRENT_QUANTITIES
-        ),
+        calculate_true_laspeyres_index(CURRENT_PRICES, BASE_PRICES, BASE_QUANTITIES),
+        calculate_paasche_index(CURRENT_PRICES, BASE_PRICES, CURRENT_QUANTITIES),
     )
     quantity_fisher = calculate_fisher_index(
         calculate_true_laspeyres_index(
             CURRENT_QUANTITIES, BASE_QUANTITIES, BASE_PRICES
         ),
-        calculate_paasche_index(
-            CURRENT_QUANTITIES, BASE_QUANTITIES, CURRENT_PRICES
-        ),
+        calculate_paasche_index(CURRENT_QUANTITIES, BASE_QUANTITIES, CURRENT_PRICES),
     )
     product = (price_fisher / 100.0) * (quantity_fisher / 100.0)
     assert product == pytest.approx(_value_ratio(), rel=1e-12)
@@ -175,17 +169,13 @@ def test_engine_laspeyres_with_quantities_satisfies_fisher_factor_reversal() -> 
         calculate_laspeyres_index(
             CURRENT_PRICES, BASE_PRICES, base_quantities=BASE_QUANTITIES
         ),
-        calculate_paasche_index(
-            CURRENT_PRICES, BASE_PRICES, CURRENT_QUANTITIES
-        ),
+        calculate_paasche_index(CURRENT_PRICES, BASE_PRICES, CURRENT_QUANTITIES),
     )
     quantity_fisher = calculate_fisher_index(
         calculate_laspeyres_index(
             CURRENT_QUANTITIES, BASE_QUANTITIES, base_quantities=BASE_PRICES
         ),
-        calculate_paasche_index(
-            CURRENT_QUANTITIES, BASE_QUANTITIES, CURRENT_PRICES
-        ),
+        calculate_paasche_index(CURRENT_QUANTITIES, BASE_QUANTITIES, CURRENT_PRICES),
     )
     product = (price_fisher / 100.0) * (quantity_fisher / 100.0)
     assert product == pytest.approx(_value_ratio(), rel=1e-12)

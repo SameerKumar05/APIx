@@ -17,9 +17,9 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from pydantic import ValidationError
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -208,7 +208,9 @@ def api_client(tmp_path: Path):
                     route_code="NATIONAL",
                     laspeyres_index=cpi_val + 14.0,
                     paasche_index=cpi_val + 7.0,
-                    fisher_ideal_index=round(((cpi_val + 14.0) * (cpi_val + 7.0)) ** 0.5, 2),
+                    fisher_ideal_index=round(
+                        ((cpi_val + 14.0) * (cpi_val + 7.0)) ** 0.5, 2
+                    ),
                     substitution_bias=7.0,
                     calculation_method="dgca_traffic_weighted",
                     created_at=now,
@@ -268,6 +270,7 @@ def test_visual_1_national_history(api_client: TestClient) -> None:
     point = data["points"][0]
     assert "timestamp" in point
     assert "index_value" in point
+
 
 def test_visual_1_routes_overview(api_client: TestClient) -> None:
     """Visual 1: Trunk routes overview returns weighted corridor list."""
@@ -363,14 +366,18 @@ def test_visual_3_lead_time_curve_includes_t45(api_client: TestClient) -> None:
     assert 1 in days_present
 
     # Verify elasticity curve structure
-    pt_t45 = next((p for p in data["curve_points"] if p["days_before_departure"] == 45), None)
+    pt_t45 = next(
+        (p for p in data["curve_points"] if p["days_before_departure"] == 45), None
+    )
     assert pt_t45 is not None
     assert pt_t45["avg_fare_inr"] > 0
     assert pt_t45["median_fare_inr"] > 0
     assert pt_t45["elasticity_factor"] is not None
 
     # T+1 urgent should show higher fare than T+45 baseline
-    pt_t1 = next((p for p in data["curve_points"] if p["days_before_departure"] == 1), None)
+    pt_t1 = next(
+        (p for p in data["curve_points"] if p["days_before_departure"] == 1), None
+    )
     assert pt_t1 is not None
     assert pt_t1["median_fare_inr"] > pt_t45["median_fare_inr"]
     assert pt_t1["elasticity_factor"] > pt_t45["elasticity_factor"]
@@ -384,6 +391,7 @@ def test_visual_3_price_elasticity_endpoint(api_client: TestClient) -> None:
     assert data["route_code"] == "DEL-BOM"
     assert "curves" in data
     assert len(data["curves"]) >= 1
+
 
 # =============================================================================
 # Visual 4: Econometric Comparisons (Fisher, Laspeyres, Paasche, CPI Gap)
@@ -427,6 +435,7 @@ def test_visual_4_cpi_divergence_series(api_client: TestClient) -> None:
     assert "mospi_cpi" in point
     assert "gap" in point
 
+
 # =============================================================================
 # Contract & Governance: OpenAPI, Rate Limits, CORS, Auth
 # =============================================================================
@@ -454,7 +463,9 @@ def test_contract_rate_limit_headers(api_client: TestClient) -> None:
     assert response.status_code == 200
     assert "x-ratelimit-limit" in response.headers
     assert "x-ratelimit-remaining" in response.headers
-    assert int(response.headers["x-ratelimit-limit"]) == settings.API_RATE_LIMIT_REQUESTS
+    assert (
+        int(response.headers["x-ratelimit-limit"]) == settings.API_RATE_LIMIT_REQUESTS
+    )
     assert int(response.headers["x-ratelimit-remaining"]) >= 0
 
 

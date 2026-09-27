@@ -573,9 +573,7 @@ class DgcaTrafficLoader:
             )
             prov = resolve_traffic_provenance(token)
             source_url = row.get("source_url") or row.get("url") or ""
-            release_date = (
-                row.get("release_date") or row.get("date_published") or ""
-            )
+            release_date = row.get("release_date") or row.get("date_published") or ""
             raw_rows_by_period.setdefault(ym, []).append(
                 {
                     "origin": origin,
@@ -635,7 +633,9 @@ class DgcaTrafficLoader:
     def _source_for(self, provenance: str, is_synthetic: bool) -> str:
         if is_synthetic:
             return f"MODELLED {provenance} file: {self.data_path}. Not a DGCA release."
-        return f"DGCA Form A Domestic Scheduled Passenger Traffic Report: {self.data_path}"
+        return (
+            f"DGCA Form A Domestic Scheduled Passenger Traffic Report: {self.data_path}"
+        )
 
     def parse_json(
         self, json_source: str | Path | list[dict[str, Any]] | dict[str, Any]

@@ -268,17 +268,27 @@ async def test_scheduler_orchestration() -> None:
     assert (
         total_registered == expected_slots
     ), f"Expected {expected_slots} registered slot jobs, got {total_registered}"
-    assert total_registered == 70, f"Expected exactly 70 registered slot jobs, got {total_registered}"
+    assert (
+        total_registered == 70
+    ), f"Expected exactly 70 registered slot jobs, got {total_registered}"
     logger.info(
         "✓ APScheduler successfully registered all %d discrete slot jobs",
         total_registered,
     )
 
     # Verify new PSD corridors are among registered slots
-    maa_del_job = next((j for j in status["jobs"] if j["id"] == "slot_MAA_DEL_T+1"), None)
-    assert maa_del_job is not None, "MAA-DEL slot job missing from scheduler registration"
-    blr_hyd_job = next((j for j in status["jobs"] if j["id"] == "slot_BLR_HYD_T+1"), None)
-    assert blr_hyd_job is not None, "BLR-HYD slot job missing from scheduler registration"
+    maa_del_job = next(
+        (j for j in status["jobs"] if j["id"] == "slot_MAA_DEL_T+1"), None
+    )
+    assert (
+        maa_del_job is not None
+    ), "MAA-DEL slot job missing from scheduler registration"
+    blr_hyd_job = next(
+        (j for j in status["jobs"] if j["id"] == "slot_BLR_HYD_T+1"), None
+    )
+    assert (
+        blr_hyd_job is not None
+    ), "BLR-HYD slot job missing from scheduler registration"
     # Verify job naming and IDs
     sample_job = next(j for j in status["jobs"] if j["id"] == "slot_DEL_BOM_T+1")
     assert sample_job["route"] == "DEL-BOM"

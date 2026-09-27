@@ -21,6 +21,7 @@ class TrafficProvenanceKind(StrEnum):
     GENERATED = "generated"
     MODELLED = "modelled"
 
+
 @dataclass(frozen=True, slots=True)
 class TrafficProvenance:
     """Parsed provenance. is_synthetic is derived from kind."""

@@ -159,7 +159,9 @@ def load_apix(conn: sqlite3.Connection) -> dict[str, float]:
 def load_apix_daily(conn: sqlite3.Connection) -> list[tuple[str, float]]:
     """Daily series of the Fisher national index, sorted chronologically."""
     cols = _columns(conn, "national_daily_indices")
-    clause = "WHERE lower(coalesce(index_type,'')) = 'fisher' AND index_value IS NOT NULL"
+    clause = (
+        "WHERE lower(coalesce(index_type,'')) = 'fisher' AND index_value IS NOT NULL"
+    )
     if "routes_covered" in cols:
         max_routes = (
             conn.execute(
@@ -174,6 +176,7 @@ def load_apix_daily(conn: sqlite3.Connection) -> list[tuple[str, float]]:
         "ORDER BY index_date ASC"
     ).fetchall()
     return [(str(r[0]), float(r[1])) for r in rows if r[0] and r[1] is not None]
+
 
 def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})")}
