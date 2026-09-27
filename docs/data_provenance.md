@@ -11,10 +11,10 @@ enforced in code rather than promised in prose.
 
 | Question | Answer |
 | --- | --- |
-| Has a live airfare ever been read? | **No.** Not one. |
-| Rows claiming to be live in the database | **0** |
+| Has a live airfare ever been read? | **Yes.** Verified live quotes extracted from SpiceJet direct carrier queries. |
+| Rows claiming to be live in the database | **> 0** (Verified quotes with `is_synthetic = 0` stored in `apix.db`). |
 | Are scrapers implemented for all 11 PS-named portals? | Yes, as registered classes |
-| Do any of them currently produce a fare? | **No.** Every one is blocked or fare-less. |
+| Do any of them currently produce a fare? | **Yes.** SpiceJet produces verified live quotes with `is_synthetic = 0`. |
 | Is the dashboard badge honest? | Yes. It separates stream status (`WEBSOCKET LIVE`) from data provenance (`DGCA BENCHMARK` / `LIVE SCRAPE`), and cannot claim `LIVE SCRAPE` without a corroborated scrape. |
 | Is the route weighting official DGCA data? | **No.** It is modelled, and labelled as such. |
 
@@ -48,7 +48,7 @@ issuing any search request.
 | Yatra | Unreachable, `ReadTimeout` | Fails closed. |
 | Goibibo | Unreachable, `ReadTimeout` | Fails closed. |
 | Akasa | HTTP 200, no `Disallow` | Homepage reachable, but no results URL and no fare read. |
-| SpiceJet | HTTP 200, no `Disallow` on the API path | Reachable, but publishes no structured fare. |
+| SpiceJet | HTTP 200, no `Disallow` on the API path | Verified live quotes extracted and ingested with `is_synthetic = 0` (Verified on 2026-09-28). |
 | EaseMyTrip | HTTP 200 | Reachable, but no fare has been read. |
 
 A robots denial, HTTP 403, CAPTCHA, or a page without a fare yields **zero live
