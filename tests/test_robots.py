@@ -180,3 +180,53 @@ def test_rate_limit_ignores_crawl_delay_when_robots_respected_is_off() -> None:
         respect_robots_txt=False,
     )
     assert _Scraper(config=cfg).effective_rate_limit_delay() == pytest.approx(2.0)
+
+
+def test_robots_strict_fail_closed_enabled_by_default() -> None:
+    """When robots_strict_fail_closed is True (default), 404 or connection failure must fail closed."""
+    from ingestion.config import IngestionConfig
+    from ingestion.robots import load_policy
+
+    cfg = IngestionConfig(ingestion_mode="live")
+    assert cfg.robots_strict_fail_closed is True
+
+    class Fake404:
+        status_code = 404
+        text = "Not Found"
+
+    policy_404 = load_policy("https://strict.test", cfg, fetcher=lambda url: Fake404())
+    assert policy_404.is_deny_all is True
+    assert policy_404.can_fetch("https://strict.test/flights") is False
+
+    def failing_fetcher(url: str):
+        raise ConnectionError("Network unreachable")
+
+    policy_err = load_policy("https://strict.test", cfg, fetcher=failing_fetcher)
+    assert policy_err.is_deny_all is True
+    assert policy_err.can_fetch("https://strict.test/flights") is False
+
+
+def test_robots_strict_fail_closed_disabled_allows_on_404_or_error() -> None:
+    """When robots_strict_fail_closed is False, 404 or connection failure fails open (permissive)."""
+    from ingestion.config import IngestionConfig
+    from ingestion.robots import load_policy
+
+    cfg = IngestionConfig(ingestion_mode="live", robots_strict_fail_closed=False)
+    assert cfg.robots_strict_fail_closed is False
+
+    class Fake404:
+        status_code = 404
+        text = "Not Found"
+
+    policy_404 = load_policy(
+        "https://permissive.test", cfg, fetcher=lambda url: Fake404()
+    )
+    assert policy_404.is_deny_all is False
+    assert policy_404.can_fetch("https://permissive.test/flights") is True
+
+    def failing_fetcher(url: str):
+        raise TimeoutError("Robots fetch timed out")
+
+    policy_err = load_policy("https://permissive.test", cfg, fetcher=failing_fetcher)
+    assert policy_err.is_deny_all is False
+    assert policy_err.can_fetch("https://permissive.test/flights") is True

@@ -828,6 +828,148 @@ def test_index_pipeline_and_db_integration() -> None:
         print("  ✓ PASSED: End-to-end integration verified successfully.")
 
 
+def test_streaming_dedup_excludes_cancelled_and_sold_out_quotes() -> None:
+    """Test 9: Verify cancelled and sold-out quotes are strictly excluded from minimum consumer price."""
+    print("\n[Test 9] Exclusion of Cancelled and Sold-Out Quotes from Minimum Price")
+
+    engine = StreamingDedupEngine(window_seconds=300.0)
+
+    # 1. Ingest valid scheduled quote at 5000
+    res1 = engine.ingest(
+        {
+            "airline_code": "6E",
+            "flight_number": "6E-551",
+            "origin": "DEL",
+            "destination": "BOM",
+            "flight_date": "2026-10-25",
+            "departure_time": "09:00",
+            "fare": 5000.0,
+            "source_portal": "makemytrip",
+            "flight_status": "scheduled",
+        }
+    )
+    assert res1.is_new_minimum is True
+    assert res1.min_fare == 5000.0
+
+    # 2. Ingest cheaper cancelled quote at 3000
+    res2 = engine.ingest(
+        {
+            "airline_code": "6E",
+            "flight_number": "6E-551",
+            "origin": "DEL",
+            "destination": "BOM",
+            "flight_date": "2026-10-25",
+            "departure_time": "09:00",
+            "fare": 3000.0,
+            "source_portal": "easemytrip",
+            "flight_status": "cancelled",
+        }
+    )
+    assert res2.is_new_minimum is False
+    assert res2.min_fare == 5000.0
+
+    # 3. Ingest even cheaper sold_out quote at 2500
+    res3 = engine.ingest(
+        {
+            "airline_code": "6E",
+            "flight_number": "6E-551",
+            "origin": "DEL",
+            "destination": "BOM",
+            "flight_date": "2026-10-25",
+            "departure_time": "09:00",
+            "fare": 2500.0,
+            "source_portal": "cleartrip",
+            "flight_status": "sold_out",
+        }
+    )
+    assert res3.is_new_minimum is False
+    assert res3.min_fare == 5000.0
+
+    # 4. Ingest genuinely lower scheduled quote at 4500
+    res4 = engine.ingest(
+        {
+            "airline_code": "6E",
+            "flight_number": "6E-551",
+            "origin": "DEL",
+            "destination": "BOM",
+            "flight_date": "2026-10-25",
+            "departure_time": "09:00",
+            "fare": 4500.0,
+            "source_portal": "indigo",
+            "flight_status": "scheduled",
+        }
+    )
+    assert res4.is_new_minimum is True
+    assert res4.min_fare == 4500.0
+
+    # 5. Flight where ALL quotes are cancelled / sold out
+    engine_cancelled = StreamingDedupEngine(window_seconds=300.0)
+    ai_item = {
+        "airline_code": "AI",
+        "flight_number": "AI-801",
+        "origin": "BOM",
+        "destination": "DEL",
+        "flight_date": "2026-10-25",
+        "departure_time": "12:00",
+        "fare": 4000.0,
+        "source_portal": "airindia",
+        "flight_status": "cancelled",
+    }
+    res_canc = engine_cancelled.ingest(ai_item)
+    assert res_canc.min_fare == float("inf")
+    key_canc, _ = engine_cancelled.generate_flight_key(ai_item)
+    state_canc = engine_cancelled.get_flight_state(key_canc)
+    assert state_canc is not None
+    assert state_canc.best_quote is None
+    assert state_canc.best_source_portal == "unknown"
+
+    print(
+        "  ✓ Cancelled & sold-out quotes safely bypassed when evaluating best consumer price."
+    )
+
+
+def test_streaming_dedup_preserves_fare_components() -> None:
+    """Test 10: Verify fare component splits and fees are preserved in quote ingestion."""
+    print("\n[Test 10] Preservation of Fare Component Splits & Fees")
+
+    engine = StreamingDedupEngine(window_seconds=300.0)
+    item = {
+        "airline_code": "6E",
+        "flight_number": "6E-333",
+        "origin": "DEL",
+        "destination": "BOM",
+        "flight_date": "2026-10-22",
+        "departure_time": "07:30",
+        "fare": 5500.0,
+        "base_fare": 4100.0,
+        "taxes_and_fees": 1400.0,
+        "udf_fee": 300.0,
+        "convenience_fee": 150.0,
+        "source_portal": "indigo",
+        "flight_status": "scheduled",
+        "fare_split_basis": "measured",
+    }
+    res = engine.ingest(item)
+    assert res.is_new_flight is True
+    assert res.min_fare == 5500.0
+    key, _ = engine.generate_flight_key(item)
+    state = engine.get_flight_state(key)
+    assert state is not None
+    quote = state.quotes_by_portal["indigo"]
+    assert quote.base_fare == 4100.0
+    assert quote.taxes_and_fees == 1400.0
+    assert quote.udf_fee == 300.0
+    assert quote.convenience_fee == 150.0
+    assert quote.flight_status == "scheduled"
+    assert quote.fare_split_basis == "measured"
+    assert state.best_quote is not None
+    assert state.best_quote.base_fare == 4100.0
+
+    print(
+        "  ✓ Fare splits (base, taxes, udf, convenience) fully preserved on FlightQuote."
+    )
+
+
 def main() -> int:
     print_header("APIx Streaming Dedup & Arbitrage Engine - Verification Test Suite")
     try:
@@ -839,8 +981,10 @@ def main() -> int:
         test_cross_platform_arbitrage_detector()
         test_arbitrage_edge_cases()
         test_index_pipeline_and_db_integration()
+        test_streaming_dedup_excludes_cancelled_and_sold_out_quotes()
+        test_streaming_dedup_preserves_fare_components()
 
-        print_header("ALL 8 VERIFICATION TESTS PASSED SUCCESSFULLY (8/8)")
+        print_header("ALL 10 VERIFICATION TESTS PASSED SUCCESSFULLY (10/10)")
         return 0
     except Exception as exc:
         logger.exception("Verification test failed: %s", exc)
