@@ -1126,8 +1126,10 @@ class TestCycle4FastApiEndpoints:
     @pytest.fixture(scope="class")
     def api_client(self):
         """Client for the application routes. No stand-in router."""
+        from backend.app.db.session import init_db
         from backend.app.main import app
 
+        init_db()
         return TestClient(app)
 
     def test_get_cpi_divergence_endpoint(self, api_client: TestClient):

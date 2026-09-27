@@ -130,3 +130,41 @@ def test_dgca_unavailability_is_documented_with_an_authority() -> None:
     assert bt.DGCA_POSITION["verdict"].startswith("FALSE")
     assert "1934" in bt.DGCA_POSITION["authority"]
     assert "78 routes" in bt.DGCA_POSITION["quote"]
+
+
+def test_demonstrates_30_day_backtest_with_valid_metrics(tmp_path):
+    """Problem Statement 26056 mandates:
+    'Demonstrate at least 30 days of back-tested results against publicly available
+    DGCA monthly average-fare data'.
+
+    Over a 30-day historical window, bt.run() must emit status == 'OK'
+    and populate valid RMSE, Pearson r, and MAPE metrics without error.
+    """
+    import math
+    from datetime import date, timedelta
+    start_date = date(2026, 8, 20)
+    apix_rows = []
+    for i in range(35):
+        d = (start_date + timedelta(days=i)).isoformat()
+        val = 112.0 + (i * 0.12) + (0.35 * math.sin(i * 0.6))
+        apix_rows.append((d, "fisher", val))
+
+    mospi_rows = [
+        ("2026-07", 110.5),
+        ("2026-08", 113.2),
+        ("2026-09", 116.1),
+    ]
+    db = _seed(tmp_path, apix_rows, mospi_rows)
+    res = bt.run(db, required_days=30)
+
+    assert res.status == "OK", res.reason
+    assert res.apix_observations == 35
+    assert res.pearson_r is not None
+    assert res.pearson_r > 0.8
+    assert res.rmse is not None
+    assert res.rmse >= 0.0
+    assert res.mape is not None
+    assert res.mape >= 0.0
+    assert res.r_squared is not None
+    assert res.direction_agreement_pct is not None
+
