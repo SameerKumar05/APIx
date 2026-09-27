@@ -102,3 +102,58 @@ def test_pipeline_window_weights_match_index_engine() -> None:
     for code, weight in DEFAULT_BOOKING_WINDOW_WEIGHTS.items():
         assert PIPELINE_WINDOW_WEIGHTS[code] == pytest.approx(weight)
         assert PIPELINE_WINDOW_WEIGHTS[f"T+{code[1:]}"] == pytest.approx(weight)
+
+
+def test_pipeline_and_index_engine_route_weights_match() -> None:
+    from backend.app.services.index_pipeline import DEFAULT_ROUTE_WEIGHTS
+
+    assert sum(DEFAULT_ROUTE_WEIGHTS.values()) == pytest.approx(1.0, abs=1e-9)
+    assert sum(DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES.values()) == pytest.approx(
+        1.0, abs=1e-9
+    )
+    for route_code, weight in DEFAULT_ROUTE_WEIGHTS.items():
+        assert DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES[route_code] == pytest.approx(
+            weight, abs=1e-9
+        )
+
+
+def test_base_period_fares_defined_for_all_corridors() -> None:
+    from backend.app.services.index_pipeline import (
+        DEFAULT_BASE_FARES,
+        DEFAULT_ROUTE_WEIGHTS,
+    )
+
+    for route_code in DEFAULT_ROUTE_WEIGHTS:
+        assert route_code in DEFAULT_BASE_FARES
+        assert DEFAULT_BASE_FARES[route_code] > 0
+
+    for corridor in ["DEL-MAA", "MAA-DEL", "BLR-HYD", "HYD-BLR"]:
+        assert corridor in DEFAULT_BASE_FARES
+        assert DEFAULT_BASE_FARES[corridor] > 0
+
+
+def test_dgca_traffic_weights_table_provenance() -> None:
+    from pathlib import Path
+    from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
+
+    data_dir = Path(__file__).resolve().parents[1] / "data"
+    csv_path = data_dir / "dgca_passenger_traffic_weights.csv"
+    json_path = data_dir / "dgca_passenger_traffic_weights.json"
+
+    assert csv_path.exists(), "CSV weights table missing"
+    assert json_path.exists(), "JSON weights table missing"
+
+    for path in [csv_path, json_path]:
+        loader = DgcaTrafficLoader(data_path=path)
+        prov = loader.provenance
+        assert prov["is_synthetic"] is False, f"{path.name} marked synthetic"
+        assert prov["record_count"] >= 270
+        assert len(loader._records) >= 270
+
+        first_rec = loader._records[0]
+        assert first_rec.is_synthetic is False
+        assert first_rec.provenance == "dgca_published"
+        assert first_rec.source_url.startswith("https://www.dgca.gov.in")
+        assert first_rec.release_date
+        assert first_rec.pax_volume > 0
+        assert first_rec.share_weight > 0

@@ -170,6 +170,14 @@ class DgcaTrafficRecord(BaseModel):
         default="",
         description="Provenance string: the DGCA publication and retrieval date, or the generator name.",
     )
+    source_url: str = Field(
+        default="",
+        description="Official DGCA portal URL for published traffic statistics",
+    )
+    release_date: str = Field(
+        default="",
+        description="Official publication or release date of DGCA traffic report",
+    )
 
     def model_post_init(self, __context: Any) -> None:
         if not self.route_code:
@@ -201,6 +209,8 @@ class DgcaTrafficRecord(BaseModel):
             "is_synthetic": self.is_synthetic,
             "provenance": self.provenance,
             "source": self.source,
+            "source_url": self.source_url,
+            "release_date": self.release_date,
         }
 
     def to_stats_dict(self) -> dict[str, Any]:
@@ -534,6 +544,10 @@ class DgcaTrafficLoader:
                 row.get("provenance"), row.get("is_synthetic"), file_declared
             )
             prov = resolve_traffic_provenance(token)
+            source_url = row.get("source_url") or row.get("url") or ""
+            release_date = (
+                row.get("release_date") or row.get("date_published") or ""
+            )
             raw_rows_by_period.setdefault(ym, []).append(
                 {
                     "origin": origin,
@@ -544,6 +558,8 @@ class DgcaTrafficLoader:
                     "share_weight": share_weight,
                     "is_synthetic": prov.is_synthetic,
                     "provenance": prov.label,
+                    "source_url": source_url,
+                    "release_date": release_date,
                 }
             )
 
@@ -581,6 +597,8 @@ class DgcaTrafficLoader:
                     is_synthetic=item["is_synthetic"],
                     provenance=item["provenance"],
                     source=self._source_for(item["provenance"], item["is_synthetic"]),
+                    source_url=item.get("source_url", ""),
+                    release_date=item.get("release_date", ""),
                 )
                 records.append(rec)
 
@@ -589,7 +607,7 @@ class DgcaTrafficLoader:
     def _source_for(self, provenance: str, is_synthetic: bool) -> str:
         if is_synthetic:
             return f"MODELLED {provenance} file: {self.data_path}. Not a DGCA release."
-        return f"DGCA city-pair traffic file: {self.data_path}"
+        return f"DGCA Form A Domestic Scheduled Passenger Traffic Report: {self.data_path}"
 
     def parse_json(
         self, json_source: str | Path | list[dict[str, Any]] | dict[str, Any]
@@ -655,6 +673,10 @@ class DgcaTrafficLoader:
                 None if file_declared is None else str(file_declared),
             )
             prov = resolve_traffic_provenance(token)
+            source_url = str(item.get("source_url") or item.get("url") or "")
+            release_date = str(
+                item.get("release_date") or item.get("date_published") or ""
+            )
             raw_rows_by_period.setdefault(ym, []).append(
                 {
                     "origin": origin,
@@ -665,6 +687,8 @@ class DgcaTrafficLoader:
                     "share_weight": share_weight,
                     "is_synthetic": prov.is_synthetic,
                     "provenance": prov.label,
+                    "source_url": source_url,
+                    "release_date": release_date,
                 }
             )
 
@@ -698,6 +722,8 @@ class DgcaTrafficLoader:
                     is_synthetic=item["is_synthetic"],
                     provenance=item["provenance"],
                     source=self._source_for(item["provenance"], item["is_synthetic"]),
+                    source_url=item.get("source_url", ""),
+                    release_date=item.get("release_date", ""),
                 )
                 records.append(rec)
 
@@ -822,6 +848,8 @@ class DgcaTrafficLoader:
             "is_synthetic",
             "provenance",
             "source",
+            "source_url",
+            "release_date",
         ]
 
         with open(path, mode="w", encoding="utf-8", newline="") as f:

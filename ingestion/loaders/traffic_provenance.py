@@ -16,6 +16,7 @@ class TrafficProvenanceKind(StrEnum):
     """How a traffic file says it was produced."""
 
     DGCA = "DGCA"
+    DGCA_PUBLISHED = "dgca_published"
     GENERATED = "generated"
     MODELLED = "modelled"
 
@@ -29,7 +30,7 @@ class TrafficProvenance:
     @property
     def is_synthetic(self) -> bool:
         match self.kind:
-            case TrafficProvenanceKind.DGCA:
+            case TrafficProvenanceKind.DGCA | TrafficProvenanceKind.DGCA_PUBLISHED:
                 return False
             case TrafficProvenanceKind.GENERATED | TrafficProvenanceKind.MODELLED:
                 return True
@@ -74,7 +75,9 @@ def declared_token(
 def resolve_traffic_provenance(declared: str | None) -> TrafficProvenance:
     """Map a declaration token to a provenance. Unknown and blank tokens are modelled."""
     token = (declared or "").strip().casefold()
-    if token == "dgca":
+    if token == "dgca_published":
+        kind = TrafficProvenanceKind.DGCA_PUBLISHED
+    elif token == "dgca":
         kind = TrafficProvenanceKind.DGCA
     elif token in {"generated", "synthetic"}:
         kind = TrafficProvenanceKind.GENERATED
