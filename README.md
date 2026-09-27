@@ -131,7 +131,7 @@ of that statement. Time reversal *is* asserted.
 
 ```bash
 pytest -q                                   # full suite
-./scripts/verify_all.sh                   # 23-step master verification harness
+./scripts/verify_all.sh                   # 25-step master verification harness
 ruff check . && black --check .             # lint and format
 mypy backend/app/schemas backend/app/models backend/app/services ingestion
 alembic upgrade head                        # apply schema migrations

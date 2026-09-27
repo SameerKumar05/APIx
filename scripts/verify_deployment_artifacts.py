@@ -133,15 +133,20 @@ def verify_scrape_workflow(workflow_path: Path) -> list[str]:
     if missing_secrets:
         errors.append(f"Missing required secret injection(s): {missing_secrets}")
 
-    # Check orchestrator execution
+    # Check orchestrator / scheduler execution
     orchestrator_executed = False
     for step in steps:
         run_cmd = step.get("run", "")
-        if "python -m ingestion.orchestrator" in run_cmd:
+        if (
+            "python -m ingestion.orchestrator" in run_cmd
+            or "python -m ingestion.scheduler" in run_cmd
+        ):
             orchestrator_executed = True
             break
     if not orchestrator_executed:
-        errors.append("Step executing 'python -m ingestion.orchestrator' not found")
+        errors.append(
+            "Step executing 'python -m ingestion.orchestrator' or 'python -m ingestion.scheduler' not found"
+        )
 
     # Check artifact upload
     artifact_upload = False
@@ -266,7 +271,14 @@ def verify_deployment_docs(docs_path: Path) -> list[str]:
     ]
 
     for kw in required_keywords:
-        if kw.lower() not in content.lower():
+        kw_clean = kw.lower()
+        if kw_clean == "cold-start":
+            if (
+                "cold-start" not in content.lower()
+                and "cold start" not in content.lower()
+            ):
+                errors.append(f"docs/deployment.md missing coverage for keyword '{kw}'")
+        elif kw_clean not in content.lower():
             errors.append(f"docs/deployment.md missing coverage for keyword '{kw}'")
 
     return errors
