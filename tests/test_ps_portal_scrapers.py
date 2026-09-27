@@ -231,7 +231,7 @@ def test_synthetic_fallback_keeps_label_and_generator_fare() -> None:
         assert record.airline_code == "6E"
         assert record.base_fare is not None
         assert record.taxes_and_fees is not None
-        assert record.fare_split_basis in ("measured", "residual", "estimated")
+        assert record.fare_split_basis in ("measured", "residual", "estimated", "calibrated")
 
 
 def test_valid_iata_codes_includes_maa() -> None:

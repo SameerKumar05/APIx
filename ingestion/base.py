@@ -85,10 +85,14 @@ class RawFareRecord:
             self.total_fare,
             self.base_fare,
             self.taxes_and_fees,
+            airline_code=self.airline_code,
+            origin=self.origin,
+            destination=self.destination,
         )
         self.base_fare = split.base_fare
         self.taxes_and_fees = split.taxes_and_fees
-        self.fare_split_basis = split.basis.value
+        if not self.fare_split_basis:
+            self.fare_split_basis = split.basis.value
         self.booking_class = canonical_booking_class(self.booking_class)
         self.flight_status = canonical_flight_status(self.flight_status)
         if not self.departure_datetime:
@@ -118,6 +122,17 @@ class RawFareRecord:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict with both API and DB-compatible keys."""
+        if self.total_fare != self.fare_inr and self.fare_inr is not None:
+            self.total_fare = self.fare_inr
+            if self.fare_split_basis in ("calibrated", "estimated"):
+                split = classify_fare_split(
+                    self.total_fare,
+                    airline_code=self.airline_code,
+                    origin=self.origin,
+                    destination=self.destination,
+                )
+                self.base_fare = split.base_fare
+                self.taxes_and_fees = split.taxes_and_fees
         data = asdict(self)
         data["origin_iata"] = self.origin
         data["destination_iata"] = self.destination
