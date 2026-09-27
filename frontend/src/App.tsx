@@ -357,9 +357,9 @@ export const App: React.FC = () => {
               <ElasticityTab
                 leadTimeCurve={state.data.leadTimeCurve}
                 heatmap={state.data.heatmap}
+                sectorHeatmap={state.data.sectorHeatmap}
               />
             )}
-
             {activeTab === 'anomalies' && (
               <AnomaliesTab
                 anomalies={state.data.anomalies}

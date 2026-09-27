@@ -23,6 +23,7 @@ import {
   CpiDivergenceResponse,
   PriceElasticityResponse,
   DgcaSurveillanceResponse,
+  SectorHeatmapResponse,
 } from '../types/api';
 
 export type ApiError = {kind:"http";status:number;endpoint:string} | {kind:"network";endpoint:string} | {kind:"timeout";endpoint:string} | {kind:"parse";endpoint:string};
@@ -158,9 +159,9 @@ export class ApiClient {
   /**
    * 2. Routes: Specific route historical index
    */
-  public async getRouteHistory(routeCode: string, days: number = 30): Promise<RouteHistoryResponse> {
+  public async getRouteHistory(routeCode: string, days: number = 30, frequency: string = 'daily'): Promise<RouteHistoryResponse> {
     return this.request<RouteHistoryResponse>(
-      `/indices/routes/${routeCode}/history?days=${days}`
+      `/indices/routes/${routeCode}/history?days=${days}&frequency=${encodeURIComponent(frequency)}`
     );
   }
 
@@ -188,6 +189,17 @@ export class ApiClient {
     return this.request<HeatmapMatrixResponse>(
       endpoint
     );
+  }
+
+  /**
+   * 3a. Analytics: Route sector heatmap matrix across advance booking windows
+   */
+  public async getSectorHeatmap(routeCode?: string): Promise<SectorHeatmapResponse> {
+    const endpoint = routeCode
+      ? `/analytics/sector-heatmap?route_code=${encodeURIComponent(routeCode)}`
+      : '/analytics/sector-heatmap';
+
+    return this.request<SectorHeatmapResponse>(endpoint);
   }
 
   /**
@@ -522,6 +534,7 @@ export class ApiClient {
       cpiDivergence,
       priceElasticity,
       dgcaSurveillance,
+      sectorHeatmap,
     ] = await Promise.all([
       this.getNationalIndexLatest(),
       this.getNationalIndexHistory(30),
@@ -537,6 +550,7 @@ export class ApiClient {
       this.getCpiDivergence(),
       this.getPriceElasticity(),
       this.getDgcaSurveillance(),
+      this.getSectorHeatmap(),
     ]);
 
     return {
@@ -554,6 +568,7 @@ export class ApiClient {
       cpiDivergence,
       priceElasticity,
       dgcaSurveillance,
+      sectorHeatmap,
     };
   }
 }
