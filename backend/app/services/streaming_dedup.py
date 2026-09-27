@@ -365,7 +365,9 @@ class StreamingDedupEngine:
         base_fare_val = _extract_field(item, "base_fare")
         base_fare = float(base_fare_val) if base_fare_val is not None else None
         taxes_and_fees_val = _extract_field(item, "taxes_and_fees")
-        taxes_and_fees = float(taxes_and_fees_val) if taxes_and_fees_val is not None else None
+        taxes_and_fees = (
+            float(taxes_and_fees_val) if taxes_and_fees_val is not None else None
+        )
         udf_fee_val = _extract_field(item, "udf_fee")
         udf_fee = float(udf_fee_val) if udf_fee_val is not None else None
         conv_fee_val = _extract_field(item, "convenience_fee")

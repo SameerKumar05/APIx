@@ -393,4 +393,3 @@ def test_raw_fare_record_measured_splits_preserved(db_session: Session) -> None:
     assert row.base_fare == 3800.0
     assert row.taxes_and_fees == 1200.0
     assert row.fare_split_basis == "measured"
-
