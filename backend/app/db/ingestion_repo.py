@@ -467,19 +467,37 @@ def bulk_insert_raw_fares(
         if dialect_name == "postgresql":
             from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-            pg_stmt = (
-                pg_insert(RawFare)
-                .values(chunk)
-                .on_conflict_do_nothing(index_elements=["hash_id"])
+            pg_stmt = pg_insert(RawFare).values(chunk)
+            pg_stmt = pg_stmt.on_conflict_do_update(
+                index_elements=["hash_id"],
+                set_={
+                    "total_fare": pg_stmt.excluded.total_fare,
+                    "base_fare": pg_stmt.excluded.base_fare,
+                    "taxes_and_fees": pg_stmt.excluded.taxes_and_fees,
+                    "is_synthetic": pg_stmt.excluded.is_synthetic,
+                    "source_platform": pg_stmt.excluded.source_platform,
+                    "scraped_at": pg_stmt.excluded.scraped_at,
+                    "flight_status": pg_stmt.excluded.flight_status,
+                },
+                where=(RawFare.is_synthetic.is_(True)),
             )
             res = cast("CursorResult[Any]", db.execute(pg_stmt))
         else:
             from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-            sqlite_stmt = (
-                sqlite_insert(RawFare)
-                .values(chunk)
-                .on_conflict_do_nothing(index_elements=["hash_id"])
+            sqlite_stmt = sqlite_insert(RawFare).values(chunk)
+            sqlite_stmt = sqlite_stmt.on_conflict_do_update(
+                index_elements=["hash_id"],
+                set_={
+                    "total_fare": sqlite_stmt.excluded.total_fare,
+                    "base_fare": sqlite_stmt.excluded.base_fare,
+                    "taxes_and_fees": sqlite_stmt.excluded.taxes_and_fees,
+                    "is_synthetic": sqlite_stmt.excluded.is_synthetic,
+                    "source_platform": sqlite_stmt.excluded.source_platform,
+                    "scraped_at": sqlite_stmt.excluded.scraped_at,
+                    "flight_status": sqlite_stmt.excluded.flight_status,
+                },
+                where=(RawFare.is_synthetic.is_(True)),
             )
             res = cast("CursorResult[Any]", db.execute(sqlite_stmt))
 
