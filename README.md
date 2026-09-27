@@ -5,7 +5,7 @@
 Smart India Hackathon 2026 · Problem Statement 26056 · Team Woven Tech
 
 [![CI](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml/badge.svg)](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-460%20passed-brightgreen.svg)](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-507%20passed-brightgreen.svg)](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-see%20LICENSE-informational.svg)](LICENSE)
 
@@ -47,7 +47,7 @@ Then open <http://localhost:3000>. The API reference is served at
 Verify the install:
 
 ```bash
-pytest -q                                              # 460 tests
+pytest -q                                              # 507 tests
 python scripts/audit_provenance.py apix.db             # must exit 0
 bash scripts/verify_all.sh                             # 25-step master verification harness
 ```
@@ -72,7 +72,7 @@ bash scripts/verify_all.sh                             # 25-step master verifica
   splits (base fare, taxes and surcharges, UDF, convenience fee) are preserved or
   cleanly estimated, outliers are rejected by Tukey IQR at ingest, and cancelled or
   sold-out flights are excluded from index computation.
-- **Index.** A Fisher ideal index over 10 corridors and 5 advance-purchase
+- **Index.** A Fisher ideal index over 14 corridors and 5 advance-purchase
   windows (T+1, T+7, T+15, T+30, T+45), with weights summing to exactly 1.000000.
   Lead-time price elasticity curves are computed and persisted across all sectors.
 - **Delivery.** A versioned REST API (including sector heatmap matrix and composite
@@ -83,7 +83,7 @@ bash scripts/verify_all.sh                             # 25-step master verifica
 
 | Component | State |
 | --- | --- |
-| Scraping engine, queue, cleaning, index, API, dashboard | Built and tested (460/460 passing) |
+| Scraping engine, queue, cleaning, index, API, dashboard | Built and tested (507/507 passing) |
 | robots.txt compliance, rate limiting, IP rotation | Built and enforced in code (RFC 9309) |
 | 11 portal scrapers | Implemented; all blocked or fare-less in practice |
 | Live airfare data | **None. Zero rows.** |
@@ -99,10 +99,12 @@ Parliament answers. To demonstrate empirical validation as mandated by PS 26056,
 data against official MoSPI monthly CPI transport benchmark series, generating
 RMSE, Pearson correlation ($r$), and MAPE metrics and exiting 0.
 
-**The Fisher index here does not satisfy factor reversal.** The Paasche side is
-the textbook index; the Laspeyres side is a fixed-weight mean of price relatives
+**The default Fisher index does not satisfy factor reversal.** The Paasche side is
+the textbook index; the default Laspeyres side is a fixed-weight mean of price relatives
 rather than a true Laspeyres. `tests/test_factor_reversal.py` proves both halves
-of that statement. Time reversal *is* asserted.
+of that statement, and proves the opt-in true Laspeyres
+(`calculate_true_laspeyres_index(..., base_quantities=...)`) restores factor
+reversal identically. Time reversal *is* asserted on the default path.
 
 ## Documentation
 
@@ -121,7 +123,7 @@ of that statement. Time reversal *is* asserted.
 ## Operational commands
 
 ```bash
-pytest -q                                   # 460-test full suite
+pytest -q                                   # 507-test full suite
 ./scripts/verify_all.sh                   # 25-step master verification harness (all 25 pass)
 ruff check . && black --check .             # lint and format
 mypy backend/app/schemas backend/app/models backend/app/services ingestion

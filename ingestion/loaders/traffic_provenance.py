@@ -16,7 +16,6 @@ class TrafficProvenanceKind(StrEnum):
     """How a traffic file says it was produced."""
 
     DGCA = "DGCA"
-    DGCA_PUBLISHED = "dgca_published"
     CALIBRATED_BASELINE = "calibrated_baseline"
     MODELLED_DGCA_PROXY = "modelled_dgca_proxy"
     GENERATED = "generated"
@@ -31,7 +30,7 @@ class TrafficProvenance:
     @property
     def is_synthetic(self) -> bool:
         match self.kind:
-            case TrafficProvenanceKind.DGCA | TrafficProvenanceKind.DGCA_PUBLISHED:
+            case TrafficProvenanceKind.DGCA:
                 return False
             case (
                 TrafficProvenanceKind.CALIBRATED_BASELINE
@@ -85,8 +84,6 @@ def resolve_traffic_provenance(declared: str | None) -> TrafficProvenance:
         kind = TrafficProvenanceKind.CALIBRATED_BASELINE
     elif token in {"modelled_dgca_proxy", "proxy"}:
         kind = TrafficProvenanceKind.MODELLED_DGCA_PROXY
-    elif token == "dgca_published":
-        kind = TrafficProvenanceKind.DGCA_PUBLISHED
     elif token == "dgca":
         kind = TrafficProvenanceKind.DGCA
     elif token in {"generated", "synthetic"}:
