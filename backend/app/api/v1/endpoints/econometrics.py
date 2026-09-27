@@ -65,7 +65,7 @@ AIRLINE_NAMES: dict[str, str] = {
 }
 
 _INSUFFICIENT_OVERLAP = "insufficient overlapping observations"
-_WINDOW_DAYS: dict[str, int] = {"T+30": 30, "T+15": 15, "T+7": 7, "T+1": 1}
+_WINDOW_DAYS: dict[str, int] = {"T+45": 45, "T+30": 30, "T+15": 15, "T+7": 7, "T+1": 1}
 _WINDOW_ELASTICITY: dict[str, str] = {
     "T+1": "t1_t7_elasticity",
     "T+7": "t7_t15_elasticity",

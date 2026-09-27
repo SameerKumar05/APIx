@@ -62,3 +62,33 @@ def test_no_table_is_labelled_as_an_official_dgca_release() -> None:
 
     source = inspect.getsource(engine)
     assert "Official DGCA" not in source
+
+
+def test_seed_airline_shares_sum_to_one_hundred_percent() -> None:
+    from backend.app.db.seed import INITIAL_AIRLINES
+
+    total = sum(a["market_share_pct"] for a in INITIAL_AIRLINES)
+    assert total == pytest.approx(100.0, abs=1e-9)
+    for a in INITIAL_AIRLINES:
+        assert a["market_share_pct"] == pytest.approx(
+            DEFAULT_AIRLINE_MARKET_SHARES[a["code"]] * 100.0
+        )
+
+
+def test_pipeline_window_weights_match_index_engine() -> None:
+    from backend.app.services.index_pipeline import (
+        CANONICAL_WINDOWS,
+        DEFAULT_WINDOW_WEIGHTS as PIPELINE_WINDOW_WEIGHTS,
+    )
+
+    canonical_weights = {
+        code: weight
+        for code, weight in PIPELINE_WINDOW_WEIGHTS.items()
+        if "+" in code
+    }
+    assert sum(canonical_weights.values()) == pytest.approx(1.0, abs=1e-9)
+    assert set(canonical_weights.keys()) == set(CANONICAL_WINDOWS)
+    for code, weight in DEFAULT_BOOKING_WINDOW_WEIGHTS.items():
+        assert PIPELINE_WINDOW_WEIGHTS[code] == pytest.approx(weight)
+        assert PIPELINE_WINDOW_WEIGHTS[f"T+{code[1:]}"] == pytest.approx(weight)
+

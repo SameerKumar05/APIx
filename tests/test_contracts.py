@@ -374,6 +374,14 @@ class TestMasterDataAlignment:
         total_market_share = sum(DEFAULT_AIRLINE_MARKET_SHARES.values())
         assert pytest.approx(total_market_share, abs=1e-9) == 1.0
 
+        # Seed market shares must sum to 100% and match
+        db_seed_sum = sum(a["market_share_pct"] for a in INITIAL_AIRLINES)
+        assert pytest.approx(db_seed_sum, abs=1e-9) == 100.0
+        for a in INITIAL_AIRLINES:
+            assert a["market_share_pct"] == pytest.approx(
+                DEFAULT_AIRLINE_MARKET_SHARES[a["code"]] * 100.0
+            )
+
     def test_booking_windows_standardization(self) -> None:
         """The 5 standard booking windows (T+1, T+7, T+15, T+30, T+45) match across subsystems."""
         codes = [w.code for w in BOOKING_WINDOWS]
@@ -385,6 +393,20 @@ class TestMasterDataAlignment:
         # Quant engine weights sum to 1.0
         window_weights_sum = sum(DEFAULT_BOOKING_WINDOW_WEIGHTS.values())
         assert pytest.approx(window_weights_sum, abs=1e-5) == 1.0
+
+        # Index pipeline weights match and contain all 5 windows
+        from backend.app.services.index_pipeline import (
+            CANONICAL_WINDOWS,
+            DEFAULT_WINDOW_WEIGHTS,
+        )
+
+        assert set(CANONICAL_WINDOWS) == {"T+1", "T+7", "T+15", "T+30", "T+45"}
+        for w in codes:
+            assert w in DEFAULT_WINDOW_WEIGHTS
+            raw_w = w.replace("+", "")
+            assert DEFAULT_WINDOW_WEIGHTS[w] == pytest.approx(
+                DEFAULT_BOOKING_WINDOW_WEIGHTS[raw_w]
+            )
 
 
 # ===========================================================================

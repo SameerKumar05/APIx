@@ -22,7 +22,7 @@ from backend.app.services.mospi_provenance import source_cites_press_note
 
 router = APIRouter()
 
-_WINDOW_DAYS = {"T+1": 1, "T+7": 7, "T+15": 15, "T+30": 30}
+_WINDOW_DAYS = {"T+1": 1, "T+7": 7, "T+15": 15, "T+30": 30, "T+45": 45}
 
 
 def _horizon_context(db: Session, index_value: float) -> dict:
@@ -355,6 +355,7 @@ async def get_route_history(
             .filter(
                 RouteDailyIndex.origin == origin,
                 RouteDailyIndex.destination == dest,
+                RouteDailyIndex.booking_window == "COMPOSITE",
             )
             .order_by(RouteDailyIndex.index_date.desc())
             .limit(days)

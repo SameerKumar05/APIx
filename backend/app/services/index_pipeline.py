@@ -71,19 +71,21 @@ logger = logging.getLogger("apix.services.index_pipeline")
 # ---------------------------------------------------------------------------
 
 # Advance booking purchase window weights (DGCA lead-time distribution)
-# Formula: P_{r,t} = 0.20*T1 + 0.35*T7 + 0.30*T15 + 0.15*T30
+# Formula: P_{r,t} = 0.20*T1 + 0.32*T7 + 0.26*T15 + 0.14*T30 + 0.08*T45
 DEFAULT_WINDOW_WEIGHTS: dict[str, float] = {
     "T1": 0.20,
     "T+1": 0.20,
-    "T7": 0.35,
-    "T+7": 0.35,
-    "T15": 0.30,
-    "T+15": 0.30,
-    "T30": 0.15,
-    "T+30": 0.15,
+    "T7": 0.32,
+    "T+7": 0.32,
+    "T15": 0.26,
+    "T+15": 0.26,
+    "T30": 0.14,
+    "T+30": 0.14,
+    "T45": 0.08,
+    "T+45": 0.08,
 }
 
-# Canonical 4 advance booking purchase windows
+# Canonical 5 advance booking purchase windows
 CANONICAL_WINDOWS: list[str] = ["T+1", "T+7", "T+15", "T+30", "T+45"]
 
 # Mapping to canonical window tags
@@ -100,6 +102,9 @@ WINDOW_NORM_MAP: dict[str, str] = {
     "T30": "T+30",
     "T+30": "T+30",
     "30": "T+30",
+    "T45": "T+45",
+    "T+45": "T+45",
+    "45": "T+45",
 }
 
 # Top 10 Indian domestic directional flight corridors (DGCA traffic weights sum to 1.000)
@@ -324,6 +329,8 @@ def evaluate_anomaly_condition(
         lead_days = 15
     elif "30" in win_str:
         lead_days = 30
+    elif "45" in win_str:
+        lead_days = 45
     else:
         lead_days = 7
 
@@ -738,7 +745,13 @@ def _execute_daily_pipeline(
         )
     else:
         lead_time_elasticity = calculate_lead_time_elasticity(
-            window_fares={"T+1": 6500.0, "T+7": 5200.0, "T+15": 4500.0, "T+30": 3800.0},
+            window_fares={
+                "T+1": 6500.0,
+                "T+7": 5200.0,
+                "T+15": 4500.0,
+                "T+30": 3800.0,
+                "T+45": 3500.0,
+            },
         )
 
     # 5d. MoSPI CPI Transport Sub-Index Divergence Analytics
@@ -832,6 +845,48 @@ def _execute_daily_pipeline(
             db.add(econ_rec)
     except Exception as e:
         logger.warning("Could not persist EconometricIndex: %s", e)
+
+    # Forward-compatible persistence into RouteElasticity (fixes Issue #1 empty elasticity chart)
+    try:
+        from backend.app.db.econometrics_repo import upsert_route_elasticity
+
+        t1_t7 = abs(
+            lead_time_elasticity.arc_elasticities.get(
+                "T+7_to_T+1",
+                lead_time_elasticity.arc_elasticities.get("T+1_to_T+7", 1.25),
+            )
+        )
+        t7_t15 = abs(
+            lead_time_elasticity.arc_elasticities.get(
+                "T+15_to_T+7",
+                lead_time_elasticity.arc_elasticities.get("T+7_to_T+15", 1.10),
+            )
+        )
+        t15_t30 = abs(
+            lead_time_elasticity.arc_elasticities.get(
+                "T+30_to_T+15",
+                lead_time_elasticity.arc_elasticities.get("T+15_to_T+30", 0.95),
+            )
+        )
+        avg_decay = (
+            abs(lead_time_elasticity.lead_time_premium_pct) / 100.0 / 30.0
+            if lead_time_elasticity.lead_time_premium_pct
+            else 0.035
+        )
+
+        upsert_route_elasticity(
+            db=db,
+            route_code="NATIONAL",
+            calculation_date=calc_date,
+            t1_t7_elasticity=round(t1_t7, 4),
+            t7_t15_elasticity=round(t7_t15, 4),
+            t15_t30_elasticity=round(t15_t30, 4),
+            avg_lead_time_decay=round(avg_decay, 4),
+            confidence_score=1.0,
+            commit=False,
+        )
+    except Exception as e:
+        logger.warning("Could not persist RouteElasticity for NATIONAL: %s", e)
 
     db.commit()
 

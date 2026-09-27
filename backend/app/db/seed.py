@@ -108,31 +108,31 @@ INITIAL_AIRLINES: list[dict[str, Any]] = [
     {
         "code": "6E",
         "name": "IndiGo",
-        "market_share_pct": 62.0,
+        "market_share_pct": 60.0,
         "is_active": True,
     },
     {
         "code": "AI",
         "name": "Air India",
-        "market_share_pct": 20.0,
+        "market_share_pct": 15.0,
         "is_active": True,
     },
     {
         "code": "IX",
         "name": "Air India Express",
-        "market_share_pct": 8.0,
+        "market_share_pct": 10.0,
         "is_active": True,
     },
     {
         "code": "QP",
         "name": "Akasa Air",
-        "market_share_pct": 5.0,
+        "market_share_pct": 10.0,
         "is_active": True,
     },
     {
         "code": "SG",
         "name": "SpiceJet",
-        "market_share_pct": 4.0,
+        "market_share_pct": 5.0,
         "is_active": True,
     },
 ]
