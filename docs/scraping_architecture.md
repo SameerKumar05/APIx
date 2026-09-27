@@ -333,7 +333,7 @@ Where:
 
 ### 8. Distributed Task Scheduler (`ingestion/scheduler.py`) and Standalone Worker (`ingestion/worker.py`)
 
-The distributed scheduler is built upon `APScheduler` (`AsyncIOScheduler`), operating as an asynchronous daemon capable of running standalone or embedded within the APIx backend process. For trigger truth, the durable path is authoritative: the standalone worker `python -m ingestion.worker` polls `crawler_jobs` with atomic claims, holds `worker_heartbeats` leases, sweeps stale leases, and dispatches via `IngestionClient`. Current suite covering this path is 388 passed with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`; older counts are historical.
+The distributed scheduler is built upon `APScheduler` (`AsyncIOScheduler`), operating as an asynchronous daemon capable of running standalone or embedded within the APIx backend process. For trigger truth, the durable path is authoritative: the standalone worker `python -m ingestion.worker` polls `crawler_jobs` with atomic claims, holds `worker_heartbeats` leases, sweeps stale leases, and dispatches via `IngestionClient`. Current suite covering this path is 460 passed, with 25/25 verification steps passing in `scripts/verify_all.sh`; older counts (388/226/188) are historical.
 
 #### 8.1 Key Capabilities & Lifecycle Architecture
 - **Slot Job Registration:** Pre-registers all 50 discrete route-window combinations as individual jobs with unique deterministic identifiers (`slot_DEL_BOM_T+1`, `slot_BOM_DEL_T+7`, etc.).

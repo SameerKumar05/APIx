@@ -15,7 +15,7 @@ enforced in code rather than promised in prose.
 | Rows claiming to be live in the database | **0** |
 | Are scrapers implemented for all 11 PS-named portals? | Yes, as registered classes |
 | Do any of them currently produce a fare? | **No.** Every one is blocked or fare-less. |
-| Is the dashboard badge honest? | Yes. It reads `SIMULATED` and cannot read `LIVE` without a corroborated scrape. |
+| Is the dashboard badge honest? | Yes. It separates stream status (`WEBSOCKET LIVE`) from data provenance (`DGCA BENCHMARK` / `LIVE SCRAPE`), and cannot claim `LIVE SCRAPE` without a corroborated scrape. |
 | Is the route weighting official DGCA data? | **No.** It is modelled, and labelled as such. |
 
 `GET /api/v1/health` reports this machine-readably:
@@ -94,13 +94,14 @@ Four mechanisms, all enforced in code:
 
 1. **A missing provenance flag defaults to synthetic.** A record that omits
    `is_synthetic` is persisted as `is_synthetic=true`.
-2. **The UI derives its state from the data**, reading `SIMULATED`, `MIXED`,
-   `LIVE SCRAPE`, or `PROVENANCE UNKNOWN`. There is no path that sets `LIVE`
-   independently of the rows.
+2. **The UI derives its provenance state from the data**, displaying `DGCA BENCHMARK`, `MIXED (HYBRID)`,
+   `LIVE SCRAPE`, or `PROVENANCE UNKNOWN`. The active WebSocket connection is displayed separately
+   as `WEBSOCKET LIVE`, ensuring stream health is visible without misrepresenting synthetic data. There is no path that sets `LIVE SCRAPE`
+   independently of genuine scraping rows.
 3. **`scripts/audit_provenance.py` fails closed.** It exits non-zero if any row
    claims to be live without corroborating telemetry, a scraping run, proxy
    evidence, and scrape-time diversity.
-4. **The header does not say LIVE.** The fare feed is labelled `FARE FEED`, and
+4. **Data provenance is rigorously tested.** The feed distinguishes stream connectivity (`WEBSOCKET LIVE`) from data calibration (`DGCA BENCHMARK`), and
    the provenance badge is contract-tested in
    `frontend/scripts/verify-mock-data.ts`.
 

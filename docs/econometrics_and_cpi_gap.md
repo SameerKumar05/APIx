@@ -701,7 +701,7 @@ In accordance with BackendApiDev-4's router implementation in `backend/app/api/v
 
 ### 9. Verification, Open Findings, and Mathematical Proof Reference
 
-Current suite: **388 passed** with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`. Older counts are historical. The mathematical invariants and econometric specifications established in this document are codified and continuously verified by `scripts/test_econometric_specs.py`.
+Current suite: **460 passed**, with 25/25 steps passing in `scripts/verify_all.sh`. Older counts (388/226/188) are historical. The mathematical invariants and econometric specifications established in this document are codified and continuously verified by `scripts/test_econometric_specs.py` and `scripts/backtest_vs_mospi.py`.
 
 The test suite validates seven fundamental mathematical assertions:
 1. **Assertion 1 (Index Axioms):** Identity, proportionality, time reversal, and factor reversal tests.
