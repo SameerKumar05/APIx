@@ -31,6 +31,9 @@ Base.metadata.create_all(bind=engine)
 # RouteDailyIndex, and its 24h change divides by a prior day, hence two dates each.
 with SessionLocal() as seed_db:
     seed_routes(seed_db)
+    seed_db.query(RouteDailyIndex).filter(
+        RouteDailyIndex.base_period == "synthetic"
+    ).delete()
     for route in seed_db.query(Route).filter(Route.is_active.is_(True)).all():
         for days_ago in (1, 0):
             seed_db.add(
@@ -38,7 +41,7 @@ with SessionLocal() as seed_db:
                     origin=route.origin,
                     destination=route.destination,
                     index_date=date.today() - timedelta(days=days_ago),
-                    booking_window="T+7",
+                    booking_window="COMPOSITE",
                     index_type="composite",
                     sample_size=4,
                     median_fare=5000.0 + days_ago * 100,
@@ -100,6 +103,7 @@ _LEAD_WINDOWS = [
     "T+90",
 ]
 with SessionLocal() as fare_db:
+    fare_db.query(RawFare).filter(RawFare.source_platform == "synthetic").delete()
     for i, win in enumerate(_LEAD_WINDOWS):
         _seed_fare(
             fare_db,
@@ -125,6 +129,7 @@ with SessionLocal() as fare_db:
 
 # The anomalies endpoint reads stored alerts, so the assertions need some present.
 with SessionLocal() as alert_db:
+    alert_db.query(AnomalyAlert).filter(AnomalyAlert.status == "OPEN").delete()
     for alert_type, severity in (
         ("SPIKE", "CRITICAL"),
         ("SURGE_PRICING", "WARNING"),
@@ -145,6 +150,7 @@ with SessionLocal() as alert_db:
 # The DGCA audit reports stored violation rows grouped by route; the assertions
 # expect five evaluated routes and at least one fare above its statutory band cap.
 with SessionLocal() as dgca_db:
+    dgca_db.query(DgcaViolation).filter(DgcaViolation.status == "OPEN").delete()
     for idx, route_code in enumerate(
         ["DEL-BOM", "BOM-BLR", "BLR-DEL", "DEL-BLR", "BOM-DEL"]
     ):
@@ -462,6 +468,22 @@ def test_dgca_validation():
     )
 
 
+def test_sector_heatmap():
+    print("[TEST 14/14] GET /api/v1/analytics/sector-heatmap")
+    response = client.get("/api/v1/analytics/sector-heatmap")
+    assert (
+        response.status_code == 200
+    ), f"Expected 200, got {response.status_code}: {response.text}"
+    data = response.json()
+    assert data["data_available"] is True
+    assert data["total_routes"] >= 1
+    assert len(data["sectors"]) >= 1
+    assert "windows" in data
+    print(
+        f"  ✓ Sector heatmap verified: {data['total_routes']} routes, windows={data['windows']}"
+    )
+
+
 def main():
     print("=" * 70)
     print("Starting APIx Cycle 1 Backend API Test Suite...")
@@ -481,6 +503,7 @@ def main():
         test_heatmap_matrix()
         test_anomalies()
         test_dgca_validation()
+        test_sector_heatmap()
     except AssertionError as e:
         print("\n❌ TEST FAILED:", str(e))
         import traceback
@@ -495,7 +518,7 @@ def main():
         sys.exit(1)
 
     print("\n" + "=" * 70)
-    print("ALL 13 API ENDPOINT TESTS PASSED WITH ZERO ERRORS!")
+    print("ALL 14 API ENDPOINT TESTS PASSED WITH ZERO ERRORS!")
     print("=" * 70)
     sys.exit(0)
 

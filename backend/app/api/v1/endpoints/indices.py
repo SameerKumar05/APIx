@@ -10,6 +10,7 @@ from backend.app.models.econometrics import MospiCpiSeries
 from backend.app.models.index import NationalDailyIndex, RouteDailyIndex
 from backend.app.models.raw_fare import RawFare
 from backend.app.models.route import Route
+from backend.app.schemas.analytics import SectorHeatmapResponse
 from backend.app.schemas.index import (
     NationalIndexHistoryResponse,
     NationalIndexLatestResponse,
@@ -22,7 +23,7 @@ from backend.app.services.mospi_provenance import source_cites_press_note
 
 router = APIRouter()
 
-_WINDOW_DAYS = {"T+1": 1, "T+7": 7, "T+15": 15, "T+30": 30}
+_WINDOW_DAYS = {"T+1": 1, "T+7": 7, "T+15": 15, "T+30": 30, "T+45": 45}
 
 
 def _horizon_context(db: Session, index_value: float) -> dict:
@@ -338,6 +339,9 @@ async def get_routes_overview(
 async def get_route_history(
     route_code: str,
     days: int = Query(30, ge=1, le=365, description="Number of lookback days"),
+    booking_window: str = Query(
+        "COMPOSITE", description="Booking window filter (default: COMPOSITE)"
+    ),
     db: Session = Depends(get_db),
 ) -> RouteHistoryResponse:
     clean_code = route_code.strip().upper()
@@ -350,16 +354,25 @@ async def get_route_history(
     origin, dest = parts[0], parts[1]
 
     try:
+        clean_window = (booking_window or "COMPOSITE").strip().upper()
+        base_query = db.query(RouteDailyIndex).filter(
+            RouteDailyIndex.origin == origin,
+            RouteDailyIndex.destination == dest,
+        )
         route_indices = (
-            db.query(RouteDailyIndex)
-            .filter(
-                RouteDailyIndex.origin == origin,
-                RouteDailyIndex.destination == dest,
+            base_query.filter(
+                func.upper(RouteDailyIndex.booking_window) == clean_window
             )
             .order_by(RouteDailyIndex.index_date.desc())
             .limit(days)
             .all()
         )
+        if not route_indices and clean_window == "COMPOSITE":
+            route_indices = (
+                base_query.order_by(RouteDailyIndex.index_date.desc())
+                .limit(days)
+                .all()
+            )
         if route_indices:
             route_indices.reverse()
             by_date = {row.index_date: row for row in route_indices}
@@ -422,3 +435,24 @@ async def get_route_history(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database unavailable",
         ) from exc
+
+
+@router.get(
+    "/sector-heatmap",
+    response_model=SectorHeatmapResponse,
+    summary="Get route sector matrix and advance window pricing",
+    description="Returns cross-corridor advance booking window fare matrix and surge multipliers.",
+)
+async def get_sector_heatmap_alias(
+    route_code: str | None = Query(
+        None,
+        description="Optional route code filter (e.g. DEL-BOM) or None for all routes",
+    ),
+    db: Session = Depends(get_db),
+) -> SectorHeatmapResponse:
+    from backend.app.api.v1.endpoints.analytics import (
+        get_sector_heatmap as _get_sector_heatmap,
+    )
+
+    return await _get_sector_heatmap(route_code=route_code, db=db)
+

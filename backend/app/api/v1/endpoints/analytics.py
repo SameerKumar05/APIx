@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 from backend.app.db.session import get_db
 from backend.app.models.anomaly import AnomalyAlert
 from backend.app.models.econometrics import DgcaViolation
+from backend.app.models.index import RouteDailyIndex
 from backend.app.models.raw_fare import RawFare
+from backend.app.models.route import Route
 from backend.app.schemas.analytics import (
     AnomalyAlertItem,
     AnomalyAlertsResponse,
@@ -20,6 +22,9 @@ from backend.app.schemas.analytics import (
     HeatmapMatrixResponse,
     LeadTimeCurvePoint,
     LeadTimeCurveResponse,
+    SectorHeatmapCell,
+    SectorHeatmapResponse,
+    SectorHeatmapRow,
 )
 
 router = APIRouter()
@@ -359,3 +364,284 @@ async def get_dgca_validation(
         data_available=True,
         evaluation_status="evaluated",
     )
+
+
+@router.get(
+    "/sector-heatmap",
+    response_model=SectorHeatmapResponse,
+    summary="Get route sector matrix and advance window pricing",
+    description="Returns cross-corridor advance booking window fare matrix and surge multipliers.",
+)
+async def get_sector_heatmap(
+    route_code: str | None = Query(
+        None,
+        description="Optional route code filter (e.g. DEL-BOM) or None for all routes",
+    ),
+    db: Session = Depends(get_db),
+) -> SectorHeatmapResponse:
+    target_route = _normalize_route(route_code) if route_code else None
+    generated_at = datetime.now(UTC)
+
+    airports = (
+        _route_airports(target_route)
+        if target_route and target_route != "NATIONAL"
+        else None
+    )
+    if target_route and target_route != "NATIONAL" and airports is None:
+        return SectorHeatmapResponse(
+            generated_at=generated_at,
+            sectors=[],
+            matrix=[],
+            windows=[],
+            total_routes=0,
+            data_available=False,
+        )
+
+    try:
+        corridors: list[tuple[str, str]] = []
+        if airports is not None:
+            corridors = [airports]
+        else:
+            routes = (
+                db.query(Route.origin, Route.destination)
+                .filter(Route.is_active.is_(True))
+                .order_by(Route.origin, Route.destination)
+                .all()
+            )
+            corridors = [(r.origin, r.destination) for r in routes]
+
+            if not corridors:
+                idx_corridors = (
+                    db.query(RouteDailyIndex.origin, RouteDailyIndex.destination)
+                    .distinct()
+                    .all()
+                )
+                raw_corridors = (
+                    db.query(RawFare.origin, RawFare.destination).distinct().all()
+                )
+                seen: set[tuple[str, str]] = set()
+                for o, d in list(idx_corridors) + list(raw_corridors):
+                    pair = (o, d)
+                    if pair not in seen:
+                        seen.add(pair)
+                        corridors.append(pair)
+                corridors.sort()
+
+        if not corridors:
+            return SectorHeatmapResponse(
+                generated_at=generated_at,
+                sectors=[],
+                matrix=[],
+                windows=[],
+                total_routes=0,
+                data_available=False,
+            )
+
+        sectors: list[SectorHeatmapRow] = []
+        matrix_cells: list[SectorHeatmapCell] = []
+        all_windows: set[str] = set()
+
+        for origin, dest in corridors:
+            corridor_code = f"{origin}-{dest}"
+
+            latest_date = (
+                db.query(func.max(RouteDailyIndex.index_date))
+                .filter(
+                    RouteDailyIndex.origin == origin,
+                    RouteDailyIndex.destination == dest,
+                )
+                .scalar()
+            )
+            indices: list[RouteDailyIndex] = []
+            if latest_date:
+                indices = (
+                    db.query(RouteDailyIndex)
+                    .filter(
+                        RouteDailyIndex.origin == origin,
+                        RouteDailyIndex.destination == dest,
+                        RouteDailyIndex.index_date == latest_date,
+                    )
+                    .all()
+                )
+
+            raw_stats = (
+                db.query(
+                    RawFare.booking_window,
+                    func.avg(RawFare.total_fare).label("avg_fare"),
+                    func.min(RawFare.total_fare).label("min_fare"),
+                    func.max(RawFare.total_fare).label("max_fare"),
+                    func.count(RawFare.id).label("count"),
+                )
+                .filter(
+                    RawFare.origin == origin,
+                    RawFare.destination == dest,
+                )
+                .group_by(RawFare.booking_window)
+                .all()
+            )
+
+            window_data: dict[str, dict] = {}
+            composite_fare: float | None = None
+            total_samples = 0
+
+            for idx in indices:
+                win = (idx.booking_window or "").strip().upper()
+                if not win:
+                    continue
+                if win == "COMPOSITE":
+                    composite_fare = round(
+                        float(idx.mean_fare or idx.median_fare or idx.index_value),
+                        2,
+                    )
+                    total_samples += idx.sample_size or 0
+                    continue
+                avg_val = round(float(idx.mean_fare or idx.median_fare), 2)
+                med_val = (
+                    round(float(idx.median_fare), 2) if idx.median_fare else avg_val
+                )
+                window_data[win] = {
+                    "avg_fare": avg_val,
+                    "median_fare": med_val,
+                    "min_fare": (
+                        round(float(idx.min_fare), 2)
+                        if idx.min_fare is not None
+                        else None
+                    ),
+                    "max_fare": (
+                        round(float(idx.max_fare), 2)
+                        if idx.max_fare is not None
+                        else None
+                    ),
+                    "sample_size": idx.sample_size or 0,
+                }
+                total_samples += idx.sample_size or 0
+
+            for stat in raw_stats:
+                win = (stat.booking_window or "").strip().upper()
+                if not win or win == "COMPOSITE":
+                    continue
+                if win not in window_data and stat.avg_fare is not None:
+                    avg_val = round(float(stat.avg_fare), 2)
+                    count_val = int(stat.count or 0)
+                    window_data[win] = {
+                        "avg_fare": avg_val,
+                        "median_fare": avg_val,
+                        "min_fare": (
+                            round(float(stat.min_fare), 2)
+                            if stat.min_fare is not None
+                            else None
+                        ),
+                        "max_fare": (
+                            round(float(stat.max_fare), 2)
+                            if stat.max_fare is not None
+                            else None
+                        ),
+                        "sample_size": count_val,
+                    }
+                    total_samples += count_val
+
+            if not window_data and composite_fare is None:
+                continue
+
+            windows_by_days: list[tuple[int, str, float]] = []
+            for w, data in window_data.items():
+                d = _window_days(w)
+                if d is not None:
+                    windows_by_days.append((d, w, data["avg_fare"]))
+                all_windows.add(w)
+
+            windows_by_days.sort(key=lambda x: x[0])
+
+            base_fare: float | None = None
+            urgent_fare: float | None = None
+            surge_multiplier: float | None = None
+
+            if "T+30" in window_data:
+                base_fare = window_data["T+30"]["avg_fare"]
+            elif windows_by_days:
+                base_fare = windows_by_days[-1][2]
+
+            if "T+1" in window_data:
+                urgent_fare = window_data["T+1"]["avg_fare"]
+            elif windows_by_days:
+                urgent_fare = windows_by_days[0][2]
+
+            if (
+                base_fare is not None
+                and base_fare > 0
+                and urgent_fare is not None
+                and len(windows_by_days) >= 2
+            ):
+                surge_multiplier = round(urgent_fare / base_fare, 2)
+            elif window_data:
+                surge_multiplier = 1.0
+
+            windows_fares: dict[str, float | None] = {
+                w: data["avg_fare"] for w, data in window_data.items()
+            }
+
+            sectors.append(
+                SectorHeatmapRow(
+                    route_code=corridor_code,
+                    origin=origin,
+                    destination=dest,
+                    windows=windows_fares,
+                    surge_multiplier=surge_multiplier,
+                    base_fare_inr=base_fare,
+                    urgent_fare_inr=urgent_fare,
+                    composite_fare_inr=composite_fare,
+                    sample_size=total_samples,
+                )
+            )
+
+            for w, data in window_data.items():
+                w_days = _window_days(w)
+                fare_idx = (
+                    round((data["avg_fare"] / base_fare) * 100.0, 2)
+                    if base_fare and base_fare > 0
+                    else 100.0
+                )
+                matrix_cells.append(
+                    SectorHeatmapCell(
+                        route_code=corridor_code,
+                        origin=origin,
+                        destination=dest,
+                        booking_window=w,
+                        days_before_departure=w_days,
+                        avg_fare_inr=data["avg_fare"],
+                        median_fare_inr=data["median_fare"],
+                        min_fare_inr=data["min_fare"],
+                        max_fare_inr=data["max_fare"],
+                        sample_size=data["sample_size"],
+                        fare_index=fare_idx,
+                    )
+                )
+
+        if not sectors:
+            return SectorHeatmapResponse(
+                generated_at=generated_at,
+                sectors=[],
+                matrix=[],
+                windows=[],
+                total_routes=0,
+                data_available=False,
+            )
+
+        sorted_windows = sorted(
+            all_windows,
+            key=lambda w: (_window_days(w) if _window_days(w) is not None else 999),
+        )
+
+        return SectorHeatmapResponse(
+            generated_at=generated_at,
+            sectors=sectors,
+            matrix=matrix_cells,
+            windows=sorted_windows,
+            total_routes=len(sectors),
+            data_available=True,
+        )
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise _unavailable() from exc
+
+

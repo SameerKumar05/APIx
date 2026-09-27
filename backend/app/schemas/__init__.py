@@ -7,6 +7,9 @@ from backend.app.schemas.analytics import (
     HeatmapMatrixResponse,
     LeadTimeCurvePoint,
     LeadTimeCurveResponse,
+    SectorHeatmapCell,
+    SectorHeatmapResponse,
+    SectorHeatmapRow,
 )
 from backend.app.schemas.arbitrage import (
     ArbitrageItem,
@@ -66,6 +69,9 @@ __all__ = [
     "LeadTimeCurveResponse",
     "HeatmapCell",
     "HeatmapMatrixResponse",
+    "SectorHeatmapCell",
+    "SectorHeatmapRow",
+    "SectorHeatmapResponse",
     "AnomalyAlertItem",
     "AnomalyAlertsResponse",
     "DGCAValidationItem",
