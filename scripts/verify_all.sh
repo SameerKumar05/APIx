@@ -48,6 +48,9 @@ elif [ -n "$VIRTUAL_ENV" ] && [ -x "$VIRTUAL_ENV/bin/python" ]; then
 elif [ -x "$REPO_ROOT/../../.venv/bin/python" ]; then
     PYTHON_BIN="$REPO_ROOT/../../.venv/bin/python"
     PYTEST_BIN="$REPO_ROOT/../../.venv/bin/pytest"
+elif [ -x "$REPO_ROOT/../../APIx/.venv/bin/python" ]; then
+    PYTHON_BIN="$REPO_ROOT/../../APIx/.venv/bin/python"
+    PYTEST_BIN="$REPO_ROOT/../../APIx/.venv/bin/pytest"
 elif command -v python3 >/dev/null 2>&1; then
     PYTHON_BIN="$(command -v python3)"
     PYTEST_BIN="$(command -v pytest 2>/dev/null || echo "$PYTHON_BIN -m pytest")"

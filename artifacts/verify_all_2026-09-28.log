@@ -1,0 +1,912 @@
+[36m[1m
+================================================================================
+          APIx Master Verification & CI/CD Test Harness                         
+  SIH 2026 PS 26056 - Real-time Airfare Price Index for CPI Augmentation        
+================================================================================
+[0m
+[34m▶ Python Interpreter: [1mPython 3.12.14[0m (/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python)
+[34m▶ Repository Root:    [1m/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts[0m
+
+[33m[1m[STEP 1/25] Database Models & DGCA Seed Invariants...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_db_models.py
+======================================================================
+APIx Database Models & DGCA Baseline Verification
+======================================================================
+
+[1/6] Initializing in-memory SQLite database...
+[2/6] Creating all registered tables via Base.metadata.create_all()...
+  -> All 7 tables created: ['airlines', 'anomaly_alerts', 'crawler_jobs', 'dgca_traffic_weights', 'dgca_violations', 'econometric_indices', 'mospi_cpi_series', 'national_daily_indices', 'proxy_health_records', 'raw_fares', 'route_daily_indices', 'route_elasticity', 'routes', 'scraper_telemetry', 'scraping_runs', 'worker_heartbeats']
+
+[3/6] Running seed routines (routes & airlines)...
+  -> Seeded 10 routes and 5 airlines.
+
+[4/6] Verifying Route table invariants...
+  -> Route count verified: 10/10 directional corridors.
+  -> Total DGCA monthly pax: 2,500,000
+  -> Total basket weight sum: 1.000000
+  -> Sum of DGCA route weights == 1.000 (CONFIRMED)
+
+[5/6] Verifying Airline table invariants...
+  -> Airline count verified: 5/5 carriers.
+     - 6E: IndiGo (60.0%)
+     - AI: Air India (15.0%)
+     - IX: Air India Express (10.0%)
+     - QP: Akasa Air (10.0%)
+     - SG: SpiceJet (5.0%)
+  -> Total airline market share sum: 100.0%
+  -> Sum of airline market shares == 100.0% (CONFIRMED)
+
+[6/6] Verifying operational models CRUD and constraints...
+  -> RawFare insertion successful.
+  -> RawFare unique hash_id constraint verified (duplicate rejected).
+  -> RouteDailyIndex, NationalDailyIndex, AnomalyAlert, and ScrapingRun models verified.
+
+======================================================================
+ALL VERIFICATION CHECKS PASSED SUCCESSFULLY (10 routes, 5 airlines, sum=1.000)
+======================================================================
+[32m[1m✓ [STEP 1/25 PASSED][0m Database Models & DGCA Seed Invariants (1s)
+
+[33m[1m[STEP 2/25] Ingestion Repository & Automated Retention Pruning...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_ingestion_repo.py
+======================================================================
+APIx Ingestion Repository Verification Test Suite
+======================================================================
+
+[1/6] Booting in-memory database and creating tables...
+  -> Tables initialized successfully.
+
+[2/6] Testing bulk insertion of 500 records...
+  -> Bulk insert completed in 176.23ms
+  -> Result: received=500, inserted=500, duplicates=0
+  -> Total records in DB verified: 500 (PASS)
+
+[3/6] Testing duplicate suppression & idempotency...
+  -> Replay insert completed in 154.55ms
+  -> Result: received=500, inserted=0, duplicates=500
+  -> Database count remains unchanged: 500 (100% duplicate suppression confirmed)
+  -> In-batch duplicate suppression verified (PASS)
+
+[4/6] Testing ScrapingRun execution telemetry...
+  -> ScrapingRun lifecycle verified: status=COMPLETED, duration=0.003745s (PASS)
+
+[5/6] Testing 90-day retention pruning & index preservation...
+  -> Inserted 150 old raw fare records (100+ days old)
+  -> Pruned records count: 150
+  -> Remaining raw fares in DB: 500 (PASS)
+  -> Daily indices preserved intact: RouteDailyIndex=1, NationalDailyIndex=1 (PASS)
+
+[6/6] Testing query helpers and time-series latency...
+  -> Route-window-date calculation lookup returned 2 fares in 1.463ms
+  -> Benchmark (100 runs): avg=0.237ms, p95=0.303ms
+  -> Query performance assertion (< 50ms): PASSED
+  -> Fare ordering invariant verified (PASS)
+  -> Multi-parameter query filtering verified (PASS)
+
+======================================================================
+ALL 6 INGESTION REPOSITORY VERIFICATION CHECKS PASSED (100%)
+======================================================================
+[32m[1m✓ [STEP 2/25 PASSED][0m Ingestion Repository & Automated Retention Pruning (1s)
+
+[33m[1m[STEP 3/25] Mathematical Invariants & Quant Formulations...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_math_engine.py
+================================================================================
+APIx Mathematical & Statistical Quant Engine Verification Suite
+SIH 2026 Problem Statement 26056 - Real-time Airfare Price Index
+================================================================================
+  [PASS] Invariant 1: Equal price distribution weighted median equals scalar price
+  [PASS] Invariant 2: Base period prices yield national index = 100.00
+  [PASS] Invariant 3: +20% uniform price increase yields national index = 120.00
+  [PASS] Invariant 4: 3-sigma surge triggers CRITICAL anomaly alert
+  [PASS] Cross-Platform Flight Deduplication (Minimum consumer fare selection)
+  [PASS] Tukey IQR Outlier Filtering [Q1 - 1.5*IQR, Q3 + 1.5*IQR]
+  [PASS] Asymmetric Market Share Weighted Median Calculation
+  [PASS] Route Composite Fare (0.20*T1 + 0.35*T7 + 0.30*T15 + 0.15*T30)
+  [PASS] Non-uniform Laspeyres Price Index Computation
+  [PASS] Stateful Rolling 30-Day Anomaly Detection Engine
+--------------------------------------------------------------------------------
+Verification Summary: 10/10 tests PASSED, 0 FAILED
+================================================================================
+[32m[1m✓ [STEP 3/25 PASSED][0m Mathematical Invariants & Quant Formulations (0s)
+
+[33m[1m[STEP 4/25] Daily Index Pipeline & Anomaly Engine...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_index_pipeline.py
+================================================================================
+APIx Daily Airfare Index Pipeline - Premier Verification Suite
+================================================================================
+[1/5] Initializing test database and populating mock raw fares...
+      Seeded 10 routes and 202 raw flight fare quotes.
+      ✓ Assertion Passed: Seed data and raw fares populated.
+
+[2/5] Running run_daily_index_pipeline(db, calculation_date)...
+      Pipeline finished: National Index = 113.41
+      Route indices saved: 60, Anomalies detected: 2
+      ✓ Assertion Passed: Batch pipeline completed successfully.
+
+[3/5] Verifying RouteDailyIndex database persistence...
+      Total RouteDailyIndex records saved: 60
+      DEL-BOM Composite: fare=INR 6346.12, index=115.38
+      DEL-BOM T+15 Outlier Trimming: median=5775.00 (unaffected by 55,000 INR quote)
+      ✓ Assertion Passed: RouteDailyIndex records verified across all routes and windows.
+
+[4/5] Verifying NationalDailyIndex database persistence...
+      National Laspeyres Index: 113.41 (Base 100.0)
+      National Weighted Mean Fare: INR 5922.33
+      DoD Inflation: +11.73%
+      ✓ Assertion Passed: NationalDailyIndex record verified.
+      National Fisher Index: 113.46, Paasche Index: 113.52
+
+[5/5] Verifying AnomalyAlert detection and idempotency...
+      Anomaly alerts generated: 2
+      Detected Alert: BLR->DEL type=DGCA_STATUTORY_VIOLATION severity=CRITICAL pct_change=19.13%
+      ✓ Assertion Passed: AnomalyAlert generation and pipeline idempotency verified.
+      ✓ Assertion Passed: Autonomous session management (db=None) verified.
+
+================================================================================
+ALL PREMIER VERIFICATION CHECKS PASSED SUCCESSFULLY (6/6)
+================================================================================
+[32m[1m✓ [STEP 4/25 PASSED][0m Daily Index Pipeline & Anomaly Engine (1s)
+
+[33m[1m[STEP 5/25] Ingestion Scraper Framework & Multi-Window Generator...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_ingestion_synthetic.py
+================================================================================
+APIx Ingestion - Synthetic Fare Generator Premier Verification
+================================================================================
+[1/5] Executing synthetic generation across all routes and windows...
+      Generated slots: 50 (Expected: 50)
+      ✓ Assertion Passed: Exactly 50 slots generated.
+      ✓ Assertion Passed: All 50 slots are distinct route-window pairs.
+
+[2/5] Inspecting 276 flight fare records across all slots...
+      Null fares found: 0
+      Non-positive fares found: 0
+      ✓ Assertion Passed: 0 null fares and 0 non-positive fares.
+      Invalid IATA occurrences: 0
+      ✓ Assertion Passed: 100% valid 3-letter IATA codes (BLR, BOM, CCU, DEL, HYD, MAA).
+      Invalid airline codes: 0
+      ✓ Assertion Passed: 100% valid airline codes (6E, AI, IX, QP, SG).
+      ✓ Assertion Passed: Output schema conforms strictly with valid timestamps and dedup hashes.
+
+[3/5] Calibrated Dynamic Pricing Curve Breakdown by Booking Window:
+      Window   | Flights  | Min Fare (₹)   | Avg Fare (₹)   | Max Fare (₹)  
+      ------------------------------------------------------------------
+      T+1      | 53       | 7170.00        | 12948.49       | 21250.00      
+      T+7      | 61       | 5100.00        | 8382.62        | 13950.00      
+      T+15     | 55       | 4140.00        | 6706.55        | 9770.00       
+      T+30     | 55       | 3390.00        | 5752.00        | 9340.00       
+      T+45     | 52       | 3360.00        | 5332.31        | 7730.00       
+      ✓ Assertion Passed: Calibrated surge pricing curve verified: T+1 > T+7 > T+15 > T+30.
+
+[4/5] Route Summary (10 Route Pairs x 5 Windows = 50 Slots):
+      Route BLR-BOM: 5 windows configured
+      Route BLR-DEL: 5 windows configured
+      Route BOM-BLR: 5 windows configured
+      Route BOM-DEL: 5 windows configured
+      Route CCU-DEL: 5 windows configured
+      Route DEL-BLR: 5 windows configured
+      Route DEL-BOM: 5 windows configured
+      Route DEL-CCU: 5 windows configured
+      Route DEL-HYD: 5 windows configured
+      Route HYD-DEL: 5 windows configured
+
+[5/5] Sample RawFareRecord Preview:
+      airline_code: QP
+      flight_number: QP-1318
+      origin: DEL
+      destination: BOM
+      departure_datetime: 2026-09-25T06:00:00
+      arrival_datetime: 2026-09-25T08:16:00
+      booking_datetime: 2026-09-24T06:00:00
+      fare_inr: 11970.0
+      cabin_class: economy
+      stops: 0
+      source: synthetic
+      booking_window: T+1
+      flight_date: 2026-09-25
+      duration_minutes: 136
+      base_fare: 9336.6
+      taxes_and_fees: 2633.4
+      total_fare: 11970.0
+      is_synthetic: True
+      source_platform: synthetic_dgca
+      booking_class: None
+      udf_fee: None
+      convenience_fee: None
+      flight_status: None
+      fare_split_basis: estimated
+      origin_iata: DEL
+      destination_iata: BOM
+      hash_id: 1186269581cef1fdcf1d52f9ea8222a437ad262c6c6dcfeb53d55a42e0aff516
+
+================================================================================
+PREMIER VERIFICATION CONFIRMED: 50/50 SLOTS, 0 NULL FARES, VALID IATA CODES.
+================================================================================
+[32m[1m✓ [STEP 5/25 PASSED][0m Ingestion Scraper Framework & Multi-Window Generator (0s)
+
+[33m[1m[STEP 6/25] FastAPI Backend Endpoints & API Authentication...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_api_endpoints.py
+======================================================================
+Starting APIx Cycle 1 Backend API Test Suite...
+======================================================================
+[TEST 1/13] GET /health
+  ✓ Health check passed with 200 OK
+[TEST 2/13] GET /
+  ✓ Root index passed with 200 OK
+[TEST 3/13] POST /api/v1/ingestion/batch without header (expect 401)
+  ✓ Rejected unauthenticated batch with 401 Unauthorized
+[TEST 4/13] POST /api/v1/ingestion/batch with invalid key (expect 401)
+  ✓ Rejected invalid key with 401 Unauthorized
+[TEST 5/13] POST /api/v1/ingestion/batch with valid key and sample batch (expect 200 OK)
+  ✓ Ingestion batch succeeded: Processed 2 records in 7.9ms: 2 inserted, 0 duplicates, 0 rejected.
+[TEST 6/13] GET /api/v1/indices/national/latest
+  ✓ National latest index verified: Index=84.9 (Base 100)
+[TEST 7/13] GET /api/v1/indices/national/history?days=14
+  ✓ National history returned 1 chronological points
+[TEST 8/13] GET /api/v1/indices/routes
+  ✓ Routes overview returned 10 active domestic corridors: ['DEL-BOM', 'BOM-DEL', 'BLR-DEL', 'DEL-BLR']...
+[TEST 9/13] GET /api/v1/indices/routes/DEL-BOM/history
+  ✓ Route DEL-BOM history returned 3 points
+[TEST 10/13] GET /api/v1/analytics/lead-time-curve?route_code=DEL-BOM
+  ✓ Lead-time curve verified: D-90 INR 4000.0 -> D-0 INR 5500.0
+[TEST 11/13] GET /api/v1/analytics/heatmap?route_code=NATIONAL
+  ✓ Heatmap matrix verified with 168 cells: Min=4200.0 Max=4798.0
+[TEST 12/13] GET /api/v1/analytics/anomalies
+  ✓ Anomaly alerts verified: 3 alerts, including anom-del-bom-001
+[TEST 13/13] GET /api/v1/analytics/dgca-validation
+  ✓ DGCA statutory validation audit verified: 5 total violations found
+[TEST 14/14] GET /api/v1/analytics/sector-heatmap
+  ✓ Sector heatmap verified: 10 routes, windows=['T+0', 'T+1', 'T+3', 'T+5', 'T+7', 'T+12', 'T+14', 'T+21', 'T+30', 'T+45', 'T+60', 'T+75', 'T+90']
+
+======================================================================
+ALL 14 API ENDPOINT TESTS PASSED WITH ZERO ERRORS!
+======================================================================
+[32m[1m✓ [STEP 6/25 PASSED][0m FastAPI Backend Endpoints & API Authentication (2s)
+
+[33m[1m[STEP 7/25] Schema Contract Alignment Verification...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" -m pytest tests/test_contracts.py -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-8.4.2, pluggy-1.6.0
+rootdir: /home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts
+configfile: pyproject.toml
+plugins: asyncio-0.26.0, anyio-4.15.1, mock-3.15.1, cov-5.0.0
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 22 items
+
+tests/test_contracts.py ......................                           [100%]
+
+============================== 22 passed in 0.09s ==============================
+[32m[1m✓ [STEP 7/25 PASSED][0m Schema Contract Alignment Verification (1s)
+
+[33m[1m[STEP 8/25] Cycle 2 End-to-End Pipeline Integration Test...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" -m pytest tests/test_e2e_pipeline.py -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-8.4.2, pluggy-1.6.0
+rootdir: /home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts
+configfile: pyproject.toml
+plugins: asyncio-0.26.0, anyio-4.15.1, mock-3.15.1, cov-5.0.0
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1 item
+
+tests/test_e2e_pipeline.py .                                             [100%]
+
+=============================== warnings summary ===============================
+../../APIx/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/adix/Work/woventech/APIx/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+========================= 1 passed, 1 warning in 0.60s =========================
+[32m[1m✓ [STEP 8/25 PASSED][0m Cycle 2 End-to-End Pipeline Integration Test (2s)
+
+[33m[1m[STEP 9/25] Cycle 3 Telemetry & Proxy Health DB Persistence...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_telemetry_db.py
+===========================================================================
+APIx Cycle 3 Telemetry & Proxy Health DB Verification
+===========================================================================
+
+[1/7] Initializing in-memory SQLite database and creating schema...
+  ✓ Tables 'scraper_telemetry' and 'proxy_health_records' verified.
+  ✓ ScraperTelemetry columns verified: ['booking_window', 'crawler_name', 'created_at', 'error_details', 'id', 'proxy_ip', 'records_extracted', 'response_time_ms', 'route', 'status']
+  ✓ ProxyHealthRecord columns verified: ['consecutive_failures', 'created_at', 'error_message', 'failure_count', 'id', 'last_checked_at', 'latency_ms', 'proxy_ip', 'status', 'success_count']
+
+[2/7] Testing individual and bulk scraper telemetry logging...
+  ✓ Single telemetry log & serialization passed.
+  ✓ Bulk logged 6 records. Query filters verified.
+
+[3/7] Testing crawler uptime and error rate aggregation calculations...
+  ✓ MakeMyTrip uptime: 66.67% (2/3 runs)
+  ✓ MakeMyTrip error rate: 33.33%
+  ✓ Global crawler uptime: 71.43% across 3 platforms
+  ✓ Empty state defaults (100% uptime, 0% error) verified.
+  ✓ Composite crawler summary verified: 71.43% uptime, 138 total records.
+
+[4/7] Testing proxy health logging, circuit breaking, and upsert...
+  ✓ ProxyHealthRecord created & serialized.
+  ✓ Proxy circuit breaker auto-transition to DEGRADED verified after 3 consecutive failures.
+  ✓ Proxy recovery to HEALTHY verified upon successful request.
+
+[5/7] Testing proxy latency statistics and pool retrieval...
+  ✓ Active healthy proxy filtering returned 4 valid proxies.
+  ✓ Proxy latency statistics: min=85.0ms, avg=986.67ms, p95=450.0ms
+  ✓ Proxy pool summary verified: 6 distinct proxies.
+
+[6/7] Testing automated retention pruning for stale telemetry...
+  ✓ Pruned 1 stale telemetry and 1 proxy records. Recent data preserved.
+
+[7/7] Testing TelemetryRepo OOP wrapper...
+  ✓ TelemetryRepo class methods verified successfully.
+
+===========================================================================
+ALL CYCLE 3 TELEMETRY DATABASE TESTS PASSED SUCCESSFULLY!
+===========================================================================
+[32m[1m✓ [STEP 9/25 PASSED][0m Cycle 3 Telemetry & Proxy Health DB Persistence (0s)
+
+[33m[1m[STEP 10/25] Cycle 3 Streaming Dedup & Cross-Platform Arbitrage Engine...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_streaming_dedup.py
+
+================================================================================
+ APIx Streaming Dedup & Arbitrage Engine - Verification Test Suite
+================================================================================
+
+[Test 1] Exact Hash Deduplication & Flight Key Generation
+  ✓ Canonical Key: 6E:6E204:DEL:BOM:2026-10-15:08:00:economy
+  ✓ Deterministic SHA-256 Hash: 9d3829774b32ab73a5c6555da3f567c391b59541a155f110b9f0b160cd32ed00
+  ✓ PASSED: All portal variations resolve to identical canonical key and hash.
+
+[Test 2] Real-Time Minimum Consumer Price Resolution
+  ✓ Best Quote Resolved: Fare=INR 4800.0 via spicejet
+  ✓ Portals Tracked: 4 (['makemytrip', 'easemytrip', 'spicejet', 'yatra'])
+  ✓ Cross-Portal Fare Spread: INR 800.0 (16.6667%)
+  ✓ PASSED: Minimum consumer price resolved across 4 portals accurately.
+
+[Test 3] High-Throughput Sub-Millisecond Latency Benchmark
+  ✓ Processed Quotes: 5,000 quotes in 166.94 ms
+  ✓ Average Latency: 30.72 µs (0.0307 ms per quote)
+  ✓ Max Recorded Latency: 621.01 µs
+  ✓ Engine Throughput: 29,951 quotes/second
+  ✓ Sub-Millisecond Compliant: True
+  ✓ PASSED: Sub-millisecond latency requirement verified with premier margin.
+
+[Test 4] Sliding Window & Out-of-Order Timestamp Handling
+  ✓ Out-of-order arrival correctly flagged and resolved lower price.
+  ✓ Sliding window expiration pruned 2 records precisely.
+  ✓ PASSED: Sliding window and out-of-order timestamp handling verified.
+
+[Test 5] Strict LRU Memory Bounding
+  ✓ Buffer capped at: 50 records (max=50)
+  ✓ LRU Evictions executed: 150 records
+  ✓ PASSED: LRU memory bounding guarantees bounded memory footprint.
+
+[Test 6] Cross-Platform Arbitrage Detection
+  ✓ Direct Cheaper Arbitrage: Buy=spicejet (INR 4500.0), Sell=easemytrip (INR 5000.0), Spread=+11.1111%
+  ✓ OTA Cheaper Arbitrage: Buy=makemytrip (INR 5200.0), Sell=indigo (INR 5800.0), Spread=-10.3448%
+  ✓ Threshold filtering & sorting verified.
+  ✓ PASSED: Arbitrage detection and spread calculations verified.
+
+[Test 7] Arbitrage Edge Cases & Zero-Division Safety
+  ✓ Empty inputs, single portal, and zero fare handled without errors.
+  ✓ ZeroDivisionError eliminated across all zero/negative edge cases.
+  ✓ PASSED: Arbitrage edge cases and mathematical boundaries verified.
+
+[Test 8] Index Pipeline & DB Integration
+  ✓ DB Arbitrage Query returned 2 opportunities.
+  ✓ Pipeline executed with streaming dedup: 5 quotes, avg latency=76.97 µs.
+  ✓ Arbitrage Opportunities in Pipeline Summary: 2
+  ✓ PASSED: End-to-end integration verified successfully.
+
+================================================================================
+ ALL 8 VERIFICATION TESTS PASSED SUCCESSFULLY (8/8)
+================================================================================
+[32m[1m✓ [STEP 10/25 PASSED][0m Cycle 3 Streaming Dedup & Cross-Platform Arbitrage Engine (1s)
+
+[33m[1m[STEP 11/25] Cycle 3 Ingestion Scheduler & Proxy Pool Architecture...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_scheduler_and_proxies.py
+[32m[1m✓ [STEP 11/25 PASSED][0m Cycle 3 Ingestion Scheduler & Proxy Pool Architecture (3s)
+
+[33m[1m[STEP 12/25] Cycle 3 Multi-Source Ingestion & Orchestration...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_ingestion_multi_source.py
+================================================================================
+APIX MULTI-SOURCE INGESTION END-TO-END VERIFICATION (CYCLE 3)
+================================================================================
+
+[STEP 1/5] Verifying Individual Scrapers (MakeMyTrip & SpiceJet)...
+  ✓ MakeMyTripScraper verified: 6 records collected (Source: makemytrip)
+  ✓ SpiceJetScraper verified: 6 records collected (Airline: SG, Source: spicejet)
+
+[STEP 2/5] Executing Multi-Source Orchestration across all 50 Slots...
+  -> Run ID:                   run-5e1bf5a351ed
+  -> Total Slots Scheduled:    50 (Expected: 50)
+  -> Successful Slots:         50 (Expected: 50)
+  -> Failed Slots:             0 (Expected: 0)
+  -> Total Records Collected:  2992
+  -> Total Batches Dispatched: 30
+  -> Successful Batches:       30
+  -> Backend Status:           success
+  -> Tier Distribution:        {'tier_1': 0, 'tier_2': 0, 'tier_3': 50}
+  ✓ Multi-source 50-slot orchestration succeeded with 100% slot pass rate!
+
+[STEP 3/5] Verifying Multi-Source Scraper Coverage and Slot Aggregation...
+  ✓ Verified all 10 trunk routes across all 4 booking windows (T+1, T+7, T+15, T+30)
+
+[STEP 4/5] Exporting and Validating Summary Artifact...
+  ✓ Artifact exported to /home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/artifacts/multi_source_summary.json (17341 bytes)
+
+[STEP 5/5] Validating Domain Invariants and Schema Quality...
+  ✓ Inspected 66 records: 100% valid IATA codes, positive fares, valid timestamps
+  ✓ Verified deduplication hash generation (30 distinct hashes)
+  ✓ Confirmed multi-source representation: ['airindia', 'airindiaexpress', 'akasa', 'cleartrip', 'easemytrip', 'goibibo', 'indigo', 'ixigo', 'makemytrip', 'spicejet', 'yatra']
+
+================================================================================
+🏆 ALL MULTI-SOURCE INGESTION VERIFICATIONS PASSED (100% SUCCESS)
+================================================================================
+[32m[1m✓ [STEP 12/25 PASSED][0m Cycle 3 Multi-Source Ingestion & Orchestration (3s)
+
+[33m[1m[STEP 13/25] Cycle 3 Backend API: Telemetry, Streaming & Arbitrage...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_api_cycle3.py
+===========================================================================
+APIx Cycle 3 Backend API Test Suite: Telemetry, Streaming & Arbitrage
+===========================================================================
+[TEST 1/16] GET /api/v1/ingestion/telemetry
+  ✓ Telemetry verified: status=HEALTHY, active_scrapers=4, proxies=11/12
+[TEST 2/16] GET /api/v1/ingestion/telemetry?source=makemytrip
+  ✓ Source filtering verified: makemytrip uptime=99.4%
+[TEST 3/16] GET /api/v1/ingestion/telemetry?hours=48
+  ✓ Telemetry lookback window parameter accepted
+[TEST 4/16] POST /api/v1/ingestion/trigger with JSON body
+  ✓ Manual trigger dispatched: task_id=trig-9cbae1b149, crawler=makemytrip, route=DEL-BOM
+[TEST 5/16] POST /api/v1/ingestion/trigger with query parameters
+  ✓ Trigger via query params accepted: task_id=trig-4f64f2e34c
+[TEST 6/16] GET /api/v1/ingestion/proxies
+  ✓ Proxy diagnostics returned 12 configured proxies (sample=103.251.167.21:8080 HEALTHY 112.4ms)
+[TEST 7/16] GET /api/v1/analytics/arbitrage
+  ✓ Arbitrage returned 1 opportunities, total savings INR 1500.0, avg spread 35.71%
+[TEST 8/16] GET /api/v1/analytics/arbitrage?route_code=DEL-BOM
+  ✓ Route filtering confirmed: 1 opportunities on DEL-BOM
+[TEST 9/16] GET /api/v1/analytics/arbitrage?airline_code=6E
+  ✓ Airline filtering confirmed: 1 IndiGo (6E) opportunities
+[TEST 10/16] GET /api/v1/analytics/arbitrage?min_spread_pct=6.0
+  ✓ Min spread percentage filter (>=6.0%) returned 1 opportunities
+[TEST 11/16] GET /api/v1/analytics/arbitrage?actionable_only=true
+  ✓ Actionable-only filter returned 1 high-confidence opportunities
+[TEST 12/16] GET /api/v1/stream/status
+  ✓ Stream status: status=LIVE, buffer_size=6
+[TEST 13/16] GET /api/v1/stream/recent?limit=5
+  ✓ Stream recent returned 5 live fare quotes (sample=6E-201 DEL-BOM INR 4600.0)
+[TEST 14/16] WS /api/v1/stream/fares (handshake, initial buffer, ping/pong)
+  ✓ WebSocket stream handshake, initial buffer, ping/pong, and subscription verified
+[TEST 15/16] Convenience route aliases (/api/v1/telemetry and /api/v1/arbitrage)
+  ✓ Convenience aliases /api/v1/telemetry and /api/v1/arbitrage functional
+[TEST 16/16] Database persistence: write telemetry record and verify in API
+  ✓ Persisted DB record retrieved via API: test_bot fares=45
+===========================================================================
+ALL 16 CYCLE 3 INTEGRATION TESTS COMPLETED SUCCESSFULLY WITH ZERO ERRORS!
+===========================================================================
+[32m[1m✓ [STEP 13/25 PASSED][0m Cycle 3 Backend API: Telemetry, Streaming & Arbitrage (1s)
+
+[33m[1m[STEP 14/25] Cycle 3 Integration Pytest Suite (Telemetry & Arbitrage)...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" -m pytest tests/test_cycle3_telemetry.py tests/test_streaming_arbitrage.py -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-8.4.2, pluggy-1.6.0
+rootdir: /home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts
+configfile: pyproject.toml
+plugins: asyncio-0.26.0, anyio-4.15.1, mock-3.15.1, cov-5.0.0
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 39 items
+
+tests/test_cycle3_telemetry.py ...................                       [ 48%]
+tests/test_streaming_arbitrage.py ....................                   [100%]
+
+=============================== warnings summary ===============================
+../../APIx/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/adix/Work/woventech/APIx/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 39 passed, 1 warning in 0.84s =========================
+[32m[1m✓ [STEP 14/25 PASSED][0m Cycle 3 Integration Pytest Suite (Telemetry & Arbitrage) (2s)
+
+[33m[1m[STEP 15/25] Cycle 4 Econometric Engine: Paasche, Fisher & Substitution Bias...[0m
+[36mExecuting:[0m if [ -f "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/scripts/test_econometric_engine.py" ]; then "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_econometric_engine.py; else "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" -m pytest tests/test_cycle4_econometrics.py -k 'TestFisherPaascheCalculations or TestSubstitutionBiasInvariants' -v; fi
+================================================================================
+APIx Econometric Engine & ML Anomaly Detection Verification Suite
+SIH 2026 Problem Statement 26056 - Master Cycle 4 Quantitative Engine
+================================================================================
+  [PASS] Paasche Index Axioms (Base Identity, Uniform Scaling, Monotonicity)
+  [PASS] Fisher Ideal Index Properties (Geometric Mean, Time Reversal Test)
+  [PASS] Substitution Bias Invariants & Bounds (L >= F >= P, Delta >= 0)
+  [PASS] Lead-Time Price Elasticity Curve (T+30 to T+1, Urgency Multiplier)
+  [PASS] MoSPI CPI Transport Sub-Index Divergence (+38 Days Lead Analysis)
+  [PASS] Dynamic Lead-Time Z-Score Volatility Scaling (T+1 vs T+30 Tolerance)
+  [PASS] Tukey IQR Fences Non-Parametric Outlier Bounds
+  [PASS] Carrier Market Concentration Herfindahl-Hirschman Index (HHI)
+  [PASS] Multi-Feature Surge Classification & DGCA Statutory Violations
+  [PASS] EconometricEngine High-Level Batch Orchestrator
+--------------------------------------------------------------------------------
+Verification Summary: 10/10 tests PASSED, 0 FAILED
+================================================================================
+[32m[1m✓ [STEP 15/25 PASSED][0m Cycle 4 Econometric Engine: Paasche, Fisher & Substitution Bias (0s)
+
+[33m[1m[STEP 16/25] Cycle 4 Econometric Specifications & Invariant Bounds...[0m
+[36mExecuting:[0m if [ -f "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/scripts/test_econometric_specs.py" ]; then "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_econometric_specs.py; else "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" -m pytest tests/test_cycle4_econometrics.py -k 'TestSubstitutionBiasInvariants' -v; fi
+
+[36m[1m================================================================================[0m
+[36m[1m  APIx Econometric & DGCA Statutory Verification Test Suite[0m
+[36m[1m  SIH 2026 PS 26056 - Real-time Airfare Price Index for CPI Augmentation[0m
+[36m[1m================================================================================[0m
+
+[1m[Step 1/6][0m Section 1: Axiomatic Price Index Invariants (Identity, Scaling, Time Reversal) ... [32m[1mPASSED[0m
+[1m[Step 2/6][0m Section 2: Substitution Bias & Bortkiewicz Bounds (I_L >= I_F >= I_P, Delta >= 0) ... [32m[1mPASSED[0m
+[1m[Step 3/6][0m Section 3: Advance Purchase Price Elasticity Curves (T+1 -> T+30 Monotonicity) ... [32m[1mPASSED[0m
+[1m[Step 4/6][0m Section 4: MoSPI CPI Transport Sub-Index vs APIx Divergence & Lead-Lag Dynamics ... [32m[1mPASSED[0m
+[1m[Step 5/6][0m Section 5: DGCA Statutory Violation Rubric (3-Sigma, >2.5x Median, DoD Surges) ... [32m[1mPASSED[0m
+[1m[Step 6/6][0m Section 6: Backend Service Interoperability & Cross-Validation ... [32m[1mPASSED[0m
+
+[36m--------------------------------------------------------------------------------[0m
+[32m[1m>>> ALL 6 ECONOMETRIC VERIFICATION CHECKS PASSED SUCCESSFULLY <<<[0m
+
+[32m[1m✓ [STEP 16/25 PASSED][0m Cycle 4 Econometric Specifications & Invariant Bounds (1s)
+
+[33m[1m[STEP 17/25] Cycle 4 Database Persistence: Econometric Indices & Violations...[0m
+[36mExecuting:[0m if [ -f "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/scripts/test_econometrics_db.py" ]; then "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_econometrics_db.py; else "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" -m pytest tests/test_cycle4_econometrics.py -k 'TestEconometricDatabaseModels' -v; fi
+================================================================================
+APIx Cycle 4 Econometrics & CPI Gap DB Verification Harness
+================================================================================
+
+[Step 1/8] Verifying Table Creation and Schema Columns...
+  ✓ Table 'econometric_indices' created with columns: ['calculation_method', 'created_at', 'date', 'fisher_ideal_index', 'id', 'laspeyres_index', 'paasche_index', 'route_code', 'substitution_bias']
+  ✓ Table 'mospi_cpi_series' created with columns: ['airfare_sub_index', 'cpi_transport_index', 'created_at', 'headline_cpi', 'id', 'published_at', 'source', 'year_month']
+  ✓ Table 'route_elasticity' created with columns: ['avg_lead_time_decay', 'calculation_date', 'confidence_score', 'created_at', 'id', 'route_code', 't15_t30_elasticity', 't1_t7_elasticity', 't7_t15_elasticity']
+  ✓ Table 'dgca_violations' created with columns: ['airline_code', 'detected_at', 'fare_inr', 'flight_date', 'flight_number', 'id', 'median_baseline_fare', 'route_code', 'severity', 'status', 'surge_multiple', 'violation_code', 'window']
+  ✓ Table 'dgca_traffic_weights' created with columns: ['created_at', 'id', 'pax_volume', 'route_code', 'share_weight', 'year_month']
+  ✓ Schema definitions for all Cycle 4 tables strictly match specifications.
+
+[Step 2/8] Verifying Indexes and Unique Constraints...
+  ✓ Table 'econometric_indices' indexes: ['ix_econometric_index_route_date', 'ix_econometric_indices_calculation_method', 'ix_econometric_indices_date', 'ix_econometric_indices_route_code']
+  ✓ Table 'mospi_cpi_series' indexes: ['ix_mospi_cpi_series_year_month']
+  ✓ Table 'route_elasticity' indexes: ['ix_route_elasticity_calculation_date', 'ix_route_elasticity_lookup', 'ix_route_elasticity_route_code']
+  ✓ Table 'dgca_violations' indexes: ['ix_dgca_violations_airline_code', 'ix_dgca_violations_airline_status', 'ix_dgca_violations_detected_at', 'ix_dgca_violations_flight_date', 'ix_dgca_violations_flight_number', 'ix_dgca_violations_route_code', 'ix_dgca_violations_route_date', 'ix_dgca_violations_severity', 'ix_dgca_violations_status', 'ix_dgca_violations_violation_code']
+  ✓ Table 'dgca_traffic_weights' indexes: ['ix_dgca_traffic_weights_route_code', 'ix_dgca_traffic_weights_year_month']
+  ✓ Verified unique constraint on (date, route_code, calculation_method).
+
+[Step 3/8] Verifying Idempotent Upserts & Bulk Operations...
+  ✓ Verified idempotent update in upsert_econometric_index.
+  ✓ Bulk upserted 14 National EconometricIndex records.
+  ✓ Verified MoSPI CPI series bulk upsert and idempotent in-place update.
+  ✓ Bulk upserted 3 RouteElasticity curve records.
+  ✓ Recorded 3 DGCA statutory tariff violation events.
+
+[Step 4/8] Verifying Querying, Filtering & Time-Series Retrieval...
+  ✓ Econometric index queries and latest lookup working as expected.
+  ✓ MoSPI series range and latest record retrieval verified.
+  ✓ Route elasticity corridor filtering and confidence thresholds verified.
+  ✓ DGCA violation filtering, automated surge calculation, and status transition verified.
+
+[Step 5/8] Verifying Analytical Aggregations & Mathematical Summaries...
+  ✓ Index comparison summary: Avg L=111.5, P=108.125, F=109.8125, Bias=3.375
+  ✓ MoSPI CPI Divergence computed: 2026-03 Airfare Divergence=-34.64% (APIx=109.81 vs MoSPI=168.0)
+  ✓ Network Elasticity Summary: Corridors=3, Avg T1/T7=1.55, Avg Decay=0.048333
+  ✓ DGCA Violations Summary: Total=4, Max Surge=5.09x, Severities={'CRITICAL': 1, 'SEVERE': 1, 'WARNING': 2}
+
+[Step 6/8] Verifying DGCA Traffic Weight Persistence & Route Weight Sync...
+  ✓ Successfully synchronized 2 active Route records with DGCA monthly passenger volumes and basket weights.
+
+[Step 7/8] Verifying EconometricsRepo Class Facade & Serialization...
+  ✓ EconometricsRepo class facade and model serialization (to_dict, repr) validated.
+
+[Step 8/8] Benchmarking High-Throughput Ingestion & Query Latency (<20ms)...
+  ✓ High-throughput bulk upsert: 1,000 records persisted in 370.39ms (2700 records/sec).
+  ✓ Indexed range query latency: avg 0.54ms across 1000 records (Target: < 20ms).
+
+================================================================================
+ALL APIx CYCLE 4 ECONOMETRICS DB INVARIANTS & BENCHMARKS PASSED (8/8)
+================================================================================
+[32m[1m✓ [STEP 17/25 PASSED][0m Cycle 4 Database Persistence: Econometric Indices & Violations (1s)
+
+[33m[1m[STEP 18/25] Cycle 4 Benchmark Loaders: MoSPI CPI & DGCA Traffic Weights...[0m
+[36mExecuting:[0m if [ -f "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/scripts/test_benchmark_loaders.py" ]; then "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_benchmark_loaders.py; else "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" -m pytest tests/test_cycle4_econometrics.py -k 'TestMospiCpiDivergenceTracking' -v; fi
+================================================================================
+  PROJECT APIx - INGESTION BENCHMARK LOADERS VERIFICATION SUITE
+  MoSPI CPI (Transport 2024-2026) & DGCA Traffic Weights
+================================================================================
+
+--- 1. Testing MoSPI CPI Loader & Analytics ---
+[PASS] MoSPI series withdrawn rather than bundled - Expected a withdrawn, non-official series, got {'official': False, 'status': 'withdrawn', 'record_count': 0, 'reason': 'No official MoSPI series is bundled. The previous table contradicted NSO press notes and was removed. See data/mospi_cpi_historical_2024_2026.json.'}
+
+--- 2. Testing DGCA Traffic Loader & Corridor Weight Invariants ---
+[PASS] DGCA 27-month period completeness - Periods count: 27
+[PASS] DGCA 10 trunk corridors monitored - Corridor count: 10
+[PASS] DGCA Strict Weight Sum Invariant (sum == 1.000000 across ALL periods) - Passed 27/27 periods. Violations: None
+[PASS] DGCA corridor key mapping (string & tuple)
+[PASS] DGCA passenger growth rate calculation - DEL-BOM 2-year growth: +17.07%
+[PASS] DGCA total monthly passenger volume - Total passenger volume for 2026-03: 3,076,844 pax
+[PASS] DGCA CSV round-trip & weight normalization - Reparsed 10 corridors, weight sum: 1.000000
+[PASS] DGCA JSON round-trip fidelity - Reparsed 27 periods from JSON
+
+--- 3. Testing Database Seeding & Route Synchronization ---
+[PASS] Initial routes seeded in test DB
+[PASS] MoSPI CPI seeding seeds nothing while the series is withdrawn - Seeded 0 MoSPI records
+[PASS] DGCA traffic weights database seeding - Seeded 270 traffic weight records
+[PASS] Active Route table synchronization - Synchronized 10 active Route records
+[PASS] Route dgca_monthly_pax dynamically updated - DEL-BOM pax: 437,500 -> 529,343
+[PASS] Active Route table weights sum to 1.000000 - Active Route weight sum: 1.000000
+
+--- 4. Testing CLI Runner Subcommands ---
+[PASS] CLI Runner programmatic execution (mospi, dgca, all)
+
+--- 5. Testing Cross-Agent Data Contract Compliance ---
+[PASS] StatsQuant CPI Divergence Contract ({period, cpi_transport, cpi_general}) - Sample: no series bundled; contract not exercised
+[PASS] StatsQuant Route Weights Contract (Dict[str, float], sum == 1.000000) - DEL-BOM weight: 0.172041, sum: 1.000000
+
+================================================================================
+  ALL VERIFICATION CHECKS PASSED SUCCESSFULLY (17/17 tests passing)
+================================================================================
+
+[32m[1m✓ [STEP 18/25 PASSED][0m Cycle 4 Benchmark Loaders: MoSPI CPI & DGCA Traffic Weights (0s)
+
+[33m[1m[STEP 19/25] Cycle 4 Backend API: Econometrics, Divergence & Surveillance...[0m
+[36mExecuting:[0m if [ -f "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/scripts/test_api_cycle4.py" ]; then "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/test_api_cycle4.py; else "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" -m pytest tests/test_cycle4_econometrics.py -k 'TestCycle4FastApiEndpoints or TestDgcaRegulatoryViolationSurveillance' -v; fi
+========================================================================
+APIx Master Mission Cycle 4 - Econometrics & DGCA API Test Suite
+========================================================================
+[TEST 1/22] GET /api/v1/econometrics/indices (default)
+  ✓ Verified: base=2026-09-26, L=102.0, P=101.5, F=101.75, bias=0.5
+[TEST 2/22] GET /api/v1/econometrics/indices?route_code=DEL-BOM
+  ✓ Route filtering verified: 3 points for DEL-BOM
+[TEST 3/22] GET /api/v1/econometrics/indices?limit=7
+  ✓ Limit filtering verified: received 4 points (requested 7)
+[TEST 4/22] GET /api/v1/econometrics/cpi-divergence (default)
+  ✓ CPI divergence correctly reports no comparison (no verified series)
+[TEST 5/22] GET /api/v1/econometrics/cpi-divergence?months=6&lag_days=45
+  ✓ Parameters accepted; no lead reported without a verified series
+[TEST 6/22] GET /api/v1/econometrics/cpi-gap (alias endpoint)
+  ✓ /cpi-gap alias verified identically
+[TEST 7/22] GET /api/v1/econometrics/elasticity (default)
+  ✓ Elasticity curve verified: fares 4000.0 -> 6100.0 INR, decay lambda=38.0
+[TEST 8/22] GET /api/v1/econometrics/elasticity?route_code=BOM-BLR
+  ✓ Corridor-specific elasticity verified for BOM-BLR: t1_t7=-0.42
+[TEST 9/22] GET /api/v1/econometrics/dgca-violations (default feed)
+  ✓ Violations feed verified: 8 violations across 1 carriers
+[TEST 10/22] GET /api/v1/econometrics/dgca-violations?severity=SEVERE
+  ✓ Severity filter verified: 1 SEVERE violations (all surge >= 3.0x)
+[TEST 11/22] GET /api/v1/econometrics/dgca-violations?airline_code=6E
+  ✓ Airline filter verified: 8 violations for carrier 6E
+[TEST 12/22] GET /api/v1/econometrics/dgca-violations?route_code=DEL-BOM
+  ✓ Corridor filter verified: 3 violations on DEL-BOM
+[TEST 13/22] GET /api/v1/anomalies/dgca-violations (cross-mount alias)
+  ✓ Anomaly cross-mounted alias /anomalies/dgca-violations verified
+[TEST 14/22] Authentication security: invalid key rejection
+  ✓ Invalid API key rejected with 401 Unauthorized
+[TEST 15/22] Authentication security: valid credentials accepted
+  ✓ Valid X-API-Key, X-Ingestion-Key, and Bearer token authorized successfully
+[TEST 16/22] POST /api/v1/econometrics/recalculate without auth
+  ✓ Unauthenticated recalculation request rejected with 401
+[TEST 17/22] POST /api/v1/econometrics/recalculate with valid auth
+  ✓ Recomputation executed successfully: Axiomatic price indices recomputed for route DEL-BOM
+[TEST 18/22] PATCH /api/v1/econometrics/dgca-violations/{id}/status without auth
+  ✓ Unauthenticated violation status modification rejected with 401
+[TEST 19/22] PATCH /api/v1/econometrics/dgca-violations/{id}/status with valid auth
+  ✓ Violation review status patched to CONFIRMED for id=dgca-v-001
+[TEST 20/22] POST /api/v1/econometrics/dgca-violations/{id}/acknowledge with valid auth
+  ✓ Violation dgca-v-002 acknowledged to status=UNDER_REVIEW
+[TEST 21/22] Database persistence and live repository integration
+  ✓ Live DB write and query verified: HYD-BLR Fisher=121.98, violation AI-543 recorded
+[TEST 22/22] Calibrated mock fallback resilience for unseeded route
+  ✓ Unseeded route IXZ-MAA correctly reports no data rather than a synthetic series
+========================================================================
+ALL 22/22 CYCLE 4 API TESTS PASSED SUCCESSFULLY!
+========================================================================
+[32m[1m✓ [STEP 19/25 PASSED][0m Cycle 4 Backend API: Econometrics, Divergence & Surveillance (1s)
+
+[33m[1m[STEP 20/25] Cycle 4 Lead-Time Price Elasticity & Horizon Dynamics...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" -m pytest tests/test_cycle4_econometrics.py -k 'TestLeadTimeElasticityDynamics' -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-8.4.2, pluggy-1.6.0
+rootdir: /home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts
+configfile: pyproject.toml
+plugins: asyncio-0.26.0, anyio-4.15.1, mock-3.15.1, cov-5.0.0
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 30 items / 26 deselected / 4 selected
+
+tests/test_cycle4_econometrics.py ....                                   [100%]
+
+=============================== warnings summary ===============================
+../../APIx/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/adix/Work/woventech/APIx/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================= 4 passed, 26 deselected, 1 warning in 0.20s ==================
+[32m[1m✓ [STEP 20/25 PASSED][0m Cycle 4 Lead-Time Price Elasticity & Horizon Dynamics (1s)
+
+[33m[1m[STEP 21/25] Cycle 4 Comprehensive Integration Pytest Suite...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" -m pytest tests/test_cycle4_econometrics.py -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-8.4.2, pluggy-1.6.0
+rootdir: /home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts
+configfile: pyproject.toml
+plugins: asyncio-0.26.0, anyio-4.15.1, mock-3.15.1, cov-5.0.0
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 30 items
+
+tests/test_cycle4_econometrics.py ..............................         [100%]
+
+=============================== warnings summary ===============================
+../../APIx/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/adix/Work/woventech/APIx/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 30 passed, 1 warning in 0.39s =========================
+[32m[1m✓ [STEP 21/25 PASSED][0m Cycle 4 Comprehensive Integration Pytest Suite (1s)
+
+[33m[1m[STEP 22/25] Master Pytest Full Test Suite (Cycles 1-4)...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" -m pytest tests/ -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-8.4.2, pluggy-1.6.0
+rootdir: /home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts
+configfile: pyproject.toml
+plugins: asyncio-0.26.0, anyio-4.15.1, mock-3.15.1, cov-5.0.0
+asyncio: mode=Mode.AUTO, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 460 items
+
+tests/test_api_endpoints.py ...............                              [  3%]
+tests/test_api_rate_limit.py .....                                       [  4%]
+tests/test_backtest.py ........                                          [  6%]
+tests/test_benchmark_loaders_unit.py ...................                 [ 10%]
+tests/test_contracts.py ......................                           [ 15%]
+tests/test_crawler_queue_unit.py ................                        [ 18%]
+tests/test_crawlers_unit.py .....................                        [ 23%]
+tests/test_cycle3_telemetry.py ...................                       [ 27%]
+tests/test_cycle4_econometrics.py ..............................         [ 33%]
+tests/test_deploy_config.py ...                                          [ 34%]
+tests/test_e2e_pipeline.py .                                             [ 34%]
+tests/test_econometrics_fail_closed.py ...........                       [ 36%]
+tests/test_factor_reversal.py .....                                      [ 38%]
+tests/test_fare_cleaning.py ...........                                  [ 40%]
+tests/test_ingestion_repo_unit.py .....                                  [ 41%]
+tests/test_ingestion_unit.py ...............                             [ 44%]
+tests/test_math_engine.py ..........                                     [ 46%]
+tests/test_math_invariants.py ...............................            [ 53%]
+tests/test_migration_drift.py ...                                        [ 54%]
+tests/test_models.py ...                                                 [ 55%]
+tests/test_no_fabricated_analytics.py ............                       [ 57%]
+tests/test_production_secret_guard.py .......                            [ 59%]
+tests/test_provenance_audit.py ....                                      [ 60%]
+tests/test_proxy_wiring.py .....................                         [ 64%]
+tests/test_ps_portal_scrapers.py ....................................... [ 73%]
+.......                                                                  [ 74%]
+tests/test_ps_source_contract.py .                                       [ 74%]
+tests/test_raw_fare_migration.py ..                                      [ 75%]
+tests/test_raw_fare_ps_columns.py ......                                 [ 76%]
+tests/test_robots.py ..................                                  [ 80%]
+tests/test_runtime_boundaries.py ..................                      [ 84%]
+tests/test_schedule_session_captcha.py ..............                    [ 87%]
+tests/test_stream_truthfulness.py ......                                 [ 88%]
+tests/test_streaming_arbitrage.py ....................                   [ 93%]
+tests/test_streaming_dedup.py ..........                                 [ 95%]
+tests/test_streaming_dedup_unit.py ..........                            [ 97%]
+tests/test_weight_table_consistency.py ............                      [100%]
+
+=============================== warnings summary ===============================
+../../APIx/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/adix/Work/woventech/APIx/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_runtime_boundaries.py::test_index_history_rejects_an_unknown_frequency
+  /home/adix/Work/woventech/APIx/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py:59: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    response = await handler(conn, exc)  # type: ignore[arg-type]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 460 passed, 2 warnings in 29.01s =======================
+[32m[1m✓ [STEP 22/25 PASSED][0m Master Pytest Full Test Suite (Cycles 1-4) (31s)
+
+[33m[1m[STEP 23/25] Frontend Types, Mock Contracts & Verification...[0m
+[36mExecuting:[0m cd "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/frontend" && bun run build && bun scripts/verify-mock-data.ts
+vite v6.4.3 building for production...
+transforming...
+✓ 2521 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   1.29 kB │ gzip:   0.73 kB
+dist/assets/index-C8c4uVPE.css   33.85 kB │ gzip:   6.50 kB
+dist/assets/index-a73nG1w1.js   875.37 kB │ gzip: 225.99 kB
+✓ built in 3.83s
+===============================================================
+   APIx Frontend Cycle 4 Premier Verification (PS 26056)       
+===============================================================
+
+[1/5] Verifying Enhanced Mock Data Specifications...
+✓ National Index: 118.65 | MoSPI CPI: 107.4 (Divergence: +11.25 pts)
+✓ Sub-indices: T+1: 154.2 | T+7: 128.6 | T+15: 114.1 | T+30: 99.4
+✓ 30-day historical time series with MoSPI CPI and booking window sub-indices verified.
+✓ 10 high-density DGCA corridors with 7-day sparklines verified.
+✓ Surveillance Anomaly Alerts: 6 items (2 Critical Z≥3.0, 3 Warning Z≥2.0).
+
+[Cycle 3] Verifying Scraper Telemetry & Arbitrage Datasets...
+✓ 4 Required Scraper Engines verified: easemytrip, makemytrip, spicejet, amadeus
+✓ Proxy Pool: 61 active nodes, 142ms avg latency
+✓ Arbitrage Opportunities: 8 items (6 OTA Cheaper, 2 Airline Cheaper)
+✓ Peak Arbitrage Spread: +9.56%
+✓ Live Fare Stream Seed: 6 initial broadcast packets
+
+[Cycle 4] Verifying Econometric Engine & DGCA Surveillance Datasets...
+✓ Econometric Indices: Fisher 118.63 | Laspeyres 120.45 | Paasche 116.85 (Substitution Bias: Δ 3.6 pts)
+✓ MoSPI CPI Divergence: +11.25 pts | Inflation Lead Time: +38 days | Correlation: 0.89
+✓ Price Elasticity Curve: 5 gradient points (T+30 to T+1)
+✓ DGCA Surveillance: 28 violations across 1845 flights
+✓ Carrier Distribution: 4 scheduled airlines audited
+
+[2/5] Validating Composite Mock Dashboard Dataset...
+✓ Ingestion Telemetry: HEALTHY | Scrapers: 8 | Ingested: 142,850 fares
+✓ Last scrape timestamp: 2026-09-27T19:10:07.799Z
+
+[3/5] Verifying Static / Server-Side Rendering of All 4 Tab Components...
+  -> Rendering OverviewTab (Recharts line chart, MoSPI CPI, sub-indices toggles, KPI cards)...
+  ✓ OverviewTab rendered cleanly (21276 bytes HTML).
+  -> Rendering RoutesTab (Searchable, sortable table, weights, sparklines, badges)...
+  ✓ RoutesTab rendered cleanly (28629 bytes HTML).
+  -> Rendering ElasticityTab (Lead-time elasticity surge chart, route price heatmap matrix)...
+  ✓ ElasticityTab rendered cleanly (14610 bytes HTML).
+  -> Rendering AnomaliesTab (Surveillance center, Z-score badges, baseline fare comparisons)...
+  ✓ AnomaliesTab rendered cleanly (47857 bytes HTML).
+  -> Rendering TelemetryTab (Crawler fleet cards, proxy latency gauges, error breakdown)...
+  ✓ TelemetryTab rendered cleanly (43633 bytes HTML).
+  -> Rendering LiveTicker (Real-time streaming ticker, carrier tags, route badges)...
+  ✓ LiveTicker rendered cleanly (4239 bytes HTML).
+  -> Rendering ArbitrageTab (Direct airline vs OTA spread analysis, savings alerts)...
+  ✓ ArbitrageTab rendered cleanly (42443 bytes HTML).
+  -> Rendering EconometricsTab (Dual-axis composite line chart, Fisher/Laspeyres vs MoSPI, elasticity curve)...
+  ✓ EconometricsTab rendered cleanly (25563 bytes HTML).
+  -> Rendering DgcaSurveillanceTab (Statutory violation feed, severity badges, carrier distribution)...
+  ✓ DgcaSurveillanceTab rendered cleanly (33400 bytes HTML).
+
+[4/5] Checking DGCA Route Traffic Weight Invariants...
+✓ 10 Corridors Weight Sum: 86.60% of national high-density domestic traffic
+
+[5/5] Checking Production Build Outputs (dist/)...
+✓ dist/index.html exists (1287 bytes)
+✓ JS Bundle: index-a73nG1w1.js (854.8 kB)
+✓ CSS Stylesheet: index-C8c4uVPE.css (33.1 kB)
+
+===============================================================
+>>> All 5 Premier Verifications Passed Successfully (Exit 0) <<<
+===============================================================
+[32m[1m✓ [STEP 23/25 PASSED][0m Frontend Types, Mock Contracts & Verification (7s)
+
+[33m[1m[STEP 24/25] Deployment Artifacts & Configuration Verification...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" scripts/verify_deployment_artifacts.py
+================================================================================
+APIx Deployment Artifacts & Configuration Verification
+SIH 2026 PS 26056 - LeadArchitect Deliverables Verification
+================================================================================
+
+[36mℹ INFO:[0m Validating GitHub Actions workflow: /home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/.github/workflows/scrape.yml
+[32m[1m✓ PASS:[0m Scraper workflow syntax, cron (0 2 * * *), Python 3.12, Playwright caching, secrets, and artifacts
+[36mℹ INFO:[0m Validating Docker Compose orchestration: /home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/docker-compose.yml
+[32m[1m✓ PASS:[0m Docker Compose syntax, services (db, backend, frontend), healthchecks, and dependency graph
+[36mℹ INFO:[0m Validating Multi-stage Dockerfile: /home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/Dockerfile
+[32m[1m✓ PASS:[0m Dockerfile multi-stage targets (backend, frontend), non-root security user, EXPOSE, and HEALTHCHECK
+[36mℹ INFO:[0m Validating Deployment Guide: /home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/docs/deployment.md
+[32m[1m✓ PASS:[0m Deployment guide comprehensive coverage (39520 characters)
+[36mℹ INFO:[0m Executing 'docker compose config' for syntax and variable linting...
+[32m[1m✓ PASS:[0m docker compose config executed successfully with zero errors
+
+--------------------------------------------------------------------------------
+[32m[1m>>> ALL DEPLOYMENT ARTIFACT VERIFICATIONS PASSED (0 FAILURES) <<<[0m
+[32m[1m✓ [STEP 24/25 PASSED][0m Deployment Artifacts & Configuration Verification (1s)
+
+[33m[1m[STEP 25/25] Data Provenance & Anti-Fabrication Telemetry Audit...[0m
+[36mExecuting:[0m "/home/adix/Work/woventech/.apix-worktrees/wt-agent5-backtest-artifacts/../../APIx/.venv/bin/python" -m scripts.audit_provenance apix.db
+provenance audit: apix.db
+  rows claiming is_synthetic=false : 0
+  RESULT: PASS - every live claim is corroborated
+[32m[1m✓ [STEP 25/25 PASSED][0m Data Provenance & Anti-Fabrication Telemetry Audit (0s)
+
+================================================================================
+[1mAPIx MASTER VERIFICATION SUMMARY[0m
+================================================================================
+Total Elapsed Time: 63s
+Steps Passed: [32m[1m25[0m
+Steps Failed: [31m[1m0[0m
+--------------------------------------------------------------------------------
+[32m[1m>>> ALL MASTER VERIFICATION STEPS PASSED SUCCESSFULLY! <<<
+[0m
