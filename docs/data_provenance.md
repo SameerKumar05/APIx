@@ -118,11 +118,13 @@ measured. UDF and convenience charges stay `NULL` unless a source reports them.
 
 **Carrier market shares and advance-purchase weights.** The carrier market shares
 and the advance-purchase weights are documented calibrations. City-pair route
-traffic weights and passenger volumes are now ingested from official DGCA Form A
-Monthly Scheduled Domestic Passenger Traffic releases into
+traffic weights and passenger volumes are calibrated baseline proxies in
 `data/dgca_passenger_traffic_weights.json` and `.csv` under explicit
-`provenance="dgca_published"` (`is_synthetic=False`), sourced from the DGCA
-Air Traffic Statistics Portal (`https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename`).
+`provenance="calibrated_baseline"` (`is_synthetic=True`). DGCA publishes aggregate
+domestic passenger traffic statistics (city-pair rankings and annual handbook volumes),
+but does not publish high-frequency programmatic microdata or flight fare feeds
+(Lok Sabha Unstarred Question 1934, answered 30 July 2026). The weights are calibrated
+proxies derived from published DGCA city-pair traffic rankings without false official claims.
 
 ## Withdrawn comparisons and known index limits
 
@@ -132,7 +134,7 @@ Air Traffic Statistics Portal (`https://www.dgca.gov.in/digigov-portal/?page=426
 
 **The Fisher index here fails factor reversal by design.** The Paasche leg is textbook; the Laspeyres leg is a fixed-weight mean of price relatives rather than a true Laspeyres, so `P_F x Q_F == V_t / V_0` does not hold for the engine pair. `tests/test_factor_reversal.py` proves both halves (`test_factor_reversal_holds_for_the_true_laspeyres_paasche_pair` passes for the true pair; `test_engine_fisher_pair_does_not_satisfy_factor_reversal` proves the engine pair fails). Time reversal is asserted.
 
-**Deployed fares are synthetic by name.** The fallback that produces every fare in the system today is `SyntheticFlightGenerator` (`ingestion/crawlers/synthetic.py:52`), reached only after the live scrapers yield zero records, and its output is persisted with `is_synthetic=true`. Route and traffic weights carry verified `provenance=dgca_published` from official DGCA Form A releases.
+**Deployed fares are synthetic by name.** The fallback that produces every fare in the system today is `SyntheticFlightGenerator` (`ingestion/crawlers/synthetic.py:52`), reached only after the live scrapers yield zero records, and its output is persisted with `is_synthetic=true`. Route and traffic weights carry verified `provenance=calibrated_baseline` (`is_synthetic=true`) as calibrated proxies derived from DGCA city-pair traffic rankings.
 
 ## Evidence paths
 

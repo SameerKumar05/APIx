@@ -146,13 +146,13 @@ def test_dgca_traffic_weights_table_provenance() -> None:
     for path in [csv_path, json_path]:
         loader = DgcaTrafficLoader(data_path=path)
         prov = loader.provenance
-        assert prov["is_synthetic"] is False, f"{path.name} marked synthetic"
+        assert prov["is_synthetic"] is True, f"{path.name} not marked synthetic"
         assert prov["record_count"] >= 270
         assert len(loader._records) >= 270
 
         first_rec = loader._records[0]
-        assert first_rec.is_synthetic is False
-        assert first_rec.provenance == "dgca_published"
+        assert first_rec.is_synthetic is True
+        assert first_rec.provenance in ("calibrated_baseline", "modelled_dgca_proxy")
         assert first_rec.source_url.startswith("https://www.dgca.gov.in")
         assert first_rec.release_date
         assert first_rec.pax_volume > 0

@@ -307,7 +307,7 @@ class TestDgcaWeightProvenance:
         assert again._records[0].provenance == "DGCA"
         assert again._records[0].pax_volume == 100
 
-    def test_committed_weights_file_carries_verified_dgca_provenance(self) -> None:
+    def test_committed_weights_file_carries_calibrated_baseline_provenance(self) -> None:
         from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
 
         csv = (
@@ -322,9 +322,9 @@ class TestDgcaWeightProvenance:
             if rec.year_month == "2024-01" and rec.route_code == "DEL-BOM"
         )
         assert january.pax_volume == 441875
-        assert january.is_synthetic is False
-        assert january.provenance in {"dgca_published", "DGCA"}
-        assert loader.provenance["is_synthetic"] is False
+        assert january.is_synthetic is True
+        assert january.provenance in {"calibrated_baseline", "modelled_dgca_proxy"}
+        assert loader.provenance["is_synthetic"] is True
         assert january.source_url.startswith("https://www.dgca.gov.in")
         assert january.release_date == "2024-02-18"
 
