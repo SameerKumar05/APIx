@@ -143,10 +143,10 @@ def run_multi_source_verification() -> int:
     print(f"  -> Backend Status:           {summary.backend_status}")
     print(f"  -> Tier Distribution:        {summary.tier_distribution}")
 
-    assert summary.total_slots == 50, f"Expected 50 slots, got {summary.total_slots}"
+    assert summary.total_slots == 70, f"Expected 70 slots, got {summary.total_slots}"
     assert (
-        summary.successful_slots == 50
-    ), f"Expected 50 successful slots, got {summary.successful_slots}"
+        summary.successful_slots == 70
+    ), f"Expected 70 successful slots, got {summary.successful_slots}"
     assert (
         summary.failed_slots == 0
     ), f"Expected 0 failed slots, got {summary.failed_slots}"
@@ -168,13 +168,13 @@ def run_multi_source_verification() -> int:
         "\n[STEP 3/5] Verifying Multi-Source Scraper Coverage and Slot Aggregation..."
     )
     slot_entries = summary.slots
-    assert len(slot_entries) == 50, f"Expected 50 slot entries, got {len(slot_entries)}"
+    assert len(slot_entries) == 70, f"Expected 70 slot entries, got {len(slot_entries)}"
 
     unique_routes = {s["route"] for s in slot_entries}
     unique_windows = {s["booking_window"] for s in slot_entries}
     assert (
-        len(unique_routes) == 10
-    ), f"Expected 10 unique routes, got {len(unique_routes)}: {unique_routes}"
+        len(unique_routes) == 14
+    ), f"Expected 14 unique routes, got {len(unique_routes)}: {unique_routes}"
     assert unique_windows == {
         "T+1",
         "T+7",

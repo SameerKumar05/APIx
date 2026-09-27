@@ -271,7 +271,7 @@ def run_tests() -> bool:
         print(
             f"      Seeded {route_count} routes and {raw_count} raw flight fare quotes."
         )
-        assert route_count == 10, f"Expected 10 routes, got {route_count}"
+        assert route_count == 14, f"Expected 14 routes, got {route_count}"
         assert raw_count >= 160, f"Expected >= 160 raw fares, got {raw_count}"
         print("      ✓ Assertion Passed: Seed data and raw fares populated.")
 
@@ -280,8 +280,8 @@ def run_tests() -> bool:
 
         assert result["status"] == "success", f"Pipeline returned non-success: {result}"
         assert (
-            result["routes_covered"] == 10
-        ), f"Expected 10 routes covered, got {result['routes_covered']}"
+            result["routes_covered"] == 14
+        ), f"Expected 14 routes covered, got {result['routes_covered']}"
         assert (
             result["total_raw_fares"] == raw_count
         ), f"Mismatch in raw fares count: {result['total_raw_fares']}"
@@ -304,18 +304,18 @@ def run_tests() -> bool:
         )
 
         print(f"      Total RouteDailyIndex records saved: {len(db_route_indices)}")
-        # 10 routes x (5 windows + 1 composite) = 60 records
+        # 14 routes x (5 windows + 1 composite) = 84 records
         assert (
-            len(db_route_indices) == 60
-        ), f"Expected 60 RouteDailyIndex records, got {len(db_route_indices)}"
+            len(db_route_indices) == 84
+        ), f"Expected 84 RouteDailyIndex records, got {len(db_route_indices)}"
 
-        # Verify composite records exist for all 10 routes
+        # Verify composite records exist for all 14 routes
         composite_records = [
             r for r in db_route_indices if r.booking_window == "COMPOSITE"
         ]
         assert (
-            len(composite_records) == 10
-        ), f"Expected 10 composite records, got {len(composite_records)}"
+            len(composite_records) == 14
+        ), f"Expected 14 composite records, got {len(composite_records)}"
 
         # Check DEL-BOM composite fare and distribution invariants
         del_bom_comp = next(
@@ -379,8 +379,8 @@ def run_tests() -> bool:
             nat_index.index_value > 0
         ), f"National index value non-positive: {nat_index.index_value}"
         assert (
-            nat_index.routes_covered == 10
-        ), f"Expected 10 routes covered, got {nat_index.routes_covered}"
+            nat_index.routes_covered == 14
+        ), f"Expected 14 routes covered, got {nat_index.routes_covered}"
         assert nat_index.total_samples > 0, "Total samples must be positive"
         assert nat_index.weighted_mean_fare > 0, "Weighted mean fare must be positive"
         assert math.isfinite(
@@ -474,8 +474,8 @@ def run_tests() -> bool:
         ).scalar()
 
         assert (
-            route_count_after == 60
-        ), f"Expected 60 route indices after re-run, got {route_count_after}"
+            route_count_after == 84
+        ), f"Expected 84 route indices after re-run, got {route_count_after}"
         assert (
             nat_count_after == 3
         ), f"Expected 3 national indices (Laspeyres, Paasche, Fisher) after re-run, got {nat_count_after}"

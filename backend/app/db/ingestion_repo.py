@@ -450,7 +450,16 @@ def bulk_insert_raw_fares(
 
     _assign_exclusions(db, normalized_records)
 
-    inserted_count = 0
+    all_hashes = [r["hash_id"] for r in normalized_records]
+    existing_hashes: set[str] = set()
+    if all_hashes:
+        existing_hashes = set(
+            db.scalars(
+                select(RawFare.hash_id).where(RawFare.hash_id.in_(all_hashes))
+            ).all()
+        )
+    inserted_count = sum(1 for r in normalized_records if r["hash_id"] not in existing_hashes)
+
     bind = db.get_bind()
     dialect_name = bind.dialect.name if bind else "sqlite"
 
@@ -481,7 +490,7 @@ def bulk_insert_raw_fares(
                 },
                 where=(RawFare.is_synthetic.is_(True)),
             )
-            res = cast("CursorResult[Any]", db.execute(pg_stmt))
+            db.execute(pg_stmt)
         else:
             from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
@@ -499,14 +508,7 @@ def bulk_insert_raw_fares(
                 },
                 where=(RawFare.is_synthetic.is_(True)),
             )
-            res = cast("CursorResult[Any]", db.execute(sqlite_stmt))
-
-        # res.rowcount returns the number of newly inserted rows
-        if res.rowcount is not None and res.rowcount >= 0:
-            inserted_count += res.rowcount
-        else:
-            # Fallback if driver doesn't populate rowcount
-            inserted_count += len(chunk)
+            db.execute(sqlite_stmt)
 
     if commit:
         db.commit()

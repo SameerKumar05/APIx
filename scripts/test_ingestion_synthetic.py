@@ -46,9 +46,9 @@ def run_verification() -> None:
     actual_slots = len(slots)
     print(f"      Generated slots: {actual_slots} (Expected: {expected_slots})")
     assert (
-        actual_slots == 50
-    ), f"Assertion failed: Expected exactly 50 slots, got {actual_slots}"
-    print("      ✓ Assertion Passed: Exactly 50 slots generated.")
+        actual_slots == 70
+    ), f"Assertion failed: Expected exactly 70 slots, got {actual_slots}"
+    print("      ✓ Assertion Passed: Exactly 70 slots generated.")
 
     # Check uniqueness of slot keys (route x window)
     slot_keys = set()
@@ -57,9 +57,9 @@ def run_verification() -> None:
         assert key not in slot_keys, f"Duplicate slot detected: {key}"
         slot_keys.add(key)
     assert (
-        len(slot_keys) == 50
-    ), f"Assertion failed: Expected 50 unique slot keys, got {len(slot_keys)}"
-    print("      ✓ Assertion Passed: All 50 slots are distinct route-window pairs.")
+        len(slot_keys) == 70
+    ), f"Assertion failed: Expected 70 unique slot keys, got {len(slot_keys)}"
+    print("      ✓ Assertion Passed: All 70 slots are distinct route-window pairs.")
 
     # Flatten records
     all_records = []

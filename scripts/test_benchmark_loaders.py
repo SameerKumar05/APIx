@@ -190,8 +190,8 @@ def test_dgca_traffic_loader() -> None:
 
     latest_traffic = loader.get_period_traffic(loader.get_latest_period())
     log_test(
-        "DGCA 10 trunk corridors monitored",
-        len(latest_traffic) == 10,
+        "DGCA 14 trunk corridors monitored",
+        len(latest_traffic) == 14,
         f"Corridor count: {len(latest_traffic)}",
     )
 
@@ -244,8 +244,8 @@ def test_dgca_traffic_loader() -> None:
 
         log_test(
             "DGCA CSV round-trip & weight normalization",
-            len(reparsed_weights) == 10 and abs(reparsed_sum - 1.0) < 1e-6,
-            f"Reparsed 10 corridors, weight sum: {reparsed_sum:.6f}",
+            len(reparsed_weights) == 14 and abs(reparsed_sum - 1.0) < 1e-6,
+            f"Reparsed 14 corridors, weight sum: {reparsed_sum:.6f}",
         )
 
     # 2.7 JSON Export & Parse Round-trip
@@ -257,7 +257,7 @@ def test_dgca_traffic_loader() -> None:
 
         log_test(
             "DGCA JSON round-trip fidelity",
-            reparsed_json_summary["corridors_monitored"] == 10,
+            reparsed_json_summary["corridors_monitored"] == 14,
             f"Reparsed {reparsed_json_summary['total_periods']} periods from JSON",
         )
 
@@ -288,7 +288,7 @@ def test_database_seeding() -> None:
 
             # Verify initial routes seeded
             init_routes = session.execute(select(Route)).scalars().all()
-            log_test("Initial routes seeded in test DB", len(init_routes) == 10)
+            log_test("Initial routes seeded in test DB", len(init_routes) == 14)
 
             # Record initial DEL-BOM pax
             del_bom_before = next(r for r in init_routes if r.route_code == "DEL-BOM")
@@ -308,12 +308,12 @@ def test_database_seeding() -> None:
             dgca_res = dgca_loader.seed_database(db=session, update_active_routes=True)
             log_test(
                 "DGCA traffic weights database seeding",
-                dgca_res["weights_upserted"] == 270,
+                dgca_res["weights_upserted"] == 378,
                 f"Seeded {dgca_res['weights_upserted']} traffic weight records",
             )
             log_test(
                 "Active Route table synchronization",
-                dgca_res["routes_updated"] == 10,
+                dgca_res["routes_updated"] == 14,
                 f"Synchronized {dgca_res['routes_updated']} active Route records",
             )
 
@@ -435,7 +435,7 @@ def test_agent_contracts() -> None:
         isinstance(weights, dict)
         and "DEL-BOM" in weights
         and isinstance(weights["DEL-BOM"], float)
-        and 0.15 <= weights["DEL-BOM"] <= 0.20
+        and 0.14 <= weights["DEL-BOM"] <= 0.20
         and abs(sum(weights.values()) - 1.0) < 1e-6
     )
     log_test(

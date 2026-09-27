@@ -290,6 +290,7 @@ def test_ingestion_batch_authorized_valid():
                 "cabin_class": "economy",
                 "stops": 0,
                 "source": "makemytrip_pipeline",
+                "is_synthetic": True,
                 "booking_window": 5,
             },
             {
@@ -303,6 +304,7 @@ def test_ingestion_batch_authorized_valid():
                 "cabin_class": "economy",
                 "stops": 0,
                 "source": "makemytrip_pipeline",
+                "is_synthetic": True,
                 "booking_window": 12,
             },
         ],
