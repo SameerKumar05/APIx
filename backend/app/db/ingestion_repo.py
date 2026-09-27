@@ -30,6 +30,7 @@ from backend.app.core.fare_components import (
     FareSplitBasis,
     canonical_booking_class,
     canonical_flight_status,
+    check_fare_recomposition,
     classify_fare_split,
     optional_amount,
 )
@@ -117,22 +118,34 @@ def _assign_exclusions(db: Session, records: list[dict[str, Any]]) -> None:
     for (origin, destination, window), group in groups.items():
         as_of = max(_as_utc(rec["scraped_at"]) for rec in group)
         db_peers = _peer_fares(db, origin, destination, window, as_of)
-        payable_indexes = [
+        valid_peer_indexes = [
             index
             for index, rec in enumerate(group)
             if is_payable_status(rec.get("flight_status"))
+            and check_fare_recomposition(
+                float(rec.get("total_fare") or 0.0),
+                rec.get("base_fare"),
+                rec.get("taxes_and_fees"),
+                rec.get("udf_fee"),
+                rec.get("convenience_fee"),
+            )
         ]
-        payable_fares = [float(group[index]["total_fare"]) for index in payable_indexes]
+        valid_peer_fares = [float(group[index]["total_fare"]) for index in valid_peer_indexes]
         for index, rec in enumerate(group):
             others = [
                 fare
-                for peer_index, fare in zip(payable_indexes, payable_fares, strict=True)
+                for peer_index, fare in zip(valid_peer_indexes, valid_peer_fares, strict=True)
                 if peer_index != index
             ]
             rec["index_exclusion_reason"] = exclusion_for_fare(
                 float(rec["total_fare"]),
                 rec.get("flight_status"),
                 [*db_peers, *others],
+                base_fare=rec.get("base_fare"),
+                taxes_and_fees=rec.get("taxes_and_fees"),
+                udf_fee=rec.get("udf_fee"),
+                convenience_fee=rec.get("convenience_fee"),
+                fare_split_basis=rec.get("fare_split_basis"),
             )
 
 
@@ -289,17 +302,37 @@ def _normalize_fare_record(
     tax_in = _optional_component(data, "taxes_and_fees")
     incoming_basis = data.get("fare_split_basis")
     known_bases = {item.value for item in FareSplitBasis}
-    if (
-        isinstance(incoming_basis, str)
-        and incoming_basis in known_bases
+    is_obsolete_calibration = (
+        incoming_basis in (FareSplitBasis.CALIBRATED.value, FareSplitBasis.ESTIMATED.value)
         and base_in is not None
         and tax_in is not None
-    ):
+        and abs(total_fare - (base_in + tax_in)) > 1.0
+    )
+    if base_in is not None and tax_in is not None and not is_obsolete_calibration:
         base_fare = base_in
         taxes_and_fees = tax_in
-        fare_split_basis = incoming_basis
+        fare_split_basis = (
+            incoming_basis
+            if isinstance(incoming_basis, str) and incoming_basis in known_bases
+            else FareSplitBasis.MEASURED.value
+        )
+    elif base_in is not None and not is_obsolete_calibration:
+        split = classify_fare_split(total_fare, base_fare=base_in)
+        base_fare = split.base_fare
+        taxes_and_fees = split.taxes_and_fees
+        fare_split_basis = split.basis.value
+    elif tax_in is not None and not is_obsolete_calibration:
+        split = classify_fare_split(total_fare, taxes_and_fees=tax_in)
+        base_fare = split.base_fare
+        taxes_and_fees = split.taxes_and_fees
+        fare_split_basis = split.basis.value
     else:
-        split = classify_fare_split(total_fare, base_in, tax_in)
+        split = classify_fare_split(
+            total_fare,
+            airline_code=airline_code,
+            origin=origin,
+            destination=destination,
+        )
         base_fare = split.base_fare
         taxes_and_fees = split.taxes_and_fees
         fare_split_basis = split.basis.value

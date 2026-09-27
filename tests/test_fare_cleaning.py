@@ -179,7 +179,7 @@ def test_ingest_persists_outlier_and_index_uses_only_the_normal_fare(
 def test_missing_split_is_marked_estimated_and_supplied_split_is_measured(
     db_session: Session,
 ) -> None:
-    """The ratio is an estimate. A source-supplied split is not rewritten."""
+    """The ratio is calibrated when carrier/route are known. A source-supplied split is not rewritten."""
     total = 1000.0
     expected_base = round(total * ESTIMATED_BASE_FARE_RATIO, 2)
     omitted = RawFareRecord(
@@ -211,14 +211,14 @@ def test_missing_split_is_marked_estimated_and_supplied_split_is_measured(
         convenience_fee=None,
     )
 
-    assert omitted.fare_split_basis == "estimated"
+    assert omitted.fare_split_basis == "calibrated"
     assert omitted.base_fare == expected_base
     assert supplied.fare_split_basis == "measured"
     assert supplied.udf_fee is None
 
     bulk_insert_raw_fares(db_session, [omitted, supplied], batch_id="split")
     rows = {row.flight_number: row for row in db_session.scalars(select(RawFare)).all()}
-    assert rows["6E-5001"].fare_split_basis == "estimated"
+    assert rows["6E-5001"].fare_split_basis == "calibrated"
     assert rows["6E-5001"].base_fare == expected_base
     assert rows["6E-5001"].udf_fee is None
     assert rows["6E-5001"].convenience_fee is None
@@ -466,3 +466,213 @@ def test_optional_amount_parsing_edge_cases() -> None:
     assert optional_amount(False) is None
     assert optional_amount("") is None
     assert optional_amount("   ") is None
+
+
+def test_calibrated_carrier_and_route_fare_splitting() -> None:
+    """Verify carrier- and route-aware calibrated base ratios and basis classification."""
+    from backend.app.core.fare_components import (
+        DEFAULT_BASE_FARE_RATIO,
+        FareSplitBasis,
+        classify_fare_split,
+        get_calibrated_base_fare_ratio,
+        get_calibrated_base_fare_ratio_and_basis,
+    )
+
+    total = 10000.0
+
+    # 1. Carrier calibration without route: Air India (FSC) ~0.81, SpiceJet (LCC) ~0.74
+    ai_split = classify_fare_split(total, airline_code="AI")
+    assert ai_split.basis == FareSplitBasis.CALIBRATED
+    assert ai_split.base_fare == 8100.0
+    assert ai_split.taxes_and_fees == 1900.0
+
+    sg_split = classify_fare_split(total, airline_code="SG")
+    assert sg_split.basis == FareSplitBasis.CALIBRATED
+    assert sg_split.base_fare == 7400.0
+    assert sg_split.taxes_and_fees == 2600.0
+
+    # 2. Route calibration without carrier: long-haul (DEL-BLR, 1740km) 0.81 vs short-haul (BLR-HYD, 500km) 0.72
+    long_haul = classify_fare_split(total, origin="DEL", destination="BLR")
+    assert long_haul.basis == FareSplitBasis.CALIBRATED
+    assert long_haul.base_fare == 8100.0
+
+    short_haul = classify_fare_split(total, origin="BLR", destination="HYD")
+    assert short_haul.basis == FareSplitBasis.CALIBRATED
+    assert short_haul.base_fare == 7200.0
+
+    # 3. Joint carrier and route calibration: Air India (+0.03 offset) on DEL-BLR (0.81 baseline) -> 0.84
+    ai_long = classify_fare_split(total, airline_code="AI", origin="DEL", destination="BLR")
+    assert ai_long.basis == FareSplitBasis.CALIBRATED
+    assert ai_long.base_fare == 8400.0
+    assert ai_long.taxes_and_fees == 1600.0
+
+    # 4. Joint carrier and route calibration: SpiceJet (-0.04 offset) on BLR-HYD (0.72 baseline) -> 0.68
+    sg_short = classify_fare_split(total, airline_code="SG", origin="BLR", destination="HYD")
+    assert sg_short.basis == FareSplitBasis.CALIBRATED
+    assert sg_short.base_fare == 6800.0
+    assert sg_short.taxes_and_fees == 3200.0
+
+    # 5. Generic fallback when neither carrier nor route is recognized: 0.78, basis ESTIMATED
+    fallback = classify_fare_split(total, airline_code="UNKNOWN", origin="XXX", destination="YYY")
+    assert fallback.basis == FareSplitBasis.ESTIMATED
+    assert fallback.base_fare == round(total * DEFAULT_BASE_FARE_RATIO, 2)
+
+
+def test_total_recomposition_integrity_check() -> None:
+    """Verify check_fare_recomposition enforces total ≈ base + taxes + UDF + convenience."""
+    from backend.app.core.fare_components import check_fare_recomposition
+
+    # 1. Exact match when all components exist
+    assert check_fare_recomposition(
+        total_fare=5000.0,
+        base_fare=3500.0,
+        taxes_and_fees=1000.0,
+        udf_fee=300.0,
+        convenience_fee=200.0,
+    ) is True
+
+    # 2. Within relative tolerance (0.5% of 5000 is 25 INR): delta = 15 INR -> True
+    assert check_fare_recomposition(
+        total_fare=5000.0,
+        base_fare=3500.0,
+        taxes_and_fees=1000.0,
+        udf_fee=315.0,
+        convenience_fee=200.0,
+    ) is True
+
+    # 3. Beyond relative tolerance: delta = 50 INR (> 25 INR) -> False
+    assert check_fare_recomposition(
+        total_fare=5000.0,
+        base_fare=3500.0,
+        taxes_and_fees=1000.0,
+        udf_fee=350.0,
+        convenience_fee=200.0,
+    ) is False
+
+    # 4. Small fare governed by absolute tolerance (1.0 INR): delta = 0.75 INR -> True, 2.0 INR -> False
+    assert check_fare_recomposition(
+        total_fare=100.0,
+        base_fare=70.0,
+        taxes_and_fees=30.75,
+    ) is True
+    assert check_fare_recomposition(
+        total_fare=100.0,
+        base_fare=70.0,
+        taxes_and_fees=32.0,
+    ) is False
+
+    # 5. Incomplete components (None) do not false-alarm
+    assert check_fare_recomposition(
+        total_fare=5000.0,
+        base_fare=None,
+        taxes_and_fees=None,
+    ) is True
+
+
+def test_recomposition_mismatch_quarantined_at_ingestion(db_session: Session) -> None:
+    """Verify bulk_insert_raw_fares quarantines split recomposition mismatches."""
+    from backend.app.core.cleaning import EXCLUSION_RECOMPOSITION_MISMATCH
+
+    valid_quote = {
+        "origin": "DEL",
+        "destination": "BOM",
+        "flight_date": date(2026, 10, 5),
+        "booking_window": "T+7",
+        "airline_code": "6E",
+        "flight_number": "6E-7001",
+        "departure_time": "2026-10-05T08:00:00",
+        "total_fare": 5000.0,
+        "base_fare": 3500.0,
+        "taxes_and_fees": 1000.0,
+        "udf_fee": 300.0,
+        "convenience_fee": 200.0,
+        "fare_split_basis": "measured",
+        "source_platform": "makemytrip",
+    }
+
+    # Corrupted quote: components sum to 3700 != 5000 (mismatch by 1300 INR)
+    corrupted_quote = {
+        "origin": "DEL",
+        "destination": "BOM",
+        "flight_date": date(2026, 10, 5),
+        "booking_window": "T+7",
+        "airline_code": "6E",
+        "flight_number": "6E-7002",
+        "departure_time": "2026-10-05T09:00:00",
+        "total_fare": 5000.0,
+        "base_fare": 2000.0,
+        "taxes_and_fees": 1000.0,
+        "udf_fee": 500.0,
+        "convenience_fee": 200.0,
+        "fare_split_basis": "measured",
+        "source_platform": "makemytrip",
+    }
+
+    result = bulk_insert_raw_fares(db_session, [valid_quote, corrupted_quote], batch_id="recomp_batch")
+    assert result["inserted"] == 2
+
+    rows = {row.flight_number: row for row in db_session.scalars(select(RawFare)).all()}
+    assert rows["6E-7001"].index_exclusion_reason is None
+    assert rows["6E-7002"].index_exclusion_reason == EXCLUSION_RECOMPOSITION_MISMATCH
+    assert rows["6E-7002"].index_exclusion_reason == "split_recomposition_mismatch"
+
+
+def test_sparse_window_policy_preserves_quotes_unless_recomposition_fails(
+    db_session: Session,
+) -> None:
+    """Verify sparse windows (<4 peers) keep payable quotes, but quarantine recomposition errors."""
+    from backend.app.core.cleaning import EXCLUSION_RECOMPOSITION_MISMATCH
+
+    # Only 2 peers on this corridor (MAA-DEL) in this window (sparse: < 4 Tukey peers)
+    sparse_quotes = [
+        {
+            "origin": "MAA",
+            "destination": "DEL",
+            "flight_date": date(2026, 10, 10),
+            "booking_window": "T+15",
+            "airline_code": "AI",
+            "flight_number": "AI-9001",
+            "departure_time": "2026-10-10T06:00:00",
+            "total_fare": 4500.0,
+            "source_platform": "air_india",
+        },
+        # High fare: would be an outlier if peer fence existed, but with <4 peers it must be kept
+        {
+            "origin": "MAA",
+            "destination": "DEL",
+            "flight_date": date(2026, 10, 10),
+            "booking_window": "T+15",
+            "airline_code": "AI",
+            "flight_number": "AI-9002",
+            "departure_time": "2026-10-10T12:00:00",
+            "total_fare": 18000.0,
+            "source_platform": "air_india",
+        },
+        # Third quote in same sparse window with recomposition mismatch
+        {
+            "origin": "MAA",
+            "destination": "DEL",
+            "flight_date": date(2026, 10, 10),
+            "booking_window": "T+15",
+            "airline_code": "AI",
+            "flight_number": "AI-9003",
+            "departure_time": "2026-10-10T18:00:00",
+            "total_fare": 6000.0,
+            "base_fare": 2000.0,
+            "taxes_and_fees": 1000.0,
+            "udf_fee": 300.0,
+            "convenience_fee": 100.0,
+            "fare_split_basis": "measured",
+            "source_platform": "air_india",
+        },
+    ]
+
+    bulk_insert_raw_fares(db_session, sparse_quotes, batch_id="sparse_batch")
+    rows = {row.flight_number: row for row in db_session.scalars(select(RawFare)).all()}
+
+    # Sparse policy: AI-9001 and AI-9002 are not outliers because peer count < 4
+    assert rows["AI-9001"].index_exclusion_reason is None
+    assert rows["AI-9002"].index_exclusion_reason is None
+
+    # Structural check still applies: AI-9003 has recomposition error (3400 != 6000)
+    assert rows["AI-9003"].index_exclusion_reason == EXCLUSION_RECOMPOSITION_MISMATCH

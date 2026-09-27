@@ -109,12 +109,18 @@ A prior defect, now fixed: `amadeus.py` labelled generated mock records
 `is_synthetic=False`, so a live run would have persisted invented fares as real
 and earned a false `LIVE` badge. 450 rows previously mislabelled were re-flagged.
 
-## Two things that are estimates, not measurements
+## Fare component splits, calibrations, and recomposition integrity
 
-**Base fare versus taxes.** The columns exist and are separate, but when a source
-does not supply the split it is synthesised by a single documented constant,
-`ESTIMATED_BASE_FARE_RATIO = 0.78`. Do not present base-versus-tax figures as
-measured. UDF and convenience charges stay `NULL` unless a source reports them.
+**Base fare versus taxes and calibrated ratios.** Rather than using a fixed 0.78 constant everywhere, the system utilizes route- and carrier-aware calibrated ratios grounded in Indian domestic airline economics:
+- **Carrier differentiation:** Full-Service Carriers (Air India `AI`) bundle 25kg checked baggage, complimentary meals, and seat selection into the base fare, yielding higher base proportions (~0.81). Low-Cost Carriers (IndiGo `6E`, Akasa Air `QP`, Air India Express `IX`, SpiceJet `SG`) unbundle ancillaries and levy separate fees, yielding base ratios between 0.74 and 0.78.
+- **Route distance and airport fee scaling:** Fixed passenger airport charges (User Development Fee / UDF, Passenger Service Fee / PSF, and Aviation Security Fee / ASF) represent a larger percentage of short-haul low fares (e.g. BLR-HYD ~500km, base ratio 0.72) and a smaller percentage of long-haul high fares (e.g. DEL-BLR, DEL-MAA ~1750km, base ratio 0.81).
+- **Explicit `fare_split_basis` labels:**
+  - `measured`: Both base and taxes supplied directly by the source.
+  - `residual`: One side supplied directly; the other derived as residual of total.
+  - `calibrated`: Route- and carrier-aware calibrated ratio applied when components are omitted.
+  - `estimated`: Uncalibrated fallback (`DEFAULT_BASE_FARE_RATIO = 0.78`) when carrier and route are unknown.
+- **Total recomposition integrity check:** When components exist, the system enforces `abs(total - (base + taxes + UDF + convenience)) <= max(1.0, 0.005 * total)`. Any violating observation is quarantined with `index_exclusion_reason = "split_recomposition_mismatch"`.
+- **Policy for sparse windows (< 4 Tukey peers):** When fewer than 4 payable peer quotes exist within the 30-day lookback window on a corridor-window slice, quartiles cannot be statistically identified. In sparse windows, no outlier fence is applied (all payable quotes remain index-eligible with `index_exclusion_reason = None`), avoiding false censorship on thin routes while structural checks (cancelled/sold-out status and recomposition mismatch) remain active.
 
 **Carrier market shares and advance-purchase weights.** The carrier market shares
 and the advance-purchase weights are documented calibrations. City-pair route
