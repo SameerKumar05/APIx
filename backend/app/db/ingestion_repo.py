@@ -81,6 +81,8 @@ def _peer_fares(
     as_of: datetime,
 ) -> list[float]:
     """Payable fares for this corridor and window inside the outlier lookback."""
+    as_of_utc = _as_utc(as_of)
+    cutoff = as_of_utc - timedelta(days=OUTLIER_LOOKBACK_DAYS)
     stmt = select(
         RawFare.total_fare,
         RawFare.flight_status,
@@ -90,16 +92,14 @@ def _peer_fares(
         RawFare.origin == origin,
         RawFare.destination == destination,
         RawFare.booking_window == booking_window,
+        RawFare.scraped_at >= cutoff,
+        RawFare.scraped_at <= as_of_utc,
     )
-    as_of_utc = _as_utc(as_of)
-    cutoff = as_of_utc - timedelta(days=OUTLIER_LOOKBACK_DAYS)
     peers: list[float] = []
     for total_fare, status, reason, scraped_at in db.execute(stmt):
         if scraped_at is None or not is_index_eligible(status, reason):
             continue
-        scraped = _as_utc(scraped_at)
-        if cutoff <= scraped <= as_of_utc:
-            peers.append(float(total_fare))
+        peers.append(float(total_fare))
     return peers
 
 

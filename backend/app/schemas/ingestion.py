@@ -31,6 +31,16 @@ class RawFareRecord(BaseModel):
         gt=0,
         description="Total one-way base fare in INR (inclusive of mandatory fees)",
     )
+    base_fare: float | None = Field(
+        None,
+        ge=0,
+        description="Base ticket fare before taxes, fuel surcharges, and fees in INR",
+    )
+    taxes_and_fees: float | None = Field(
+        None,
+        ge=0,
+        description="Fuel surcharge, passenger service fee, and GST in INR",
+    )
     cabin_class: str = Field(
         "economy", description="Cabin class (economy, premium_economy, business)"
     )

@@ -232,9 +232,13 @@ def load_policy(
                 response = client.get(url, headers={"User-Agent": user_agent})
         status = int(getattr(response, "status_code", 0))
         if status >= 400:
+            if not getattr(config, "robots_strict_fail_closed", True) and status == 404:
+                return parse_robots_txt(url, "", user_agent)
             return RobotsPolicy.deny_all(url, f"robots.txt returned HTTP {status}")
         return parse_robots_txt(url, getattr(response, "text", "") or "", user_agent)
-    except Exception as exc:  # noqa: BLE001 - any failure must fail closed
+    except Exception as exc:  # noqa: BLE001
+        if not getattr(config, "robots_strict_fail_closed", True):
+            return parse_robots_txt(url, "", user_agent)
         return RobotsPolicy.deny_all(url, f"{type(exc).__name__}: {exc}")
 
 

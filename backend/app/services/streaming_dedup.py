@@ -134,6 +134,9 @@ class FlightBufferState:
         min_p = float("inf")
 
         for _p_name, q in self.quotes_by_portal.items():
+            status = getattr(q, "flight_status", None)
+            if status in ("cancelled", "sold_out"):
+                continue
             if q.fare < min_p:
                 min_p = q.fare
                 best_q = q
@@ -359,6 +362,17 @@ class StreamingDedupEngine:
 
         canonical_key, hash_id = self.generate_flight_key(item)
 
+        base_fare_val = _extract_field(item, "base_fare")
+        base_fare = float(base_fare_val) if base_fare_val is not None else None
+        taxes_and_fees_val = _extract_field(item, "taxes_and_fees")
+        taxes_and_fees = float(taxes_and_fees_val) if taxes_and_fees_val is not None else None
+        udf_fee_val = _extract_field(item, "udf_fee")
+        udf_fee = float(udf_fee_val) if udf_fee_val is not None else None
+        conv_fee_val = _extract_field(item, "convenience_fee")
+        convenience_fee = float(conv_fee_val) if conv_fee_val is not None else None
+        flight_status = _extract_field(item, "flight_status")
+        fare_split_basis = _extract_field(item, "fare_split_basis")
+
         quote = FlightQuote(
             origin=origin,
             destination=destination,
@@ -371,6 +385,12 @@ class StreamingDedupEngine:
             booking_window=booking_window,
             currency=currency,
             is_nonstop=is_nonstop,
+            base_fare=base_fare,
+            taxes_and_fees=taxes_and_fees,
+            udf_fee=udf_fee,
+            convenience_fee=convenience_fee,
+            flight_status=flight_status,
+            fare_split_basis=fare_split_basis,
             metadata=metadata,
         )
         return quote, canonical_key, hash_id, cabin_class

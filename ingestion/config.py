@@ -274,6 +274,13 @@ class IngestionConfig:
     robots_fetch_timeout_seconds: float = field(
         default=10.0, metadata={"help": "Timeout for the robots.txt fetch."}
     )
+    robots_strict_fail_closed: bool = field(
+        default_factory=lambda: os.getenv("ROBOTS_STRICT_FAIL_CLOSED", "true").lower()
+        == "true",
+        metadata={
+            "help": "When false, treats robots fetch network timeouts as permissive with warning for staging/eval."
+        },
+    )
     playwright_browser_executable: str | None = field(
         default=None,
         metadata={

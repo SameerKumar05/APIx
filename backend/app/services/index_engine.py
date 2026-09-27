@@ -76,6 +76,12 @@ class FlightQuote:
     booking_window: str | None = None
     currency: str = "INR"
     is_nonstop: bool = True
+    base_fare: float | None = None
+    taxes_and_fees: float | None = None
+    udf_fee: float | None = None
+    convenience_fee: float | None = None
+    flight_status: str | None = None
+    fare_split_basis: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

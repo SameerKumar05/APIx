@@ -59,6 +59,42 @@ class SearchPage(Protocol):
         """Playwright proxy dict, or None."""
 
 
+STEALTH_INIT_SCRIPT = """
+(() => {
+    Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined,
+        configurable: true
+    });
+    window.chrome = {
+        app: { isInstalled: false },
+        runtime: { OnInstalledReason: { CHROME_UPDATE: 'chrome_update' } },
+        loadTimes: function() {},
+        csi: function() {}
+    };
+    Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-IN', 'en-GB', 'en-US', 'en'],
+        configurable: true
+    });
+    Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+        configurable: true
+    });
+    const getParameter = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function(parameter) {
+        if (parameter === 37445) return 'Intel Inc.';
+        if (parameter === 37446) return 'Intel Iris OpenGL Engine';
+        return getParameter.apply(this, arguments);
+    };
+    const originalQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications' ?
+            Promise.resolve({ state: Notification.permission }) :
+            originalQuery(parameters)
+    );
+})();
+"""
+
+
 def read_search_payloads(
     page_owner: SearchPage,
     search_url: str,
@@ -94,6 +130,8 @@ def read_search_payloads(
             context_opts: dict[str, Any] = {
                 "locale": "en-IN",
                 "timezone_id": "Asia/Kolkata",
+                "viewport": {"width": 1366, "height": 768},
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
                 "ignore_https_errors": True,
             }
             resolved = page_owner.playwright_proxy_config(page_owner.proxy)
@@ -101,11 +139,16 @@ def read_search_payloads(
                 context_opts["proxy"] = resolved
             context = browser.new_context(**context_opts)
             page = context.new_page()
+            page.add_init_script(STEALTH_INIT_SCRIPT)
             page.on("response", take_response)
             try:
                 document = page.goto(
                     search_url, wait_until="domcontentloaded", timeout=20000
                 )
+                try:
+                    page.wait_for_timeout(1500)
+                except Exception:
+                    pass
             except _BROWSER_ERRORS as exc:
                 return [], f"browser error for {search_url}: {exc}"
             if document is not None and document.status == 403:

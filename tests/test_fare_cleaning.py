@@ -362,3 +362,35 @@ def _mmt_item(flight_number: str, **extra: object) -> dict[str, object]:
     }
     item.update(extra)
     return item
+
+
+def test_raw_fare_record_measured_splits_preserved(db_session: Session) -> None:
+    from backend.app.schemas.ingestion import RawFareRecord
+
+    record = RawFareRecord(
+        airline_code="6E",
+        flight_number="6E-101",
+        origin="DEL",
+        destination="BOM",
+        departure_datetime=datetime(2026, 9, 28, 6, 0, tzinfo=UTC),
+        booking_datetime=datetime(2026, 9, 27, 6, 0, tzinfo=UTC),
+        fare_inr=5000.0,
+        base_fare=3800.0,
+        taxes_and_fees=1200.0,
+        booking_window="T+1",
+    )
+    data = record.model_dump()
+    assert data["base_fare"] == 3800.0
+    assert data["taxes_and_fees"] == 1200.0
+
+    inserted = bulk_insert_raw_fares(db_session, [data])
+    assert inserted["inserted"] == 1
+
+    row = db_session.scalars(
+        select(RawFare).where(RawFare.flight_number == "6E-101")
+    ).one()
+    assert row.total_fare == 5000.0
+    assert row.base_fare == 3800.0
+    assert row.taxes_and_fees == 1200.0
+    assert row.fare_split_basis == "measured"
+
