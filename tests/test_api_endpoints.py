@@ -407,6 +407,33 @@ def test_route_history_filtering_composite(api_client: TestClient) -> None:
     assert len(response_none.json()["points"]) == 0
 
 
+def test_route_history_frequency_aggregation(api_client: TestClient) -> None:
+    res_daily = api_client.get(
+        "/api/v1/indices/routes/DEL-BOM/history?days=30&frequency=daily"
+    )
+    assert res_daily.status_code == 200
+    data_daily = res_daily.json()
+    assert data_daily["frequency"] == "daily"
+
+    res_weekly = api_client.get(
+        "/api/v1/indices/routes/DEL-BOM/history?days=30&frequency=weekly"
+    )
+    assert res_weekly.status_code == 200
+    data_weekly = res_weekly.json()
+    assert data_weekly["frequency"] == "weekly"
+
+    res_monthly = api_client.get(
+        "/api/v1/indices/routes/DEL-BOM/history?days=30&frequency=monthly"
+    )
+    assert res_monthly.status_code == 200
+    data_monthly = res_monthly.json()
+    assert data_monthly["frequency"] == "monthly"
+
+    res_invalid = api_client.get(
+        "/api/v1/indices/routes/DEL-BOM/history?days=30&frequency=hourly"
+    )
+    assert res_invalid.status_code == 422
+
 def test_lead_time_curve(api_client: TestClient) -> None:
     response = api_client.get("/api/v1/analytics/lead-time-curve?route_code=DEL-BOM")
     assert response.status_code == 200

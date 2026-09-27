@@ -140,3 +140,7 @@ class RouteHistoryResponse(BaseModel):
         False,
         description="False when this route has no stored daily index. An empty series is missing data, not a flat trend.",
     )
+    frequency: str = Field(
+        "daily",
+        description="Aggregation frequency of the returned series (daily, weekly, monthly)",
+    )

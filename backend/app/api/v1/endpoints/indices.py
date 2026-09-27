@@ -185,19 +185,35 @@ async def get_national_index_history(
         pattern="^(daily|weekly|monthly)$",
         description="Aggregation frequency for the returned series",
     ),
+    booking_window: str = Query(
+        "COMPOSITE", description="Booking window filter (default: COMPOSITE)"
+    ),
     db: Session = Depends(get_db),
 ) -> NationalIndexHistoryResponse:
     cutoff = date.today() - timedelta(days=days)
+    clean_window = (booking_window or "COMPOSITE").strip().upper()
+    base_query = db.query(NationalDailyIndex).filter(NationalDailyIndex.index_date >= cutoff)
+    if clean_window != "ALL":
+        base_query = base_query.filter(func.upper(NationalDailyIndex.booking_window) == clean_window)
     records = (
-        db.query(NationalDailyIndex)
-        .filter(NationalDailyIndex.index_date >= cutoff)
+        base_query
         .filter(
             func.lower(func.coalesce(NationalDailyIndex.index_type, "")) == "fisher"
         )
         .order_by(NationalDailyIndex.index_date.asc())
         .all()
     )
-
+    if not records:
+        records = (
+            base_query
+            .filter(
+                func.lower(func.coalesce(NationalDailyIndex.index_type, "")) == "laspeyres"
+            )
+            .order_by(NationalDailyIndex.index_date.asc())
+            .all()
+        )
+    if not records:
+        records = base_query.order_by(NationalDailyIndex.index_date.asc()).all()
     buckets: dict[str, list[NationalDailyIndex]] = {}
     for r in records:
         buckets.setdefault(_bucket_key(r.index_date, frequency), []).append(r)
@@ -342,6 +358,11 @@ async def get_route_history(
     booking_window: str = Query(
         "COMPOSITE", description="Booking window filter (default: COMPOSITE)"
     ),
+    frequency: str = Query(
+        "daily",
+        pattern="^(daily|weekly|monthly)$",
+        description="Aggregation frequency for the returned series",
+    ),
     db: Session = Depends(get_db),
 ) -> RouteHistoryResponse:
     clean_code = route_code.strip().upper()
@@ -373,59 +394,105 @@ async def get_route_history(
             )
         if route_indices:
             route_indices.reverse()
-            by_date = {row.index_date: row for row in route_indices}
-            points: list[NationalIndexPoint] = []
-            for idx, r in enumerate(route_indices):
-                ts = datetime.combine(r.index_date, datetime.min.time(), tzinfo=UTC)
-                if r.calculation_timestamp:
-                    ts = r.calculation_timestamp
-                    if ts.tzinfo is None:
-                        ts = ts.replace(tzinfo=UTC)
-                prev = route_indices[idx - 1] if idx > 0 else None
-                change_24h = (
-                    round(
-                        ((r.index_value - prev.index_value) / prev.index_value) * 100.0,
-                        2,
+            if frequency in ("weekly", "monthly"):
+                buckets: dict[str, list[RouteDailyIndex]] = {}
+                for r in route_indices:
+                    buckets.setdefault(_bucket_key(r.index_date, frequency), []).append(r)
+
+                points: list[NationalIndexPoint] = []
+                previous_value: float | None = None
+                for key in sorted(buckets):
+                    group = buckets[key]
+                    index_value = sum(g.index_value for g in group) / len(group)
+                    sample_size = sum(g.sample_size or 0 for g in group)
+                    bucket_date = (
+                        date.fromisoformat(f"{key}-01")
+                        if frequency == "monthly"
+                        else group[-1].index_date
                     )
-                    if prev is not None and prev.index_value
-                    else None
-                )
-                week_prior = by_date.get(r.index_date - timedelta(days=7))
-                change_7d = (
-                    round(
-                        (
-                            (r.index_value - week_prior.index_value)
-                            / week_prior.index_value
+                    change = (
+                        0.0
+                        if previous_value in (None, 0)
+                        else round((index_value - previous_value) / previous_value * 100.0, 2)
+                    )
+                    points.append(
+                        NationalIndexPoint(
+                            timestamp=datetime.combine(
+                                bucket_date, datetime.min.time(), tzinfo=UTC
+                            ),
+                            index_value=round(index_value, 2),
+                            change_24h=change if frequency == "daily" else 0.0,
+                            change_7d=change,
+                            sample_size=sample_size,
+                            base_period=group[-1].base_period or "2026-01-01",
                         )
-                        * 100.0,
-                        2,
                     )
-                    if week_prior is not None and week_prior.index_value
-                    else None
+                    previous_value = index_value
+
+                return RouteHistoryResponse(
+                    route_code=clean_code,
+                    origin=origin,
+                    destination=dest,
+                    points=points,
+                    data_available=bool(points),
+                    frequency=frequency,
                 )
-                points.append(
-                    NationalIndexPoint(
-                        timestamp=ts,
-                        index_value=round(r.index_value, 2),
-                        change_24h=change_24h,
-                        change_7d=change_7d,
-                        sample_size=r.sample_size,
-                        base_period=r.base_period or "2026-01-01",
+            else:
+                by_date = {row.index_date: row for row in route_indices}
+                points = []
+                for idx, r in enumerate(route_indices):
+                    ts = datetime.combine(r.index_date, datetime.min.time(), tzinfo=UTC)
+                    if r.calculation_timestamp:
+                        ts = r.calculation_timestamp
+                        if ts.tzinfo is None:
+                            ts = ts.replace(tzinfo=UTC)
+                    prev = route_indices[idx - 1] if idx > 0 else None
+                    change_24h = (
+                        round(
+                            ((r.index_value - prev.index_value) / prev.index_value) * 100.0,
+                            2,
+                        )
+                        if prev is not None and prev.index_value
+                        else None
                     )
+                    week_prior = by_date.get(r.index_date - timedelta(days=7))
+                    change_7d = (
+                        round(
+                            (
+                                (r.index_value - week_prior.index_value)
+                                / week_prior.index_value
+                            )
+                            * 100.0,
+                            2,
+                        )
+                        if week_prior is not None and week_prior.index_value
+                        else None
+                    )
+                    points.append(
+                        NationalIndexPoint(
+                            timestamp=ts,
+                            index_value=round(r.index_value, 2),
+                            change_24h=change_24h,
+                            change_7d=change_7d,
+                            sample_size=r.sample_size,
+                            base_period=r.base_period or "2026-01-01",
+                        )
+                    )
+                return RouteHistoryResponse(
+                    route_code=clean_code,
+                    origin=origin,
+                    destination=dest,
+                    points=points,
+                    data_available=True,
+                    frequency="daily",
                 )
-            return RouteHistoryResponse(
-                route_code=clean_code,
-                origin=origin,
-                destination=dest,
-                points=points,
-                data_available=True,
-            )
         return RouteHistoryResponse(
             route_code=clean_code,
             origin=origin,
             destination=dest,
             points=[],
             data_available=False,
+            frequency=frequency,
         )
     except SQLAlchemyError as exc:
         db.rollback()

@@ -7,7 +7,7 @@ Implements:
 3. Exact weighted median using airline domestic market share weights:
    IndiGo (6E): 0.62, Air India (AI): 0.20, Air India Express (IX): 0.08,
    Akasa Air (QP): 0.05, SpiceJet (SG): 0.04.
-4. Route composite fare: P_r,t = 0.20*T1 + 0.35*T7 + 0.30*T15 + 0.15*T30.
+4. Route composite fare: P_r,t = 0.20*T1 + 0.32*T7 + 0.26*T15 + 0.14*T30 + 0.08*T45.
 5. National Modified Laspeyres Index:
    APIx_t = Sum(w_r * (P_r,t / P_r,0)) * 100, Base t_0 = 100.0.
 """
@@ -588,8 +588,7 @@ def calculate_route_composite_fare(
     """Computes the route composite fare across booking horizon windows.
 
     Formula:
-        P_r,t = 0.20*T1 + 0.35*T7 + 0.30*T15 + 0.15*T30
-
+        P_r,t = 0.20*T1 + 0.32*T7 + 0.26*T15 + 0.14*T30 + 0.08*T45
     Args:
         window_fares: Mapping of booking window names to fares (e.g. {"T1": 6000,
                       "T7": 5200, "T15": 4800, "T30": 4200}).
@@ -830,7 +829,7 @@ class IndexEngine:
         self,
         window_fares: Mapping[str, float],
     ) -> float:
-        """Computes composite fare for a route across T1, T7, T15, T30."""
+        """Computes composite fare for a route across T1, T7, T15, T30, T45."""
         return calculate_route_composite_fare(
             window_fares, weights=self.booking_window_weights
         )
