@@ -36,6 +36,10 @@ with SessionLocal() as db:
 # platform string, so "indigo" and "6e" both work; unknown names are treated as
 # neither direct nor OTA and the pair is discarded.
 with SessionLocal() as arb_db:
+    arb_db.query(RawFare).filter(RawFare.hash_id.like("cycle3-%")).delete(
+        synchronize_session=False
+    )
+    arb_db.commit()
     for platform, total in (
         ("indigo", 4200.0),
         ("makemytrip", 6100.0),
