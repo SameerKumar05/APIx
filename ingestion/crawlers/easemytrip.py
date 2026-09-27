@@ -318,6 +318,19 @@ class EaseMyTripScraper(BaseScraper):
                 flight_status = reported_flight_status(item)
                 stops = int(item.get("Stops") or item.get("stops") or 0)
 
+                base_fare_val = None
+                taxes_val = None
+                if item.get("BaseFare") is not None:
+                    try:
+                        base_fare_val = self.normalize_fare(item["BaseFare"])
+                    except ValueError:
+                        pass
+                if item.get("Tax") is not None or item.get("Taxes") is not None:
+                    try:
+                        taxes_val = self.normalize_fare(item.get("Tax") or item.get("Taxes"))
+                    except ValueError:
+                        pass
+
                 record = RawFareRecord(
                     airline_code=airline_code,
                     flight_number=full_flight_no,
@@ -333,6 +346,8 @@ class EaseMyTripScraper(BaseScraper):
                     booking_window=window_code,
                     flight_date=dep_dt_str.split("T")[0],
                     duration_minutes=duration,
+                    base_fare=base_fare_val,
+                    taxes_and_fees=taxes_val,
                     flight_status=flight_status,
                     is_synthetic=False,
                     source_platform="easemytrip",

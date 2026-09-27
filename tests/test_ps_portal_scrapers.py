@@ -229,3 +229,41 @@ def test_synthetic_fallback_keeps_label_and_generator_fare() -> None:
         assert record.is_synthetic is True
         assert record.source == "indigo"
         assert record.airline_code == "6E"
+        assert record.base_fare is not None
+        assert record.taxes_and_fees is not None
+        assert record.fare_split_basis in ("measured", "residual", "estimated")
+
+
+def test_valid_iata_codes_includes_maa() -> None:
+    from ingestion.config import VALID_IATA_CODES
+
+    assert "MAA" in VALID_IATA_CODES
+
+
+@pytest.mark.parametrize("cls", SCRAPERS, ids=lambda cls: cls.SOURCE_NAME)
+def test_parse_preserves_base_fare_and_taxes_when_supplied(cls: type[PortalScraper]) -> None:
+    scraper = _scraper(cls)
+    priced = scraper.parse_flight_json(
+        {
+            "flights": [
+                {
+                    "airlineCode": scraper.AIRLINE_CODE or "6E",
+                    "flightNumber": "532",
+                    "departureTime": "2026-09-25T06:00:00",
+                    "arrivalTime": "2026-09-25T08:15:00",
+                    "totalFare": 4510.5,
+                    "baseFare": 3500.0,
+                    "tax": 1010.5,
+                }
+            ]
+        },
+        "DEL",
+        "BOM",
+        "T+7",
+    )
+    assert len(priced) == 1
+    assert priced[0].fare_inr == 4510.5
+    assert priced[0].base_fare == 3500.0
+    assert priced[0].taxes_and_fees == 1010.5
+    assert priced[0].fare_split_basis == "measured"
+

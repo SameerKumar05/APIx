@@ -146,6 +146,10 @@ def read_search_payloads(
                     search_url, wait_until="domcontentloaded", timeout=20000
                 )
                 try:
+                    page.wait_for_load_state("networkidle", timeout=5000)
+                except Exception:
+                    pass
+                try:
                     page.wait_for_timeout(1500)
                 except Exception:
                     pass

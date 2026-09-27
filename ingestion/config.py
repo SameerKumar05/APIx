@@ -127,7 +127,7 @@ DEFAULT_ROUTES: list[Route] = [
 ]
 
 # Set of valid IATA airport codes used in our routes
-VALID_IATA_CODES = frozenset({"DEL", "BOM", "BLR", "HYD", "CCU"})
+VALID_IATA_CODES = frozenset({"DEL", "BOM", "BLR", "HYD", "CCU", "MAA"})
 
 # 5 Standard purchase windows as required by SIH PS 26056
 BOOKING_WINDOWS: list[BookingWindow] = [
