@@ -40,7 +40,7 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
 
   // Lead-time points ordered from advance booking (T+60, T+30) down to departure (T+1)
   const chartData = useMemo(() => {
-    return [...leadTimeCurve.curve_points]
+    return [...(leadTimeCurve?.curve_points || [])]
       .sort((a, b) => b.days_before_departure - a.days_before_departure)
       .map((p) => ({
         window: p.booking_window_label || `T+${p.days_before_departure}`,
@@ -527,11 +527,6 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
         {/* Matrix View 2: Day of Week x Departure Hour Slot Matrix */}
         {matrixView === 'day_hour' && (
           <div className="space-y-3">
-            {heatmap.data_available === false && (
-              <p className="text-xs text-neutral-500 font-mono">
-                No departure-timed fare observations are stored for this matrix.
-              </p>
-            )}
             {heatmap.data_available === false && (
               <p className="text-xs text-neutral-500 font-mono">
                 No departure-timed fare observations are stored for this matrix.

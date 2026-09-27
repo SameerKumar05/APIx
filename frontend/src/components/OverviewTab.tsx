@@ -62,6 +62,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   const [showT7, setShowT7] = useState<boolean>(false);
   const [showT15, setShowT15] = useState<boolean>(false);
   const [showT30, setShowT30] = useState<boolean>(true);
+  const [showT45, setShowT45] = useState<boolean>(false);
 
   // Quick preset filters
   const setPreset = (preset: 'benchmark' | 'all' | 'extreme' | 'advance') => {
@@ -72,6 +73,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         setShowT7(false);
         setShowT15(false);
         setShowT30(false);
+        setShowT45(false);
         break;
       case 'all':
         setShowMospi(true);
@@ -79,6 +81,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         setShowT7(true);
         setShowT15(true);
         setShowT30(true);
+        setShowT45(true);
         break;
       case 'extreme':
         setShowMospi(true);
@@ -86,6 +89,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         setShowT7(false);
         setShowT15(false);
         setShowT30(true);
+        setShowT45(false);
         break;
       case 'advance':
         setShowMospi(false);
@@ -93,6 +97,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         setShowT7(false);
         setShowT15(true);
         setShowT30(true);
+        setShowT45(true);
         break;
     }
   };
@@ -109,6 +114,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         t7: p.t7_index,
         t15: p.t15_index,
         t30: p.t30_index,
+        t45: p.t45_index,
         samples: p.sample_size,
       };
     });
@@ -132,6 +138,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   const hasHistoryT7 = history.some((p) => typeof p.t7_index === 'number');
   const hasHistoryT15 = history.some((p) => typeof p.t15_index === 'number');
   const hasHistoryT30 = history.some((p) => typeof p.t30_index === 'number');
+  const hasHistoryT45 = history.some((p) => typeof p.t45_index === 'number');
 
   return (
     <div className="space-y-6">
@@ -404,6 +411,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             <span className={`w-2 h-2 rounded-full ${showT30 ? 'bg-neutral-500' : 'bg-neutral-600'}`}></span>
             <span>T+30 (Baseline Advance){hasHistoryT30 ? '' : ' [No Data]'}</span>
           </button>
+
+          {/* T+45 Toggle */}
+          <button
+            onClick={() => setShowT45(!showT45)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded font-medium border font-mono transition-colors ${
+              showT45
+                ? 'bg-neutral-800 border-neutral-700 text-white'
+                : 'bg-neutral-900/50 border-neutral-800 text-neutral-500 hover:text-neutral-300'
+            }`}
+            title="T+45: Extended Horizon Advance Window"
+          >
+            <span className={`w-2 h-2 rounded-full ${showT45 ? 'bg-neutral-500' : 'bg-neutral-600'}`}></span>
+            <span>T+45 (Extended Horizon){hasHistoryT45 ? '' : ' [No Data]'}</span>
+          </button>
         </div>
 
         {/* Recharts LineChart */}
@@ -560,6 +581,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   strokeDasharray="2 2"
                   dot={false}
                   activeDot={{ r: 4, fill: '#525252' }}
+                />
+              )}
+
+              {/* Sub-Index: T+45 Extended Horizon */}
+              {showT45 && (
+                <Line
+                  type="monotone"
+                  dataKey="t45"
+                  name="Sub-Index: T+45 (Extended)"
+                  stroke="#38bdf8"
+                  strokeWidth={1.5}
+                  strokeDasharray="3 3"
+                  dot={false}
+                  activeDot={{ r: 4, fill: '#38bdf8' }}
                 />
               )}
             </LineChart>

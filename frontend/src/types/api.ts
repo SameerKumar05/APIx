@@ -26,6 +26,7 @@ export interface NationalIndexPoint {
   t7_index?: number; // T+7 Booking window sub-index
   t15_index?: number; // T+15 Booking window sub-index
   t30_index?: number; // T+30 Booking window sub-index
+  t45_index?: number; // T+45 Booking window sub-index
 }
 
 export interface NationalIndexLatestResponse {
@@ -45,6 +46,7 @@ export interface NationalIndexLatestResponse {
   t7_index?: number;
   t15_index?: number;
   t30_index?: number;
+  t45_index?: number;
 }
 
 export interface NationalIndexHistoryResponse {
@@ -424,7 +426,7 @@ export interface CpiDivergenceResponse {
 }
 
 export interface PriceElasticityGradientPoint {
-  lead_window: 'T+30' | 'T+15' | 'T+7' | 'T+1' | string;
+  lead_window: 'T+45' | 'T+30' | 'T+15' | 'T+7' | 'T+1' | string;
   days_before_departure: number;
   surge_multiplier: number;
   avg_fare_inr: number;
