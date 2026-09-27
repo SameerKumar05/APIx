@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { LeadTimeCurveResponse, HeatmapMatrixResponse } from '../types/api';
+import { LeadTimeCurveResponse, HeatmapMatrixResponse, SectorHeatmapResponse } from '../types/api';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -26,6 +26,7 @@ import {
 interface ElasticityTabProps {
   leadTimeCurve: LeadTimeCurveResponse;
   heatmap: HeatmapMatrixResponse;
+  sectorHeatmap?: SectorHeatmapResponse;
 }
 
 type ChartViewMode = 'composed' | 'envelope' | 'multipliers';
@@ -33,7 +34,7 @@ type MatrixViewMode = 'routes_leadtime' | 'day_hour';
 
 
 
-export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, heatmap }) => {
+export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, heatmap, sectorHeatmap }) => {
   const [selectedRoute, setSelectedRoute] = useState<string>('DEL-BOM');
   const [chartView, setChartView] = useState<ChartViewMode>('composed');
   const [matrixView, setMatrixView] = useState<MatrixViewMode>('routes_leadtime');
@@ -55,6 +56,17 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
       }));
   }, [leadTimeCurve]);
 
+  const availableWindows = useMemo(() => {
+    if (sectorHeatmap?.windows && sectorHeatmap.windows.length > 0) {
+      return [...sectorHeatmap.windows].sort((a, b) => {
+        const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+        const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+        return numB - numA;
+      });
+    }
+    return ['T+45', 'T+30', 'T+15', 'T+7', 'T+1'];
+  }, [sectorHeatmap]);
+
   const [hourViewMode, setHourViewMode] = useState<'all_24h' | 'sample_6h'>('all_24h');
   const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const sampleHours = [6, 9, 12, 15, 18, 21];
@@ -73,7 +85,7 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
                 Advance Booking Window &amp; Lead-Time Price Elasticity
               </h2>
               <span className="text-[11px] px-2 py-0.5 rounded border border-neutral-800 bg-neutral-900 text-neutral-300 font-mono">
-                T+30 to T+1 Surge Model
+                T+45 to T+1 Surge Model
               </span>
             </div>
             <p className="text-xs text-neutral-400 mt-1">
@@ -148,7 +160,7 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
             <div className="flex items-center gap-2">
               <h3 className="text-base font-semibold text-white tracking-tight flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-neutral-400" />
-                Dynamic Pricing Surge Curve (T+30 Baseline down to T+1 Emergency)
+                Dynamic Pricing Surge Curve (T+45 Extended Horizon down to T+1 Emergency)
               </h3>
               <span className="text-[11px] px-2 py-0.5 rounded border border-neutral-800 bg-neutral-900 text-neutral-300 font-mono">
                 {selectedRoute}
@@ -496,29 +508,118 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
                 <thead>
                   <tr className="border-b border-neutral-800 text-neutral-400 bg-neutral-900/50">
                     <th className="py-2.5 px-3 font-sans font-medium">Corridor</th>
-                    <th className="py-2.5 px-3 text-right">T+30 (Base)</th>
-                    <th className="py-2.5 px-3 text-right">T+21</th>
-                    <th className="py-2.5 px-3 text-right">T+14</th>
-                    <th className="py-2.5 px-3 text-right">T+7</th>
-                    <th className="py-2.5 px-3 text-right">T+3</th>
-                    <th className="py-2.5 px-3 text-right font-sans font-medium text-white">T+1 (Urgent)</th>
+                    {availableWindows.map((win) => {
+                      const isBase = win === 'T+30';
+                      const isExtended = win === 'T+45';
+                      const isUrgent = win === 'T+1';
+                      let label = win;
+                      if (isExtended) label = `${win} (Extended)`;
+                      else if (isBase) label = `${win} (Base)`;
+                      else if (isUrgent) label = `${win} (Urgent)`;
+                      return (
+                        <th
+                          key={win}
+                          className={`py-2.5 px-3 text-right ${
+                            isUrgent ? 'font-sans font-medium text-white' : ''
+                          }`}
+                        >
+                          {label}
+                        </th>
+                      );
+                    })}
                     <th className="py-2.5 px-3 text-right">Surge Multiplier</th>
+                    <th className="py-2.5 px-3 text-right">Observations</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-900">
-                  <tr>
-                    <td colSpan={8} className="py-6 px-3 text-center">
-                      <div className="text-sm text-neutral-300 font-sans">
-                        No per-corridor lead-time matrix is available from the live API.
-                      </div>
-                      <div className="mt-1 text-xs text-neutral-500 font-sans">
-                        <code>/api/v1/analytics/lead-time-curve</code> returns a single aggregated curve
-                        {leadTimeCurve.route_code ? ` for ${leadTimeCurve.route_code}` : ''}, not one row per
-                        corridor. Publishing a per-corridor table would require inventing the figures, so the
-                        live curve above is shown instead.
-                      </div>
-                    </td>
-                  </tr>                </tbody>
+                  {sectorHeatmap && sectorHeatmap.sectors && sectorHeatmap.sectors.length > 0 ? (
+                    sectorHeatmap.sectors.map((row) => {
+                      const baseFare =
+                        row.base_fare_inr ||
+                        (row.windows['T+30'] ?? row.windows['T+45'] ?? null);
+                      const surgeMult =
+                        row.surge_multiplier != null
+                          ? row.surge_multiplier
+                          : baseFare && row.windows['T+1']
+                          ? row.windows['T+1']! / baseFare
+                          : null;
+                      return (
+                        <tr key={row.route_code} className="hover:bg-neutral-900/40 transition-colors">
+                          <td className="py-2.5 px-3 font-medium text-white flex items-center gap-1.5">
+                            <span>{row.route_code}</span>
+                            <span className="text-[10px] text-neutral-500 font-sans">
+                              ({row.origin} → {row.destination})
+                            </span>
+                          </td>
+                          {availableWindows.map((win) => {
+                            const fare = row.windows[win];
+                            if (fare == null) {
+                              return (
+                                <td key={win} className="py-2.5 px-3 text-right text-neutral-600">
+                                  —
+                                </td>
+                              );
+                            }
+                            const ratio = baseFare && baseFare > 0 ? fare / baseFare : 1.0;
+                            let colorClass = 'text-neutral-300';
+                            let bgBadgeClass = '';
+                            if (ratio >= 2.5) {
+                              colorClass = 'text-rose-300 font-semibold';
+                              bgBadgeClass = 'bg-rose-950/60 border border-rose-800/60 px-1.5 py-0.5 rounded';
+                            } else if (ratio >= 2.0) {
+                              colorClass = 'text-amber-300 font-medium';
+                              bgBadgeClass = 'bg-amber-950/40 border border-amber-800/40 px-1.5 py-0.5 rounded';
+                            } else if (ratio >= 1.5) {
+                              colorClass = 'text-amber-200';
+                            } else if (ratio >= 1.2) {
+                              colorClass = 'text-neutral-200';
+                            } else {
+                              colorClass = 'text-neutral-400';
+                            }
+                            return (
+                              <td key={win} className="py-2.5 px-3 text-right tabular-nums">
+                                <span className={`${colorClass} ${bgBadgeClass}`}>
+                                  ₹{Math.round(fare).toLocaleString('en-IN')}
+                                </span>
+                              </td>
+                            );
+                          })}
+                          <td className="py-2.5 px-3 text-right tabular-nums font-semibold">
+                            {surgeMult != null ? (
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[11px] font-mono ${
+                                  surgeMult >= 2.0
+                                    ? 'bg-rose-950/70 text-rose-300 border border-rose-800/80'
+                                    : surgeMult >= 1.5
+                                    ? 'bg-amber-950/60 text-amber-300 border border-amber-800/60'
+                                    : 'bg-neutral-900 text-neutral-300 border border-neutral-800'
+                                }`}
+                              >
+                                {surgeMult.toFixed(2)}x
+                              </span>
+                            ) : (
+                              <span className="text-neutral-500">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums text-neutral-400">
+                            {row.sample_size ? row.sample_size.toLocaleString() : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={availableWindows.length + 3} className="py-6 px-3 text-center">
+                        <div className="text-sm text-neutral-300 font-sans">
+                          No per-corridor lead-time matrix is available from the live API.
+                        </div>
+                        <div className="mt-1 text-xs text-neutral-500 font-sans">
+                          Waiting for route sector observations from <code>/api/v1/analytics/sector-heatmap</code>.
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
               </table>
             </div>
           </div>

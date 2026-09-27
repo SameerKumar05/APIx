@@ -136,6 +136,41 @@ export interface HeatmapMatrixResponse {
   data_available?: boolean;
 }
 
+export interface SectorHeatmapCell {
+  route_code: string;
+  origin: string;
+  destination: string;
+  booking_window: string;
+  days_before_departure?: number | null;
+  avg_fare_inr: number;
+  median_fare_inr?: number | null;
+  min_fare_inr?: number | null;
+  max_fare_inr?: number | null;
+  sample_size: number;
+  fare_index?: number | null;
+}
+
+export interface SectorHeatmapRow {
+  route_code: string;
+  origin: string;
+  destination: string;
+  windows: Record<string, number | null>;
+  surge_multiplier?: number | null;
+  base_fare_inr?: number | null;
+  urgent_fare_inr?: number | null;
+  composite_fare_inr?: number | null;
+  sample_size: number;
+}
+
+export interface SectorHeatmapResponse {
+  generated_at: string;
+  sectors: SectorHeatmapRow[];
+  matrix: SectorHeatmapCell[];
+  windows: string[];
+  total_routes: number;
+  data_available: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // 4. Anomaly Alerts & DGCA Compliance Monitoring
 // ---------------------------------------------------------------------------
@@ -373,6 +408,7 @@ export interface DashboardSummaryData {
   cpiDivergence: CpiDivergenceResponse;
   priceElasticity: PriceElasticityResponse;
   dgcaSurveillance: DgcaSurveillanceResponse;
+  sectorHeatmap: SectorHeatmapResponse;
 }
 
 // ---------------------------------------------------------------------------
