@@ -291,6 +291,7 @@ export const RoutesTab: React.FC<RoutesTabProps> = ({
                   color: '#e5e5e5',
                 }}
                 labelStyle={{ color: '#ffffff' }}
+                itemStyle={{ color: '#e5e5e5' }}
                 formatter={(val: unknown) => [
                   typeof val === 'number' ? val.toFixed(1) : String(val),
                   'Index Value',

@@ -240,7 +240,7 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
                     <div className="bg-neutral-950 border border-neutral-800 p-3 rounded-md shadow-xl text-xs font-mono tabular-nums text-neutral-200 min-w-[200px]">
                       <div className="text-neutral-400 font-medium border-b border-neutral-800 pb-1.5 mb-2 flex items-center justify-between">
                         <span>{label}</span>
-                        <span className="text-[10px] text-neutral-500">Lead-Time Curve</span>
+                        <span className="text-[10px] text-neutral-400">Lead-Time Curve</span>
                       </div>
                       <div className="space-y-1">
                         {payload.map((item) => {
@@ -263,116 +263,159 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
                   );
                 }}
               />
-              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px', fontFamily: 'monospace' }} />
+              {/* Custom legend: the default legend paints each label in its series'
+  colour (e.g. #525252 = 2.53:1 on this surface), so labels render in
+  readable #e5e5e5 while the series colour stays on the dot. */}
+              <Legend
+                wrapperStyle={{ fontSize: '11px', paddingTop: '10px', fontFamily: 'monospace' }}
+                content={({ payload }) => (
+                  <ul className="recharts-default-legend" style={{ padding: 0, margin: 0, textAlign: 'center' }}>
+                    {(payload ?? []).map((entry, i) => (
+                      <li
+                        key={`legend-item-${i}`}
+                        className={`recharts-legend-item legend-item-${i}`}
+                        style={{ display: 'inline-block', marginRight: 10 }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            display: 'inline-block',
+                            width: 8,
+                            height: 8,
+                            borderRadius: 9999,
+                            backgroundColor: entry.color ?? '#e5e5e5',
+                            marginRight: 4,
+                            verticalAlign: 'middle',
+                          }}
+                        />
+                        <span className="recharts-legend-item-text" style={{ color: '#e5e5e5' }}>
+                          {entry.value}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              />
 
               {/* Composed Mode: Area for Median, Bar for Multiplier, Lines for P90/P10 */}
+              {/* NOTE: keep each series as a direct child (no fragment wrapper):
+                  recharts v2 cannot see series through fragments under React 19,
+                  which renders an empty chart whose tooltip can never appear. */}
               {chartView === 'composed' && (
-                <>
-                  <Bar
-                    yAxisId="multiplier"
-                    dataKey="elasticity"
-                    name="Surge Multiplier (x)"
-                    fill="#404040"
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Area
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="medianFare"
-                    name="Median Fare (INR)"
-                    stroke="#ffffff"
-                    strokeWidth={2.5}
-                    fill="#ffffff"
-                    fillOpacity={0.04}
-                  />
-                  <Line
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="p90Fare"
-                    name="P90 (Surge Ceiling)"
-                    stroke="#e5e5e5"
-                    strokeWidth={1.5}
-                    strokeDasharray="4 4"
-                    dot={false}
-                  />
-                  <Line
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="p10Fare"
-                    name="P10 (Promo Floor)"
-                    stroke="#737373"
-                    strokeWidth={1.5}
-                    strokeDasharray="4 4"
-                    dot={false}
-                  />
-                </>
+                <Bar
+                  yAxisId="multiplier"
+                  dataKey="elasticity"
+                  name="Surge Multiplier (x)"
+                  fill="#404040"
+                  radius={[4, 4, 0, 0]}
+                />
+              )}
+              {chartView === 'composed' && (
+                <Area
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="medianFare"
+                  name="Median Fare (INR)"
+                  stroke="#ffffff"
+                  strokeWidth={2.5}
+                  fill="#ffffff"
+                  fillOpacity={0.04}
+                />
+              )}
+              {chartView === 'composed' && (
+                <Line
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="p90Fare"
+                  name="P90 (Surge Ceiling)"
+                  stroke="#e5e5e5"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  dot={false}
+                />
+              )}
+              {chartView === 'composed' && (
+                <Line
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="p10Fare"
+                  name="P10 (Promo Floor)"
+                  stroke="#737373"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  dot={false}
+                />
               )}
 
-              {/* Envelope Mode: P10, Average, Median, P90 */}
+              {/* Envelope Mode: P10, Average, Median, P90 (direct children, no fragment — see note above) */}
               {chartView === 'envelope' && (
-                <>
-                  <Area
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="p90Fare"
-                    name="P90 (Upper Bound)"
-                    stroke="#e5e5e5"
-                    strokeWidth={1.5}
-                    strokeDasharray="4 4"
-                    fill="#ffffff"
-                    fillOpacity={0.03}
-                  />
-                  <Line
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="avgFare"
-                    name="Average Fare"
-                    stroke="#a3a3a3"
-                    strokeWidth={1.5}
-                    dot={{ r: 3, fill: '#a3a3a3' }}
-                  />
-                  <Line
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="medianFare"
-                    name="Median Fare"
-                    stroke="#ffffff"
-                    strokeWidth={2.5}
-                    dot={{ r: 4, fill: '#ffffff', stroke: '#262626', strokeWidth: 1.5 }}
-                  />
-                  <Line
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="p10Fare"
-                    name="P10 (Lower Bound)"
-                    stroke="#737373"
-                    strokeWidth={1.5}
-                    strokeDasharray="4 4"
-                    dot={{ r: 3, fill: '#737373' }}
-                  />
-                </>
+                <Area
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="p90Fare"
+                  name="P90 (Upper Bound)"
+                  stroke="#e5e5e5"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  fill="#ffffff"
+                  fillOpacity={0.03}
+                />
+              )}
+              {chartView === 'envelope' && (
+                <Line
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="avgFare"
+                  name="Average Fare"
+                  stroke="#a3a3a3"
+                  strokeWidth={1.5}
+                  dot={{ r: 3, fill: '#a3a3a3' }}
+                />
+              )}
+              {chartView === 'envelope' && (
+                <Line
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="medianFare"
+                  name="Median Fare"
+                  stroke="#ffffff"
+                  strokeWidth={2.5}
+                  dot={{ r: 4, fill: '#ffffff', stroke: '#262626', strokeWidth: 1.5 }}
+                />
+              )}
+              {chartView === 'envelope' && (
+                <Line
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="p10Fare"
+                  name="P10 (Lower Bound)"
+                  stroke="#737373"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  dot={{ r: 3, fill: '#737373' }}
+                />
               )}
 
-              {/* Multipliers Mode: Bar chart of elasticity multipliers */}
+              {/* Multipliers Mode: Bar chart of elasticity multipliers (direct children, no fragment — see note above) */}
               {chartView === 'multipliers' && (
-                <>
-                  <Bar
-                    yAxisId="multiplier"
-                    dataKey="elasticity"
-                    name="Surge Multiplier (x)"
-                    fill="#404040"
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Line
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="medianFare"
-                    name="Median Fare (INR)"
-                    stroke="#ffffff"
-                    strokeWidth={2.5}
-                    dot={{ r: 4, fill: '#ffffff', stroke: '#262626', strokeWidth: 1.5 }}
-                  />
-                </>
+                <Bar
+                  yAxisId="multiplier"
+                  dataKey="elasticity"
+                  name="Surge Multiplier (x)"
+                  fill="#404040"
+                  radius={[4, 4, 0, 0]}
+                />
+              )}
+              {chartView === 'multipliers' && (
+                <Line
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="medianFare"
+                  name="Median Fare (INR)"
+                  stroke="#ffffff"
+                  strokeWidth={2.5}
+                  dot={{ r: 4, fill: '#ffffff', stroke: '#262626', strokeWidth: 1.5 }}
+                />
               )}
             </ComposedChart>
           </ResponsiveContainer>
