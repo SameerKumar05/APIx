@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import os
 import sys
+from collections.abc import Generator
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -28,10 +29,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from backend.app.db.seed import (
+    INITIAL_AIRLINES,
+    INITIAL_ROUTES,
+    seed_airlines,
     seed_all,
+    seed_routes,
 )
 from backend.app.db.session import Base
 from backend.app.models import (
+    Airline,
     AnomalyAlert,
     NationalDailyIndex,
     RawFare,
@@ -41,7 +47,7 @@ from backend.app.models import (
 
 
 @pytest.fixture
-def db_session() -> Session:
+def db_session() -> Generator[Session, None, None]:
     """Fixture providing an isolated in-memory SQLite database session."""
     engine = create_engine(
         "sqlite:///:memory:",
@@ -65,7 +71,7 @@ def db_session() -> Session:
 
 
 def test_seed_routes_and_airlines(db_session: Session) -> None:
-    """Verify that exactly 10 routes and 5 airlines are seeded, and weights sum to 1.000."""
+    """Verify that exactly 10 routes and 5 airlines are seeded, and weights sum to 1.000 / 100.0%."""
     result = seed_all(db_session)
     assert result["routes"] == 10
     assert result["airlines"] == 5
@@ -79,11 +85,30 @@ def test_seed_routes_and_airlines(db_session: Session) -> None:
     total_pax = sum(r.dgca_monthly_pax for r in routes)
     assert total_pax == 2500000
 
-    # Ensure idempotency
+    airlines = db_session.execute(select(Airline)).scalars().all()
+    assert len(airlines) == 5
+
+    total_share = sum(a.market_share_pct for a in airlines)
+    assert math.isclose(total_share, 100.0, rel_tol=1e-6)
+
+    shares_by_code = {a.code: a.market_share_pct for a in airlines}
+    expected_shares = {"6E": 60.0, "AI": 15.0, "IX": 10.0, "QP": 10.0, "SG": 5.0}
+    assert shares_by_code == expected_shares
+
+    # Ensure idempotency of seed_all
     result_second = seed_all(db_session)
     assert result_second["routes"] == 10
     assert result_second["airlines"] == 5
     assert len(db_session.execute(select(Route)).scalars().all()) == 10
+    assert len(db_session.execute(select(Airline)).scalars().all()) == 5
+
+    # Verify seed_routes and seed_airlines execute cleanly and idempotently
+    routes_direct = seed_routes(db_session)
+    airlines_direct = seed_airlines(db_session)
+    assert len(routes_direct) == 10
+    assert len(airlines_direct) == 5
+    assert len(db_session.execute(select(Route)).scalars().all()) == 10
+    assert len(db_session.execute(select(Airline)).scalars().all()) == 5
 
 
 def test_raw_fare_unique_hash(db_session: Session) -> None:

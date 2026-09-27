@@ -103,7 +103,7 @@ INITIAL_ROUTES: list[dict[str, Any]] = [
     },
 ]
 
-# Modelled carrier shares, not official DGCA market share.
+# Modelled carrier shares, not official DGCA market share. Sum = 100.0%
 INITIAL_AIRLINES: list[dict[str, Any]] = [
     {
         "code": "6E",

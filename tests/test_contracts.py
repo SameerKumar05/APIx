@@ -370,6 +370,15 @@ class TestMasterDataAlignment:
         assert DEFAULT_AIRLINE_MARKET_SHARES["QP"] == 0.10
         assert DEFAULT_AIRLINE_MARKET_SHARES["SG"] == 0.05
 
+        # Database seed INITIAL_AIRLINES must mirror this at 100.0% sum
+        db_airline_shares = {a["code"]: a["market_share_pct"] for a in INITIAL_AIRLINES}
+        assert db_airline_shares["6E"] == 60.0
+        assert db_airline_shares["AI"] == 15.0
+        assert db_airline_shares["IX"] == 10.0
+        assert db_airline_shares["QP"] == 10.0
+        assert db_airline_shares["SG"] == 5.0
+        assert pytest.approx(sum(db_airline_shares.values()), abs=1e-9) == 100.0
+
         # These previously summed to 0.99, which under-weighted every carrier.
         total_market_share = sum(DEFAULT_AIRLINE_MARKET_SHARES.values())
         assert pytest.approx(total_market_share, abs=1e-9) == 1.0

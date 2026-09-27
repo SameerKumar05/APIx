@@ -148,6 +148,15 @@ def run_tests() -> bool:
                 f"     - {code}: {airline_dict[code].name} ({airline_dict[code].market_share_pct}%)"
             )
 
+        total_airline_share = sum(a.market_share_pct for a in airlines)
+        print(f"  -> Total airline market share sum: {total_airline_share:.1f}%")
+        if not math.isclose(total_airline_share, 100.0, rel_tol=1e-5):
+            print(
+                f"FAILED: Total airline share {total_airline_share}% does not equal 100.0%!"
+            )
+            return False
+        print("  -> Sum of airline market shares == 100.0% (CONFIRMED)")
+
         # 5. Verify Operational Models (RawFare, Index, Anomaly, ScrapingRun)
         print("\n[6/6] Verifying operational models CRUD and constraints...")
 
