@@ -161,3 +161,75 @@ class DGCAValidationResponse(BaseModel):
         "not_evaluated",
         description="'not_evaluated' when the ledger is empty; 'evaluated' when rows were read",
     )
+
+
+class SectorHeatmapCell(BaseModel):
+    route_code: str = Field(..., description="Corridor code (e.g. DEL-BOM)")
+    origin: str = Field(..., description="Origin airport IATA code")
+    destination: str = Field(..., description="Destination airport IATA code")
+    booking_window: str = Field(
+        ...,
+        description="Advance purchase booking window tag (e.g. T+1, T+7, T+15, T+30, T+45)",
+    )
+    days_before_departure: int | None = Field(
+        None, description="Days before departure corresponding to window"
+    )
+    avg_fare_inr: float = Field(..., description="Average fare in INR for this cell")
+    median_fare_inr: float | None = Field(
+        None, description="Median fare in INR for this cell"
+    )
+    min_fare_inr: float | None = Field(None, description="Minimum fare in INR")
+    max_fare_inr: float | None = Field(None, description="Maximum fare in INR")
+    sample_size: int = Field(0, description="Count of observed quotes in this cell")
+    fare_index: float | None = Field(
+        None, description="Index of this cell relative to base fare (T+30) or baseline"
+    )
+
+
+class SectorHeatmapRow(BaseModel):
+    route_code: str = Field(..., description="Corridor code (e.g. DEL-BOM)")
+    origin: str = Field(..., description="Origin airport IATA code")
+    destination: str = Field(..., description="Destination airport IATA code")
+    windows: dict[str, float | None] = Field(
+        default_factory=dict,
+        description="Average fares keyed by booking window tag (e.g. {'T+1': 8500.0, 'T+7': 6200.0})",
+    )
+    surge_multiplier: float | None = Field(
+        None,
+        description="Urgent advance window fare (T+1) divided by base window fare (T+30)",
+    )
+    base_fare_inr: float | None = Field(
+        None, description="Base advance fare in INR (T+30 or longest observed window)"
+    )
+    urgent_fare_inr: float | None = Field(
+        None,
+        description="Urgent last-minute fare in INR (T+1 or nearest observed window)",
+    )
+    composite_fare_inr: float | None = Field(
+        None, description="Composite weighted average or median fare for this corridor"
+    )
+    sample_size: int = Field(0, description="Total observations across all windows")
+
+
+class SectorHeatmapResponse(BaseModel):
+    generated_at: datetime = Field(
+        ..., description="Timestamp of analytical computation"
+    )
+    sectors: list[SectorHeatmapRow] = Field(
+        default_factory=list,
+        description="List of route corridor rows with advance booking window pricing",
+    )
+    matrix: list[SectorHeatmapCell] = Field(
+        default_factory=list,
+        description="Flat matrix of corridor x booking window cells",
+    )
+    windows: list[str] = Field(
+        default_factory=list,
+        description="Available booking windows sorted from nearest to farthest departure",
+    )
+    total_routes: int = Field(0, description="Count of evaluated corridors")
+    data_available: bool = Field(
+        False,
+        description="False when no fare observations exist for any corridor",
+    )
+

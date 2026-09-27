@@ -26,6 +26,9 @@ from backend.app.schemas.analytics import (
     HeatmapMatrixResponse,
     LeadTimeCurvePoint,
     LeadTimeCurveResponse,
+    SectorHeatmapCell,
+    SectorHeatmapResponse,
+    SectorHeatmapRow,
 )
 from backend.app.schemas.index import (
     NationalIndexLatestResponse,
@@ -652,3 +655,44 @@ class TestApiResponseSchemas:
         assert resp.total_alerts == 1
         assert resp.alerts[0].severity == "CRITICAL"
         assert resp.alerts[0].deviation_percent == 148.39
+
+    def test_sector_heatmap_response_schema(self) -> None:
+        """SectorHeatmapResponse validates route sector matrix schema."""
+        now = datetime.now(UTC)
+        cell = SectorHeatmapCell(
+            route_code="DEL-BOM",
+            origin="DEL",
+            destination="BOM",
+            booking_window="T+1",
+            days_before_departure=1,
+            avg_fare_inr=8500.0,
+            median_fare_inr=8400.0,
+            min_fare_inr=7900.0,
+            max_fare_inr=9200.0,
+            sample_size=24,
+            fare_index=177.08,
+        )
+        row = SectorHeatmapRow(
+            route_code="DEL-BOM",
+            origin="DEL",
+            destination="BOM",
+            windows={"T+1": 8500.0, "T+30": 4800.0},
+            surge_multiplier=1.77,
+            base_fare_inr=4800.0,
+            urgent_fare_inr=8500.0,
+            composite_fare_inr=6200.0,
+            sample_size=48,
+        )
+        resp = SectorHeatmapResponse(
+            generated_at=now,
+            sectors=[row],
+            matrix=[cell],
+            windows=["T+1", "T+30"],
+            total_routes=1,
+            data_available=True,
+        )
+        assert resp.total_routes == 1
+        assert resp.data_available is True
+        assert resp.sectors[0].surge_multiplier == 1.77
+        assert resp.matrix[0].days_before_departure == 1
+
