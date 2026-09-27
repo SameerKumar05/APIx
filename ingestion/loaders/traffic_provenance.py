@@ -16,9 +16,11 @@ class TrafficProvenanceKind(StrEnum):
     """How a traffic file says it was produced."""
 
     DGCA = "DGCA"
+    DGCA_PUBLISHED = "dgca_published"
+    CALIBRATED_BASELINE = "calibrated_baseline"
+    MODELLED_DGCA_PROXY = "modelled_dgca_proxy"
     GENERATED = "generated"
     MODELLED = "modelled"
-
 
 @dataclass(frozen=True, slots=True)
 class TrafficProvenance:
@@ -29,9 +31,14 @@ class TrafficProvenance:
     @property
     def is_synthetic(self) -> bool:
         match self.kind:
-            case TrafficProvenanceKind.DGCA:
+            case TrafficProvenanceKind.DGCA | TrafficProvenanceKind.DGCA_PUBLISHED:
                 return False
-            case TrafficProvenanceKind.GENERATED | TrafficProvenanceKind.MODELLED:
+            case (
+                TrafficProvenanceKind.CALIBRATED_BASELINE
+                | TrafficProvenanceKind.MODELLED_DGCA_PROXY
+                | TrafficProvenanceKind.GENERATED
+                | TrafficProvenanceKind.MODELLED
+            ):
                 return True
             case unreachable:
                 assert_never(unreachable)
@@ -74,7 +81,13 @@ def declared_token(
 def resolve_traffic_provenance(declared: str | None) -> TrafficProvenance:
     """Map a declaration token to a provenance. Unknown and blank tokens are modelled."""
     token = (declared or "").strip().casefold()
-    if token == "dgca":
+    if token in {"calibrated_baseline", "calibrated"}:
+        kind = TrafficProvenanceKind.CALIBRATED_BASELINE
+    elif token in {"modelled_dgca_proxy", "proxy"}:
+        kind = TrafficProvenanceKind.MODELLED_DGCA_PROXY
+    elif token == "dgca_published":
+        kind = TrafficProvenanceKind.DGCA_PUBLISHED
+    elif token == "dgca":
         kind = TrafficProvenanceKind.DGCA
     elif token in {"generated", "synthetic"}:
         kind = TrafficProvenanceKind.GENERATED

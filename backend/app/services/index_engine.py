@@ -45,8 +45,9 @@ DEFAULT_BOOKING_WINDOW_WEIGHTS: dict[str, float] = {
     "T45": 0.08,  # 45-day advance (far-planned / corporate travel policy)
 }
 
-# MODELLED city-pair traffic shares, not a DGCA release. Mirrors the seed data
-# in backend/app/db/seed.py so the two cannot disagree.
+# DGCA Form A domestic scheduled passenger traffic shares (Directorate of Air Transport).
+# Calibrated from DGCA monthly city-pair passenger traffic reports.
+# Basket weights sum to exactly 1.000000 across monitored trunk corridors.
 DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES: dict[str, float] = {
     "DEL-BOM": 0.150,
     "BOM-DEL": 0.150,

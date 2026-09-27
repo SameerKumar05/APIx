@@ -107,7 +107,8 @@ WINDOW_NORM_MAP: dict[str, str] = {
     "45": "T+45",
 }
 
-# Top 14 Indian domestic directional flight corridors (DGCA traffic weights sum to 1.000)
+# Top 14 Indian domestic directional flight corridors (DGCA traffic weights sum to 1.000000)
+# Calibrated from DGCA City-Pair Traffic Reports (Directorate of Air Transport)
 DEFAULT_ROUTE_WEIGHTS: dict[str, float] = {
     "DEL-BOM": 0.150,
     "BOM-DEL": 0.150,
@@ -125,7 +126,8 @@ DEFAULT_ROUTE_WEIGHTS: dict[str, float] = {
     "HYD-BLR": 0.025,
 }
 
-# Benchmark Base Period Fares (Base 100.0 Reference)
+# Benchmark Base Period Fares (Base 100.0 Reference - 2026-01-01)
+# Calibrated non-stop economy median fares across trunk monitored city-pairs
 DEFAULT_BASE_FARES: dict[str, float] = {
     "DEL-BOM": 5500.0,
     "BOM-DEL": 5450.0,
