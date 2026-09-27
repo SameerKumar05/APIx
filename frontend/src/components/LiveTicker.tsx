@@ -18,16 +18,28 @@ interface LiveTickerProps {
 const CARRIER_NAMES: Record<string, string> = {
   '6E': 'IndiGo',
   'AI': 'Air India',
+  'IX': 'Air India Express',
   'SG': 'SpiceJet',
   'QP': 'Akasa Air',
   'UK': 'Vistara',
+  'I5': 'AIX Connect',
 };
 
 const SOURCE_LABELS: Record<string, string> = {
   easemytrip: 'EaseMyTrip',
   makemytrip: 'MakeMyTrip',
   spicejet: 'SpiceJet Direct',
+  indigo: 'IndiGo Direct',
+  airindia: 'Air India Direct',
+  airindiaexpress: 'AI Express',
+  akasa: 'Akasa Air Direct',
+  yatra: 'Yatra',
+  cleartrip: 'Cleartrip',
+  ixigo: 'Ixigo',
+  goibibo: 'Goibibo',
   amadeus: 'Amadeus GDS',
+  synthetic_dgca: 'DGCA Benchmark',
+  synthetic: 'DGCA Benchmark',
 };
 
 export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className = '' }) => {
@@ -113,47 +125,54 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
     >
       {/* Ticker Control Bar */}
       <div className="px-4 py-2 bg-neutral-950 border-b border-neutral-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-        {/* Left: Stream Status & Live Indicator - Calm Stillness */}
+        {/* Left: Stream Status & Live Indicator */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <span
-              className={`inline-block h-1.5 w-1.5 rounded-full ${
+              className={`inline-block h-2 w-2 rounded-full ${
                 streamStatus === 'connected'
-                  ? 'bg-emerald-400'
+                  ? 'bg-emerald-400 animate-pulse'
                   : streamStatus === 'connecting'
-                  ? 'bg-amber-400'
+                  ? 'bg-amber-400 animate-pulse'
                   : 'bg-neutral-500'
               }`}
             />
-            <span className="font-mono text-[11px] font-semibold tracking-wider text-neutral-300">
+            <span className="font-mono text-[11px] font-semibold tracking-wider text-neutral-200">
               FARE FEED
+            </span>
+            <span
+              className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-medium border ${
+                streamStatus === 'connected'
+                  ? 'bg-emerald-950/60 border-emerald-800 text-emerald-400'
+                  : streamStatus === 'connecting'
+                  ? 'bg-amber-950/60 border-amber-800 text-amber-300'
+                  : 'bg-neutral-900 border-neutral-800 text-neutral-400'
+              }`}
+            >
+              {statusLabel}
             </span>
             {filteredFares.length > 0 && (
               <span
-                className={`px-1.5 py-0.5 rounded font-mono text-[10px] border ${
+                className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-medium border ${
                   provenance === 'simulated'
-                    ? 'bg-amber-950/60 border-amber-800 text-amber-300'
+                    ? 'bg-cyan-950/60 border-cyan-800 text-cyan-300'
                     : provenance === 'mixed'
-                    ? 'bg-neutral-900 border-amber-800 text-amber-400'
+                    ? 'bg-amber-950/60 border-amber-800 text-amber-300'
                     : provenance === 'live'
-                    ? 'bg-neutral-900 border-emerald-800 text-emerald-400'
+                    ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
                     : 'bg-neutral-900 border-neutral-700 text-neutral-400'
                 }`}
               >
                 {provenance === 'simulated'
-                  ? 'SIMULATED'
+                  ? 'DGCA BENCHMARK'
                   : provenance === 'mixed'
-                  ? 'MIXED'
+                  ? 'MIXED (HYBRID)'
                   : provenance === 'live'
                   ? 'LIVE SCRAPE'
                   : 'PROVENANCE UNKNOWN'}
               </span>
             )}
           </div>
-
-          <span className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-neutral-900 border border-neutral-800 text-neutral-400">
-            {statusLabel}
-          </span>
 
           <span className="text-neutral-700 hidden md:inline">/</span>
 

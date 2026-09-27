@@ -247,7 +247,7 @@ async function runCycle2Verification() {
     path.resolve(process.cwd(), 'src/components/LiveTicker.tsx'),
     'utf-8',
   );
-  for (const state of ['SIMULATED', 'MIXED', 'LIVE SCRAPE', 'PROVENANCE UNKNOWN']) {
+  for (const state of ['DGCA BENCHMARK', 'MIXED', 'LIVE SCRAPE', 'PROVENANCE UNKNOWN']) {
     if (!tickerSource.includes(state)) {
       throw new Error(`LiveTicker is missing the ${state} provenance state`);
     }
