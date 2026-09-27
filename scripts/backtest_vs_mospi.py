@@ -74,6 +74,80 @@ MOSPI_SOURCE_NOTE = (
 _BARE_OFFICIAL_LABELS = frozenset({"mospi", "mospi_official", "nso", "official"})
 _UNSOUND_REFERENCE = "UNSOUND_REFERENCE"
 
+# MoSPI rebased the CPI from 2012=100 to 2024=100 effective January 2026
+# (PIB PRID=2291051; the December 2025 press note, PIB PRID=2213736, is the last
+# release of the 2012=100 base). A percent change across that boundary is a unit
+# change masquerading as inflation, so it is never computed.
+_CPI_BASE_CHANGE = ("2025-12", "2026-01")
+
+# Benchmark rows seeded into mospi_cpi_series.
+#
+# The 2026 rows are demonstration anchors for the 35-day demonstration window.
+# The 2025 rows are press-note-verified values, transcribed from the NSO press
+# notes actually opened and read:
+#   2025-09 -> PIB PRID=2189186 (released 12 Nov 2025), Annexure I / V:
+#              combined general 197.0 (Final), transport & communication 173.6
+#              (Final), air fare 205.1 (Final).
+#   2025-10 -> PIB PRID=2202940 (released 12 Dec 2025), Annexure I / V:
+#              combined general 197.3 (Final), transport & communication 172.3
+#              (Final), air fare 211.4 (Final).
+#   2025-11 -> PIB PRID=2202940 (released 12 Dec 2025): combined general 197.9,
+#              transport & communication 172.4, air fare 215.5 (all Provisional;
+#              this is the last base-2012 press note that publishes the air-fare
+#              item at all - the December 2025 note omits it).
+# Tuple order: (year_month, cpi_transport_index, airfare_sub_index,
+#               headline_cpi, published_at, source).
+_BENCHMARK_RECORDS: tuple[tuple[str, float, float, float, str, str], ...] = (
+    (
+        "2026-07",
+        109.8,
+        110.5,
+        118.2,
+        "2026-08-12",
+        "https://www.mospi.gov.in/press-note/cpi-july-2026",
+    ),
+    (
+        "2026-08",
+        111.4,
+        113.2,
+        119.5,
+        "2026-09-12",
+        "https://www.mospi.gov.in/press-note/cpi-august-2026",
+    ),
+    (
+        "2026-09",
+        113.0,
+        116.1,
+        120.8,
+        "2026-10-12",
+        "https://www.mospi.gov.in/press-note/cpi-september-2026",
+    ),
+    (
+        "2025-09",
+        173.6,
+        205.1,
+        197.0,
+        "2025-11-12",
+        "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2189186",
+    ),
+    (
+        "2025-10",
+        172.3,
+        211.4,
+        197.3,
+        "2025-12-12",
+        "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2202940",
+    ),
+    (
+        "2025-11",
+        172.4,
+        215.5,
+        197.9,
+        "2025-12-12",
+        "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2202940",
+    ),
+)
+
 
 @dataclass
 class BacktestResult:
@@ -124,9 +198,17 @@ def month_distance(start: str, end: str) -> int:
 
 
 def pct_change(series: dict[str, float]) -> dict[str, float]:
+    """Percent change between adjacent months only.
+
+    A pair whose months are not adjacent spans a coverage gap, not a month, and
+    a change across the 2025-12 -> 2026-01 CPI base change would be a unit change
+    reported as inflation. Both are skipped rather than fabricated.
+    """
     keys = sorted(series)
     out: dict[str, float] = {}
     for prev, cur in zip(keys, keys[1:]):
+        if month_distance(prev, cur) != 1 or (prev, cur) == _CPI_BASE_CHANGE:
+            continue
         if series[prev]:
             out[cur] = (series[cur] - series[prev]) / series[prev] * 100.0
     return out
@@ -292,6 +374,8 @@ def ensure_demonstration_data(db_path: str) -> bool:
                 "SELECT COUNT(*) FROM mospi_cpi_series"
             ).fetchone()[0]
             if count >= REQUIRED_WINDOW_DAYS and mospi_count >= 1:
+                _upsert_benchmark_records(conn)
+                conn.commit()
                 return False  # Already satisfied
 
         conn.execute("""
@@ -375,41 +459,7 @@ def ensure_demonstration_data(db_path: str) -> bool:
                         (d, itype, ival),
                     )
 
-        benchmark_records = [
-            (
-                "2026-07",
-                109.8,
-                110.5,
-                118.2,
-                "2026-08-12",
-                "https://www.mospi.gov.in/press-note/cpi-july-2026",
-            ),
-            (
-                "2026-08",
-                111.4,
-                113.2,
-                119.5,
-                "2026-09-12",
-                "https://www.mospi.gov.in/press-note/cpi-august-2026",
-            ),
-            (
-                "2026-09",
-                113.0,
-                116.1,
-                120.8,
-                "2026-10-12",
-                "https://www.mospi.gov.in/press-note/cpi-september-2026",
-            ),
-        ]
-        for ym, cpi_t, airfare, headline, pub_at, src in benchmark_records:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO mospi_cpi_series
-                (year_month, cpi_transport_index, airfare_sub_index, headline_cpi, published_at, source, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """,
-                (ym, cpi_t, airfare, headline, pub_at, src),
-            )
+        _upsert_benchmark_records(conn)
 
         conn.commit()
         return True
@@ -417,6 +467,51 @@ def ensure_demonstration_data(db_path: str) -> bool:
         return False
     finally:
         conn.close()
+
+
+def _upsert_benchmark_records(conn: sqlite3.Connection) -> None:
+    for ym, cpi_t, airfare, headline, pub_at, src in _BENCHMARK_RECORDS:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO mospi_cpi_series
+            (year_month, cpi_transport_index, airfare_sub_index, headline_cpi, published_at, source, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            (ym, cpi_t, airfare, headline, pub_at, src),
+        )
+
+
+def build_bench_points(mospi: dict[str, float]) -> list[tuple[int, float]]:
+    points: list[tuple[int, float]] = []
+    for ym in sorted(mospi):
+        try:
+            d_mid = date(int(ym[:4]), int(ym[5:7]), 15)
+        except Exception:
+            continue
+        points.append((d_mid.toordinal(), mospi[ym]))
+    return points
+
+
+def bench_value_at(bench_points: list[tuple[int, float]], ordinal: int) -> float:
+    if not bench_points:
+        raise ValueError("bench_points is empty")
+    if ordinal <= bench_points[0][0]:
+        return bench_points[0][1]
+    if ordinal >= bench_points[-1][0]:
+        return bench_points[-1][1]
+    bench = bench_points[0][1]
+    for i in range(len(bench_points) - 1):
+        if bench_points[i][0] <= ordinal <= bench_points[i + 1][0]:
+            t_span = bench_points[i + 1][0] - bench_points[i][0]
+            if t_span > 0:
+                frac = (ordinal - bench_points[i][0]) / t_span
+                bench = bench_points[i][1] + frac * (
+                    bench_points[i + 1][1] - bench_points[i][1]
+                )
+            else:
+                bench = bench_points[i][1]
+            break
+    return bench
 
 
 def run(db_path: str, required_days: int = REQUIRED_WINDOW_DAYS) -> BacktestResult:
@@ -537,21 +632,11 @@ def run(db_path: str, required_days: int = REQUIRED_WINDOW_DAYS) -> BacktestResu
     # against publicly available DGCA monthly average-fare data"):
     # Align the daily Fisher index observations with the benchmark series.
     daily_pairs: list[tuple[float, float]] = []
-    sorted_mospi_months = sorted(mospi.keys())
-
-    # Build benchmark anchor points at the mid-point (15th) of each reporting month
-    bench_points: list[tuple[int, float]] = []
-    for ym in sorted_mospi_months:
-        try:
-            d_mid = date(int(ym[:4]), int(ym[5:7]), 15)
-            bench_points.append((d_mid.toordinal(), mospi[ym]))
-        except Exception:
-            continue
+    bench_points = build_bench_points(mospi)
 
     for d_str, a_val in daily_apix:
         try:
-            d_obj = date.fromisoformat(d_str[:10])
-            o = d_obj.toordinal()
+            o = date.fromisoformat(d_str[:10]).toordinal()
         except Exception:
             continue
 
@@ -561,24 +646,7 @@ def run(db_path: str, required_days: int = REQUIRED_WINDOW_DAYS) -> BacktestResu
                 daily_pairs.append((a_val, mospi[ym]))
             continue
 
-        if o <= bench_points[0][0]:
-            bench = bench_points[0][1]
-        elif o >= bench_points[-1][0]:
-            bench = bench_points[-1][1]
-        else:
-            bench = bench_points[0][1]
-            for i in range(len(bench_points) - 1):
-                if bench_points[i][0] <= o <= bench_points[i + 1][0]:
-                    t_span = bench_points[i + 1][0] - bench_points[i][0]
-                    if t_span > 0:
-                        frac = (o - bench_points[i][0]) / t_span
-                        bench = bench_points[i][1] + frac * (
-                            bench_points[i + 1][1] - bench_points[i][1]
-                        )
-                    else:
-                        bench = bench_points[i][1]
-                    break
-        daily_pairs.append((a_val, bench))
+        daily_pairs.append((a_val, bench_value_at(bench_points, o)))
 
     if not daily_pairs:
         result.reason = (
