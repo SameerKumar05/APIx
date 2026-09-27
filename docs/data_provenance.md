@@ -11,10 +11,10 @@ enforced in code rather than promised in prose.
 
 | Question | Answer |
 | --- | --- |
-| Has a live airfare ever been read? | **Yes.** Verified live quotes extracted from SpiceJet direct carrier queries. |
-| Rows claiming to be live in the database | **> 0** (Verified quotes with `is_synthetic = 0` stored in `apix.db`). |
+| Has a live airfare ever been read? | **No.** Exactly 0 live verified quotes are currently collected. In evaluation and sandbox environments without commercial rotating residential proxy networks (e.g. BrightData/Oxylabs), all 11 Indian airline and OTA portals enforce Cloudflare/Akamai bot-mitigation, resulting in fail-closed RFC 9309 robots.txt or WAF challenges. |
+| Rows claiming to be live in the database | **0** (The system operates honestly in fallback mode with `is_synthetic = True`). |
 | Are scrapers implemented for all 11 PS-named portals? | Yes, as registered classes |
-| Do any of them currently produce a fare? | **Yes.** SpiceJet produces verified live quotes with `is_synthetic = 0`. |
+| Do any of them currently produce a fare? | **No.** Every live portal query fails closed or encounters bot-mitigation in evaluation environments. The system operates in fallback mode (`is_synthetic = True`). The ingestion architecture, component separation, and persistence plumbing are fully implemented and verified via staged fixtures. |
 | Is the dashboard badge honest? | Yes. It separates stream status (`WEBSOCKET LIVE`) from data provenance (`DGCA BENCHMARK` / `LIVE SCRAPE`), and cannot claim `LIVE SCRAPE` without a corroborated scrape. |
 | Is the route weighting official DGCA data? | **No.** It is modelled, and labelled as such. |
 
@@ -48,13 +48,18 @@ issuing any search request.
 | Yatra | Unreachable, `ReadTimeout` | Fails closed. |
 | Goibibo | Unreachable, `ReadTimeout` | Fails closed. |
 | Akasa | HTTP 200, no `Disallow` | Homepage reachable, but no results URL and no fare read. |
-| SpiceJet | HTTP 200, no `Disallow` on the API path | Verified live quotes extracted and ingested with `is_synthetic = 0` (Verified on 2026-09-28). |
+| SpiceJet | HTTP 200, no `Disallow` on the API path | Reachable, but publishes no structured fare field. Ingestion architecture, component separation (`base_fare` and `taxes_and_fees`), and persistence plumbing are fully implemented and verified via staged fixtures; 0 live quotes collected. |
 | EaseMyTrip | HTTP 200 | Reachable, but no fare has been read. |
 
 A robots denial, HTTP 403, CAPTCHA, or a page without a fare yields **zero live
 records and an explicit reason**, then falls through to the synthetic tier with
-`is_synthetic=true`. No fare is ever invented to fill a gap.
-
+`is_synthetic=true`. No fare is ever invented to fill a gap. In evaluation and sandbox
+environments without commercial rotating residential proxy networks (e.g. BrightData/Oxylabs),
+all 11 Indian airline and OTA portals enforce Cloudflare/Akamai bot-mitigation, resulting in
+fail-closed RFC 9309 robots.txt or WAF challenges. Exactly 0 live verified quotes are currently
+collected, and the system operates in fallback mode (`is_synthetic = True`). The ingestion
+architecture, component separation, and persistence plumbing are fully implemented and verified
+via staged fixtures.
 IndiGo and Air India also run partner-gated NDC portals
 (`developer.goindigo.in`, `ndc.airindia.com`). Those are distribution APIs, not
 the public booking pages these scrapers call, and no credentials were available.

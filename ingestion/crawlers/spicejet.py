@@ -531,20 +531,20 @@ class SpiceJetScraper(BaseScraper):
         destination: str,
         target_date: date,
         window_code: str,
+        fallback_to_fixture: bool = False,
     ) -> list[RawFareRecord]:
-        """Extracts genuine live SpiceJet flight quotes for route and date.
+        """Attempts to extract genuine live SpiceJet flight quotes for route and date.
 
-        Queries the live SpiceJet availability search or public pricing query,
-        normalizing responses into canonical RawFareRecords with is_synthetic=False.
+        Queries the live SpiceJet availability search or public pricing query.
+        Returns parsed live records if available, or empty list if no genuine live
+        quotes were returned. Never fabricates live quotes.
         """
-        records: list[RawFareRecord] = []
         norm_orig = self.normalize_iata(origin)
         norm_dest = self.normalize_iata(destination)
         date_str = target_date.strftime("%Y-%m-%d")
         now_dt = datetime.now(UTC)
-        booking_dt_str = now_dt.strftime("%Y-%m-%dT%H:%M:%S")
 
-        if HAS_HTTPX:
+        if HAS_HTTPX and httpx is not None:
             try:
                 headers = self.get_randomized_headers()
                 with httpx.Client(timeout=min(self.config.timeout_seconds, 6.0)) as client:
@@ -569,6 +569,33 @@ class SpiceJetScraper(BaseScraper):
                                 return parsed
             except Exception as exc:
                 logger.debug("SpiceJet public API search query failed: %s", exc)
+
+        if fallback_to_fixture:
+            return self.get_staged_fixtures(
+                norm_orig, norm_dest, target_date, window_code
+            )
+
+        return []
+
+    def get_staged_fixtures(
+        self,
+        origin: str,
+        destination: str,
+        target_date: date,
+        window_code: str,
+    ) -> list[RawFareRecord]:
+        """Generates staged fixture records for route and date.
+
+        These records are explicitly staged fixtures for testing persistence
+        plumbing. They are always marked with is_synthetic=True and
+        source_platform='staged_fixture'.
+        """
+        records: list[RawFareRecord] = []
+        norm_orig = self.normalize_iata(origin)
+        norm_dest = self.normalize_iata(destination)
+        date_str = target_date.strftime("%Y-%m-%d")
+        now_dt = datetime.now(UTC)
+        booking_dt_str = now_dt.strftime("%Y-%m-%dT%H:%M:%S")
 
         corridor_profiles: dict[tuple[str, str], list[dict[str, Any]]] = {
             ("DEL", "BOM"): [
@@ -646,8 +673,8 @@ class SpiceJetScraper(BaseScraper):
                 taxes_and_fees=tax_val,
                 total_fare=total_fare_val,
                 flight_status="scheduled",
-                is_synthetic=False,
-                source_platform="spicejet",
+                is_synthetic=True,
+                source_platform="staged_fixture",
             )
             is_valid, errs = self.validate_record(record)
             if is_valid:
@@ -733,23 +760,24 @@ class SpiceJetScraper(BaseScraper):
                 records = self._extract_live_fares(
                     norm_orig, norm_dest, target_date, window_code
                 )
-            if records:
+            live_records = [r for r in records if not r.is_synthetic]
+            if live_records:
                 elapsed_ms = round((time.time() - start_time) * 1000, 2)
                 logger.info(
                     "Tier 1 Success: %d records from SpiceJet in %.2fms",
-                    len(records),
+                    len(live_records),
                     elapsed_ms,
                 )
                 return ScrapeResult(
                     source="spicejet",
                     success=True,
-                    records=records,
+                    records=live_records,
                     errors=[],
                     duration_ms=elapsed_ms,
                     metadata={
                         "tier": 1,
                         "source": "spicejet_live",
-                        "records_count": len(records),
+                        "records_count": len(live_records),
                         "origin": norm_orig,
                         "destination": norm_dest,
                         "date": target_date.isoformat(),
@@ -857,7 +885,7 @@ class SpiceJetScraper(BaseScraper):
                     round(r.taxes_and_fees * 0.95, 2) if r.taxes_and_fees else None
                 ),
                 is_synthetic=True,
-                source_platform="spicejet",
+                source_platform="staged_fixture",
             )
             sg_records.append(rec)
 
