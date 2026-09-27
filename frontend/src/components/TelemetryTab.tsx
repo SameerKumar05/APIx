@@ -574,13 +574,13 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
                     <XAxis
                       dataKey="name"
                       stroke="#737373"
-                      fontSize={11}
+                      tick={{ fill: '#a3a3a3', fontSize: 11, fontFamily: 'monospace' }}
                       tickLine={false}
                       axisLine={{ stroke: '#262626' }}
                     />
                     <YAxis
                       stroke="#737373"
-                      fontSize={11}
+                      tick={{ fill: '#a3a3a3', fontSize: 11, fontFamily: 'monospace' }}
                       unit="ms"
                       tickLine={false}
                       axisLine={{ stroke: '#262626' }}
@@ -592,7 +592,7 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({ telemetry, onRefresh
                           return (
                             <div className="bg-neutral-950 border border-neutral-800 p-2.5 rounded font-mono text-xs">
                               <p className="font-semibold text-white">{d.region}</p>
-                              <p className="text-neutral-500">Subnet: {d.ip}</p>
+                              <p className="text-neutral-400">Subnet: {d.ip}</p>
                               <p className="text-neutral-300 mt-1">Ping Latency: {d.latency} ms</p>
                               <p className="text-neutral-400">Status: {d.status}</p>
                             </div>

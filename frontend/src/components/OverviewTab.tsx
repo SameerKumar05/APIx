@@ -432,7 +432,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                     <div className="bg-neutral-950 border border-neutral-800 p-3 rounded-md shadow-xl text-xs font-mono tabular-nums text-neutral-200 min-w-[210px]">
                       <div className="text-neutral-400 font-medium border-b border-neutral-800 pb-1.5 mb-2 flex items-center justify-between">
                         <span>{label}</span>
-                        <span className="text-[10px] text-neutral-500">APIx Index</span>
+                        <span className="text-[10px] text-neutral-400">APIx Index</span>
                       </div>
                       <div className="space-y-1">
                         {payload.map((item) => (
@@ -451,9 +451,38 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                   );
                 }}
               />
+              {/* Custom legend: the default legend paints each label in its series'
+  colour (e.g. #525252 = 2.53:1 on this surface), so labels render in
+  readable #e5e5e5 while the series colour stays on the dot. */}
               <Legend
                 wrapperStyle={{ fontSize: '11px', paddingTop: '12px', fontFamily: 'monospace' }}
-                iconType="circle"
+                content={({ payload }) => (
+                  <ul className="recharts-default-legend" style={{ padding: 0, margin: 0, textAlign: 'center' }}>
+                    {(payload ?? []).map((entry, i) => (
+                      <li
+                        key={`legend-item-${i}`}
+                        className={`recharts-legend-item legend-item-${i}`}
+                        style={{ display: 'inline-block', marginRight: 10 }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            display: 'inline-block',
+                            width: 8,
+                            height: 8,
+                            borderRadius: 9999,
+                            backgroundColor: entry.color ?? '#e5e5e5',
+                            marginRight: 4,
+                            verticalAlign: 'middle',
+                          }}
+                        />
+                        <span className="recharts-legend-item-text" style={{ color: '#e5e5e5' }}>
+                          {entry.value}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               />
 
               {/* APIx Composite Index */}

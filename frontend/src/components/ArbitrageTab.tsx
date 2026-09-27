@@ -246,7 +246,7 @@ export const ArbitrageTab: React.FC<ArbitrageTabProps> = ({ arbitrage, onRefresh
               <XAxis
                 dataKey="name"
                 stroke="#737373"
-                fontSize={11}
+                tick={{ fill: '#a3a3a3', fontSize: 11, fontFamily: 'monospace' }}
                 tickLine={false}
                 interval={0}
                 angle={-15}
@@ -255,7 +255,7 @@ export const ArbitrageTab: React.FC<ArbitrageTabProps> = ({ arbitrage, onRefresh
               />
               <YAxis
                 stroke="#737373"
-                fontSize={11}
+                tick={{ fill: '#a3a3a3', fontSize: 11, fontFamily: 'monospace' }}
                 tickLine={false}
                 unit="₹"
                 axisLine={{ stroke: '#262626' }}

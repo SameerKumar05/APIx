@@ -359,7 +359,7 @@ export const EconometricsTab: React.FC<EconometricsTabProps> = ({
                     <div className="bg-neutral-950 border border-neutral-800 p-3.5 rounded-md shadow-xl text-xs font-mono tabular-nums text-neutral-200 min-w-[240px]">
                       <div className="text-neutral-400 font-medium border-b border-neutral-800 pb-1.5 mb-2 flex items-center justify-between">
                         <span>{data.date}</span>
-                        <span className="text-[10px] text-neutral-500">P_F = √(P_L · P_P)</span>
+                        <span className="text-[10px] text-neutral-400">P_F = √(P_L · P_P)</span>
                       </div>
                       <div className="space-y-1.5">
                         <div className="flex justify-between items-center text-neutral-300">
@@ -404,9 +404,39 @@ export const EconometricsTab: React.FC<EconometricsTabProps> = ({
                 }}
               />
 
+              {/* Custom legend: the default legend paints each label in its series'
+  colour (e.g. #525252 = 2.53:1 on this surface), so labels render in
+  readable #e5e5e5 while the series colour stays on the dot. */}
               <Legend
                 verticalAlign="bottom"
                 wrapperStyle={{ paddingTop: '10px', fontSize: '11px', fontFamily: 'monospace' }}
+                content={({ payload }) => (
+                  <ul className="recharts-default-legend" style={{ padding: 0, margin: 0, textAlign: 'center' }}>
+                    {(payload ?? []).map((entry, i) => (
+                      <li
+                        key={`legend-item-${i}`}
+                        className={`recharts-legend-item legend-item-${i}`}
+                        style={{ display: 'inline-block', marginRight: 10 }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            display: 'inline-block',
+                            width: 8,
+                            height: 8,
+                            borderRadius: 9999,
+                            backgroundColor: entry.color ?? '#e5e5e5',
+                            marginRight: 4,
+                            verticalAlign: 'middle',
+                          }}
+                        />
+                        <span className="recharts-legend-item-text" style={{ color: '#e5e5e5' }}>
+                          {entry.value}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               />
 
               {/* Divergence Gap Fill on Right Axis */}
