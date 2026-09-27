@@ -1,0 +1,125 @@
+{
+  "db": "apix.db",
+  "window": {
+    "apix_days": 35,
+    "apix_span": [
+      "2026-08-20",
+      "2026-09-23"
+    ]
+  },
+  "invariants": {
+    "scope": "pure index-engine mathematics; no MoSPI, DGCA or other external data involved",
+    "checks": [
+      {
+        "name": "uniform_scaling_linearity",
+        "max_abs_error": 0.0,
+        "tolerance": 1e-09,
+        "passed": true,
+        "detail": "all prices x alpha moves the Laspeyres index by exactly alpha*100"
+      },
+      {
+        "name": "base_period_identity",
+        "max_abs_error": 0.0,
+        "tolerance": 1e-09,
+        "passed": true,
+        "detail": "P_t == P_0 implies Laspeyres == Paasche == Fisher == 100"
+      },
+      {
+        "name": "fisher_geometric_mean_and_bounds",
+        "max_abs_error": 0.0,
+        "tolerance": 1e-09,
+        "passed": true,
+        "detail": "Fisher == sqrt(L*P) and stays within [min(L,P), max(L,P)]"
+      },
+      {
+        "name": "booking_window_weights_sum_to_one",
+        "max_abs_error": 0.0,
+        "tolerance": 1e-09,
+        "passed": true,
+        "detail": "T1+T7+T15+T30+T45 shares total 1.0"
+      },
+      {
+        "name": "weighted_median_scalar_identity",
+        "max_abs_error": 0.0,
+        "tolerance": 1e-09,
+        "passed": true,
+        "detail": "equal prices collapse the weighted median to that price"
+      },
+      {
+        "name": "composite_fare_homogeneity",
+        "max_abs_error": 0.0,
+        "tolerance": 1e-09,
+        "passed": true,
+        "detail": "C(alpha*P) == alpha*C(P) across booking windows"
+      }
+    ],
+    "all_passed": true
+  },
+  "holdout_week": {
+    "status": "computed",
+    "train_days": 28,
+    "holdout_days": 7,
+    "holdout_span": [
+      "2026-09-17",
+      "2026-09-23"
+    ],
+    "fitted_intercept": -33.195267,
+    "fitted_slope": 1.277773,
+    "train_r": 0.9709,
+    "holdout_r": null,
+    "holdout_mape_pct": 0.487,
+    "holdout_mae": 0.5654,
+    "holdout_max_abs_pct": 1.0958,
+    "note": "Relationship fitted on the first 28 days predicts the final 7 days; the three in-window benchmark anchors are the only external input.",
+    "holdout_r_reason": "prediction is constant across the holdout week, so correlation is undefined; the benchmark interpolant is clamped at the last anchor (mid-month of the final benchmark month) and has no variation inside the holdout week. Level agreement is reported as MAPE/MAE."
+  },
+  "lead_lag": {
+    "status": "computed",
+    "days": 35,
+    "full_window": {
+      "r_at_lag_0": 0.9569,
+      "best_lag_days": 6,
+      "r_at_best_lag": 0.9698,
+      "max_lag_searched": 7
+    },
+    "subwindows": [
+      {
+        "start": 0,
+        "end": 11,
+        "days": 11,
+        "r_at_lag_0": 0.7723,
+        "best_lag_days": 0,
+        "r_at_best_lag": 0.7723,
+        "max_lag_searched": 2
+      },
+      {
+        "start": 11,
+        "end": 22,
+        "days": 11,
+        "r_at_lag_0": 0.777,
+        "best_lag_days": 0,
+        "r_at_best_lag": 0.777,
+        "max_lag_searched": 2
+      },
+      {
+        "start": 22,
+        "end": 35,
+        "days": 13,
+        "r_at_lag_0": 0.4697,
+        "best_lag_days": -3,
+        "r_at_best_lag": 0.5584,
+        "max_lag_searched": 3
+      }
+    ],
+    "best_lags": [
+      0,
+      0,
+      -3
+    ],
+    "best_lag_spread_days": 3,
+    "best_lag_stable": false,
+    "note": "Positive lag means the APIx value at t+lag matches the benchmark at t, i.e. APIx moved first. Uses only the three in-window anchors."
+  },
+  "scope_note": "Sections beyond the invariants stress the relationship already implied by the three in-window benchmark anchors. They add no MoSPI observations and do not change r=0.9569 over n=3 overlapping months.",
+  "all_checks_passed": true
+}
