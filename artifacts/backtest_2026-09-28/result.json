@@ -1,0 +1,34 @@
+{
+  "status": "OK",
+  "reason": "",
+  "required_window_days": 30,
+  "apix_observations": 35,
+  "apix_first": "2026-08-20",
+  "apix_last": "2026-09-23",
+  "mospi_observations": 3,
+  "overlapping_months": 1,
+  "apix_mom_pct": {
+    "2026-09": 1.8823
+  },
+  "mospi_mom_pct": {
+    "2026-08": 2.4434,
+    "2026-09": 2.5618
+  },
+  "pearson_r": 0.9569,
+  "r_squared": 0.9157,
+  "rmse": 1.2077,
+  "mape": 0.9811,
+  "mean_abs_error_pct": 1.1276,
+  "best_lag_months": 0,
+  "correlation_at_best_lag": 0.9569,
+  "direction_agreement_pct": 65.71,
+  "dgca": {
+    "claim": "DGCA publishes monthly average air-fare data suitable for a back-test",
+    "verdict": "FALSE - not published in reusable form",
+    "authority": "Lok Sabha Unstarred Question 1934, answered 30 July 2026",
+    "quote": "Tariff Monitoring Unit (TMU) has been set up in DGCA which monitors airfares on selected 78 routes (72 domestic & 06 international) on random basis by using airline websites on monthly basis. The 72 domestic routes covers about 27% of the domestic traffic.",
+    "consequence": "Only aggregate percentage changes have ever been disclosed, in Parliament answers and press coverage. No dataset, no route list, and no monthly per-sector fare series is available, so a reproducible 30-day back-test against DGCA fares is impossible. An RTI request to DGCA would be the only route to that data.",
+    "substitute": "MoSPI CPI airfare sub-index, published monthly for All-India and every State, is the official price benchmark for the same quantity and is used instead."
+  },
+  "mospi_source_note": "The repository does not ship an official MoSPI series. A previous bundle labelled source=MoSPI contradicted NSO press notes (January 2024 combined general 185.5 not 185.2; January 2024 transport and communication 166.8 not 174.5; December 2025 combined general 198.0 not 195.8; January 2026 combined general 104.46 on base 2024=100, not 196.4 on base 2012=100) and was withdrawn. Rows whose source is the bare label MoSPI, or that still carry those values, are not a benchmark. A correlation against them is not emitted."
+}
