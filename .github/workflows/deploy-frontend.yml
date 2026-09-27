@@ -1,0 +1,131 @@
+name: Deploy frontend to Vercel (fallback CLI path)
+
+# ---------------------------------------------------------------------------
+# FALLBACK auto-deploy for the apix-dashboard Vercel project.
+#
+# Primary recommendation is Vercel's native Git integration (zero YAML, PR
+# previews, instant rollback) -- see docs/ci_deploy_frontend.md. That requires
+# a human to connect the GitHub repo in the Vercel dashboard, which had NOT
+# been done when this file was written (project is CLI-only, link == null).
+# This workflow closes the gap: every push to `main` that passes CI gets a
+# production deploy with no dashboard action beyond one repository secret.
+#
+# DECOMMISSION RULE: the moment Git integration is connected, DELETE this
+# file (or set `"git": {"deploymentEnabled": false}` in frontend/vercel.json
+# to hand deploys to Actions cleanly). Leaving both active double-deploys
+# every push to main. See docs/ci_deploy_frontend.md.
+#
+# Coupling: the `workflow_run` trigger below names the CI workflow in
+# .github/workflows/ci.yml ("APIx CI / Quality Gate", owned by another
+# agent). If that workflow is renamed, update the `workflows:` list here.
+# ---------------------------------------------------------------------------
+
+on:
+  workflow_run:
+    workflows: ["APIx CI / Quality Gate"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two production deploys concurrently; queue instead of cancelling
+# (cancel-in-progress: false -- killing a deploy mid-promotion is worse than
+# waiting for it).
+concurrency:
+  group: deploy-frontend-production
+  cancel-in-progress: false
+
+env:
+  # Non-secret Vercel identifiers (verified read-only 2026-09-27; also
+  # visible in the Vercel dashboard URL / API -- safe to keep in plaintext).
+  VERCEL_ORG_ID: team_FUcs8fFoJOSKweY8QRIvuKW9
+  VERCEL_PROJECT_ID: prj_57vza4o30M0yztJyP7RrzJt1UVZW
+  # Public backend origin, baked into the client bundle by Vite at BUILD
+  # time. This is shipped to every browser, so it is NOT a secret -- but it
+  # must match the Vercel project env var of the same name (production).
+  VITE_API_BASE_URL: https://api.adityaai.dev
+
+jobs:
+  deploy:
+    name: Build and deploy frontend to production
+    # Same-repo gate (public repo): a fork PR opened from a fork branch NAMED
+    # `main` also satisfies branches:[main] + conclusion==success, while
+    # head_sha points at attacker code. Requiring head_repository to BE this
+    # repo admits only pushes to upstream main -- no fork content can deploy
+    # or run under VERCEL_TOKEN.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      # Vercel CLI reads VERCEL_TOKEN directly: the secret never appears on a
+      # command line (no `ps` exposure) and GitHub masks it in logs.
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout CI-tested SHA
+        # Pinned to actions/checkout v4 (2026-07-16). Do not float tags.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # workflow_run checks out the branch tip by default, which may be
+          # NEWER than the CI-tested commit -- pin to the tested SHA instead.
+          # (On manual dispatch workflow_run is null, so fall back to tip.)
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+
+      - name: Detect frontend changes
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only HEAD~1 HEAD -- . | grep -q .; then
+            echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes under frontend/ -- skipping deploy."
+          fi
+
+      - name: Set up Node.js (for Vercel CLI)
+        if: steps.changes.outputs.frontend_changed == 'true'
+        # Pinned to actions/setup-node v5. Do not float tags.
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+
+      - name: Set up Bun (project package manager)
+        if: steps.changes.outputs.frontend_changed == 'true'
+        # Pinned to oven-sh/setup-bun v2. Do not float tags.
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+
+      - name: Install Vercel CLI
+        if: steps.changes.outputs.frontend_changed == 'true'
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel project settings and production env
+        if: steps.changes.outputs.frontend_changed == 'true'
+        # Pulls VITE_API_BASE_URL (production) from the Vercel project env
+        # into .vercel/.env.production.local. Auth comes from the VERCEL_TOKEN
+        # job env var (never a --token flag, never echoed); GitHub masks the
+        # secret value in logs automatically.
+        run: vercel pull --yes --environment=production
+
+      - name: Build production artifact
+        if: steps.changes.outputs.frontend_changed == 'true'
+        # Runs the project's Build Command (bun run build: tsc -b + vite
+        # build) in the runner. tsc is the real frontend gate: type errors
+        # fail here before anything ships. VITE_API_BASE_URL is baked in now.
+        run: vercel build --prod
+
+      - name: Deploy prebuilt artifact to production
+        if: steps.changes.outputs.frontend_changed == 'true'
+        # --prebuilt uploads ONLY .vercel/output (no second build on Vercel);
+        # --prod promotes the deployment to the production domains.
+        run: vercel deploy --prebuilt --prod

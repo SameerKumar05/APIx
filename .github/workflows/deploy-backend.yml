@@ -1,0 +1,241 @@
+name: Deploy backend to GCE (SSH + Compose)
+
+# ---------------------------------------------------------------------------
+# Production auto-deploy for the FastAPI backend on the shared GCE VM.
+#
+# Trigger: fires AFTER the "APIx CI / Quality Gate" workflow (ci.yml, owned
+# by another agent -- do NOT add a deploy job there) concludes on `main`,
+# and deploys only when CI succeeded. `workflow_dispatch` exists for manual
+# re-deploys. The frontend/Vercel workflow is owned by another agent.
+#
+# Design notes (each choice researched before writing; see docs/ci_deploy.md):
+#  1. workflow_run, not push/needs: a `push` trigger would race CI (gate and
+#     deploy as siblings), and a `needs:` job inside ci.yml is out of scope.
+#     workflow_run is read from the DEFAULT branch copy of this file and runs
+#     with secrets access, so it is hardened with branches:[main] +
+#     conclusion==success + same-repo head_repository check (fork PRs from a
+#     branch named `main` would otherwise pass the first two gates with an
+#     attacker head_sha) + checkout pinned to the CI-tested head_sha.
+#  2. GitHub-hosted runner SSHing out, not a self-hosted runner on the VM:
+#     a persistent runner on the shared box costs RAM, needs patching, and
+#     any fork-PR author could compromise it and read its secrets.
+#  3. concurrency cancel-in-progress:false -- a second push QUEUES behind the
+#     running deploy. Cancelling mid-deploy (between migrate and restart)
+#     would leave a half-deployed stack against one compose project.
+#  4. No third-party SSH/rsync actions: the runner's preinstalled
+#     openssh-client does everything, so there is zero extra supply-chain
+#     surface holding the deploy key. Only actions/checkout, pinned to a
+#     full commit SHA (immutable; tags can be moved after a compromise).
+#  5. Migration BEFORE serving: build new image -> `alembic upgrade head`
+#     in a one-off container while the OLD backend still serves -> recreate
+#     backend -> poll /health (which 503s on a stale schema) and fail loudly.
+#     Skipping the migration yields a "healthy"-looking app whose full-row
+#     reads 503 -- see tests/test_migration_drift.py.
+#
+# Never touched here: Caddy (no validate/reload/restart -- other vhosts
+# mcp./review. share it), Firecrawl/RustDesk/bun/hermes/ADC stacks
+# (all compose/docker commands are scoped with -p apix-deploy and name only
+# db/backend; never `down`, never unscoped `ps` side effects), and the VM's
+# /opt/apix/.env (gitignored, mode 600 -- rsync explicitly excludes `.env`
+# because --delete would otherwise destroy it: it is absent from the repo).
+# ---------------------------------------------------------------------------
+
+"on":
+  workflow_run:
+    workflows: ["APIx CI / Quality Gate"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# Serialize production deploys against the single compose project on the VM.
+# false = queue behind a running deploy; never kill one mid-flight.
+concurrency:
+  group: deploy-backend-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DEPLOY_PATH: /opt/apix
+  COMPOSE_PROJECT: apix-deploy
+  # Present only when a human configures it; shell defaults to 22 below.
+  SSH_PORT: ${{ vars.GCE_SSH_PORT }}
+
+jobs:
+  deploy:
+    name: rsync, migrate, restart backend
+    # Gate on CI: only deploy what CI already blessed on main.
+    # Same-repo gate (public repo): a fork PR opened from a fork branch NAMED
+    # `main` also satisfies branches:[main] + conclusion==success, while
+    # head_sha points at attacker code. Requiring head_repository to BE this
+    # repo admits only pushes to upstream main -- no fork content can deploy.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout CI-tested SHA
+        # Pinned to actions/checkout v4 (commit 2026-07-16). Do not float tags:
+        # a tag can be moved after a compromise; a full SHA is immutable.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # workflow_run checks out the branch tip by default, which may be
+          # NEWER than the CI-tested commit -- pin to the tested SHA instead.
+          # (On manual dispatch workflow_run is null, so fall back to tip.)
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+
+      - name: Detect backend changes
+        id: changes
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only HEAD~1 HEAD -- backend migrations ingestion requirements.txt Dockerfile docker-compose.yml docker-compose.deploy.yml alembic.ini pyproject.toml | grep -q .; then
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend_changed=false" >> "$GITHUB_OUTPUT"
+            echo "No backend paths changed -- skipping deploy."
+          fi
+
+      - name: Configure deploy SSH key
+        if: steps.changes.outputs.backend_changed == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          # Secrets are masked by GitHub; never echo them. printf (not echo)
+          # preserves the key bytes exactly, trailing newline included.
+          printf '%s\n' "${{ secrets.GCE_SSH_PRIVATE_KEY }}" > "$HOME/.ssh/apix_deploy_key"
+          chmod 600 "$HOME/.ssh/apix_deploy_key"
+          printf '%s\n' "${{ secrets.GCE_SSH_KNOWN_HOSTS }}" > "$HOME/.ssh/apix_known_hosts"
+          chmod 600 "$HOME/.ssh/apix_known_hosts"
+          cat >> "$HOME/.ssh/config" <<EOF
+          Host apix-gce
+            HostName ${{ secrets.GCE_SSH_HOST }}
+            User ${{ secrets.GCE_SSH_USER }}
+            Port ${SSH_PORT:-22}
+            IdentityFile ~/.ssh/apix_deploy_key
+            UserKnownHostsFile ~/.ssh/apix_known_hosts
+            StrictHostKeyChecking yes
+            BatchMode yes
+            ConnectTimeout 15
+            IdentitiesOnly yes
+          EOF
+          chmod 600 "$HOME/.ssh/config"
+          # Fail fast on auth/host-key problems before touching anything.
+          ssh apix-gce 'echo "ssh ok: $(whoami)@$(hostname)"'
+
+      - name: Sync repo to VM
+        if: steps.changes.outputs.backend_changed == 'true'
+        run: |
+          set -euo pipefail
+          # --delete makes /opt/apix mirror the repo, but excluded paths are
+          # ALSO protected from deletion by rsync. Excludes:
+          #   repo-build noise: .git .venv node_modules frontend/dist
+          #   local-only data: *.db evidence/ artifacts/
+          #   VM-survival: .env (runtime secrets, gitignored -- absent from
+          #     the checkout, so --delete would DESTROY it), backups/ (pg
+          #     dumps documented in deployment_run_2026-09-26.md section 11)
+          rsync -az --delete \
+            -e "ssh -o ConnectTimeout=15 -o BatchMode=yes" \
+            --exclude '.git/' \
+            --exclude '.venv/' \
+            --exclude 'node_modules/' \
+            --exclude 'frontend/dist/' \
+            --exclude '*.db' \
+            --exclude '*.sqlite*' \
+            --exclude 'evidence/' \
+            --exclude 'artifacts/' \
+            --exclude '.env' \
+            --exclude 'backups/' \
+            --exclude '.vercel/' \
+            ./ "apix-gce:${{ env.DEPLOY_PATH }}/"
+
+      - name: Ensure db is up and build new backend image
+        if: steps.changes.outputs.backend_changed == 'true'
+        run: |
+          set -euo pipefail
+          # Build WITHOUT starting: the old backend keeps serving until the
+          # migration below has run. `up -d db` is idempotent (no-op when
+          # the persistent database is already running).
+          ssh apix-gce bash -s <<'REMOTE_EOF'
+          set -euo pipefail
+          cd /opt/apix
+          test -f .env || { echo "FATAL: /opt/apix/.env missing -- refusing to deploy without runtime secrets"; exit 1; }
+          sudo -n true || { echo "FATAL: passwordless sudo not available for deploy user"; exit 1; }
+          sudo -n docker compose -p apix-deploy \
+            -f docker-compose.yml -f docker-compose.deploy.yml up -d db
+          sudo -n docker compose -p apix-deploy \
+            -f docker-compose.yml -f docker-compose.deploy.yml build backend
+          REMOTE_EOF
+
+      - name: Run migrations BEFORE restarting backend
+        if: steps.changes.outputs.backend_changed == 'true'
+        run: |
+          set -euo pipefail
+          # ORDERING IS THE WHOLE POINT. The app lifespan calls
+          # Base.metadata.create_all but swallows errors, and create_all
+          # never alters existing tables -- serving new code against an
+          # unmigrated schema returns 503 on every full-row read while
+          # looking deployed. So the new image migrates first, while the
+          # OLD container still serves traffic.
+          #
+          # The backend image does not ship alembic.ini/migrations/
+          # (Dockerfile copies only backend/, ingestion/, pyproject.toml),
+          # so the freshly rsync'd files are bind-mounted read-only: the
+          # migration scripts always match the code just synced.
+          # --no-deps + named project/files: touches nothing outside
+          # apix-deploy, and DATABASE_URL comes from the VM's own .env
+          # via compose (never from the repo).
+          ssh apix-gce bash -s <<'REMOTE_EOF'
+          set -euo pipefail
+          cd /opt/apix
+          sudo -n docker compose -p apix-deploy \
+            -f docker-compose.yml -f docker-compose.deploy.yml run --rm --no-deps \
+            -v /opt/apix/alembic.ini:/app/alembic.ini:ro \
+            -v /opt/apix/migrations:/app/migrations:ro \
+            backend alembic upgrade head
+          REMOTE_EOF
+
+      - name: Restart backend on migrated schema
+        if: steps.changes.outputs.backend_changed == 'true'
+        run: |
+          set -euo pipefail
+          # Image already built above; `up -d` recreates the container only.
+          # Scoped to `backend` -- db/frontend/Caddy/everything else untouched.
+          ssh apix-gce bash -s <<'REMOTE_EOF'
+          set -euo pipefail
+          cd /opt/apix
+          sudo -n docker compose -p apix-deploy \
+            -f docker-compose.yml -f docker-compose.deploy.yml up -d backend
+          REMOTE_EOF
+
+      - name: Health-gate the rollout
+        if: steps.changes.outputs.backend_changed == 'true'
+        run: |
+          set -euo pipefail
+          # /health probes the database (routes, crawler_jobs,
+          # worker_heartbeats) and returns 503 when the schema/DB is wrong,
+          # so a 200 here proves migration+restart actually converged.
+          # On timeout: dump state and FAIL LOUDLY -- never leave a red
+          # deploy looking green. Data survives in named volumes regardless.
+          ssh apix-gce bash -s <<'REMOTE_EOF'
+          set -euo pipefail
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 5 http://127.0.0.1:8000/health >/dev/null; then ok=1; break; fi
+            sleep 10
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "FATAL: backend unhealthy 5 min after restart -- failing the deploy"
+            sudo -n docker compose -p apix-deploy \
+              -f docker-compose.yml -f docker-compose.deploy.yml ps || true
+            sudo -n docker logs --tail 100 apix-backend || true
+            exit 1
+          fi
+          echo "backend healthy: $(curl -fsS --max-time 5 http://127.0.0.1:8000/health)"
+          REMOTE_EOF
