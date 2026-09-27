@@ -650,17 +650,59 @@ def calculate_route_composite_fare(
 # ---------------------------------------------------------------------------
 
 
+def calculate_true_laspeyres_index(
+    current_fares: Mapping[str, float],
+    base_fares: Mapping[str, float],
+    base_quantities: Mapping[str, float],
+    base_value: float = 100.0,
+) -> float:
+    """Computes the True Laspeyres Price Index using base-period physical quantities Q_{r,0}.
+
+    Formula:
+        I_L = Sum(P_{r,t} * Q_{r,0}) / Sum(P_{r,0} * Q_{r,0}) * Base_0
+
+    When paired with Paasche using current quantities Q_{r,t}, the Fisher Ideal
+    Price Index sqrt(I_L * I_P) satisfies Irving Fisher's Factor Reversal Test identically:
+        P_F * Q_F = (Sum P_{r,t} * Q_{r,t}) / (Sum P_{r,0} * Q_{r,0}) = V_t / V_0.
+    """
+    if not current_fares or not base_fares or not base_quantities:
+        raise ValueError("Current fares, base fares, and base quantities cannot be empty")
+
+    common_routes = [
+        r for r in current_fares if r in base_fares and r in base_quantities
+    ]
+    if not common_routes:
+        raise ValueError("No matching common routes between fares and base quantities")
+
+    numerator = sum(
+        float(current_fares[r]) * float(base_quantities[r]) for r in common_routes
+    )
+    denominator = sum(
+        float(base_fares[r]) * float(base_quantities[r]) for r in common_routes
+    )
+
+    if denominator <= 0:
+        raise ValueError("True Laspeyres denominator must be strictly positive")
+
+    return float((numerator / denominator) * base_value)
+
+
 def calculate_laspeyres_index(
     current_fares: Mapping[str, float],
     base_fares: Mapping[str, float],
     route_weights: Mapping[str, float] | None = None,
     base_value: float = 100.0,
+    base_quantities: Mapping[str, float] | None = None,
 ) -> float:
-    """Computes the National Modified Laspeyres Airfare Price Index.
+    """Computes the National Modified Laspeyres Airfare Price Index or True Laspeyres.
 
     Formula:
-        APIx_t = Sum_{r} (w_r * (P_{r,t} / P_{r,0})) * Base_0
-        where Base_0 = 100.0, and Sum(w_r) = 1.0.
+        Modified Laspeyres (statutory MoSPI CPI fixed-weight relative mean):
+            APIx_t = Sum_{r} (w_r * (P_{r,t} / P_{r,0})) * Base_0
+            where Base_0 = 100.0, and Sum(w_r) = 1.0.
+
+        True Laspeyres (when base_quantities Q_{r,0} is supplied):
+            APIx_t = Sum_{r} (P_{r,t} * Q_{r,0}) / Sum_{r} (P_{r,0} * Q_{r,0}) * Base_0
 
     Invariants:
     1. Base period prices (P_{r,t} == P_{r,0}) yield national index = 100.00.
@@ -672,12 +714,22 @@ def calculate_laspeyres_index(
         route_weights: Mapping of route identifiers to traffic weights w_r.
                        If None, equal weighting (1/N) is applied.
         base_value: Base period index value (default 100.0).
+        base_quantities: Optional base-period physical traffic quantities Q_{r,0}.
+                         If provided, computes True Laspeyres index satisfying factor reversal.
 
     Returns:
         Computed National Laspeyres Index value.
     """
     if not current_fares or not base_fares:
         raise ValueError("Current fares and base fares cannot be empty")
+
+    if base_quantities is not None:
+        return calculate_true_laspeyres_index(
+            current_fares=current_fares,
+            base_fares=base_fares,
+            base_quantities=base_quantities,
+            base_value=base_value,
+        )
 
     common_routes = [r for r in current_fares if r in base_fares]
     if not common_routes:
