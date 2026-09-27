@@ -35,3 +35,26 @@ def test_any_non_development_environment_refuses_it(environment: str) -> None:
 def test_production_accepts_a_real_key() -> None:
     cfg = Settings(ENVIRONMENT="production", INGESTION_API_KEY="a-unique-operator-key")
     assert cfg.INGESTION_API_KEY == "a-unique-operator-key"
+
+
+@pytest.mark.asyncio
+async def test_verify_ingestion_key_dependency() -> None:
+    from fastapi import HTTPException
+
+    from backend.app.core.auth import verify_ingestion_key
+
+    # Valid key accepted
+    accepted = await verify_ingestion_key(
+        x_ingestion_key=INSECURE_DEFAULT_INGESTION_KEY
+    )
+    assert accepted == INSECURE_DEFAULT_INGESTION_KEY
+
+    # Missing key rejected with 401
+    with pytest.raises(HTTPException) as exc_info:
+        await verify_ingestion_key(x_ingestion_key=None)
+    assert exc_info.value.status_code == 401
+
+    # Invalid key rejected with 401
+    with pytest.raises(HTTPException) as exc_info:
+        await verify_ingestion_key(x_ingestion_key="wrong-key")
+    assert exc_info.value.status_code == 401

@@ -180,3 +180,77 @@ def test_rate_limit_ignores_crawl_delay_when_robots_respected_is_off() -> None:
         respect_robots_txt=False,
     )
     assert _Scraper(config=cfg).effective_rate_limit_delay() == pytest.approx(2.0)
+
+
+def test_rfc9309_prefix_matching_does_not_block_substrings_in_other_segments() -> None:
+    """RFC 9309 requires prefix matching from the beginning of the URI path."""
+    policy = parse_robots_txt(
+        "https://x.test/robots.txt", "User-agent: *\nDisallow: /api/\n"
+    )
+    assert policy.can_fetch("https://x.test/api/search") is False
+    assert policy.can_fetch("https://x.test/about/api/test") is True
+
+
+def test_rfc9309_unslashed_pattern_assumes_leading_slash() -> None:
+    """RFC 9309 §2.2.2: If the path does not start with '/', '/' is assumed."""
+    policy = parse_robots_txt(
+        "https://x.test/robots.txt", "User-agent: *\nDisallow: private\n"
+    )
+    assert policy.can_fetch("https://x.test/private/data") is False
+    assert policy.can_fetch("https://x.test/public/private") is True
+
+
+def test_load_policy_strict_fail_closed_on_404() -> None:
+    from ingestion.config import IngestionConfig
+    from ingestion.robots import load_policy
+
+    class MockResp:
+        status_code = 404
+        text = "Not Found"
+
+    cfg = IngestionConfig(ingestion_mode="live", robots_strict_fail_closed=True)
+    policy = load_policy(
+        "https://fail-closed.test", cfg, fetcher=lambda url: MockResp()
+    )
+    assert policy.is_deny_all is True
+    assert policy.can_fetch("https://fail-closed.test/anything") is False
+
+
+def test_load_policy_strict_fail_closed_on_network_error() -> None:
+    from ingestion.config import IngestionConfig
+    from ingestion.robots import load_policy
+
+    def failing_fetcher(url: str):
+        raise ConnectionError("DNS resolution failed")
+
+    cfg = IngestionConfig(ingestion_mode="live", robots_strict_fail_closed=True)
+    policy = load_policy("https://fail-closed.test", cfg, fetcher=failing_fetcher)
+    assert policy.is_deny_all is True
+    assert policy.can_fetch("https://fail-closed.test/anything") is False
+
+
+def test_load_policy_permissive_on_404_when_configured() -> None:
+    from ingestion.config import IngestionConfig
+    from ingestion.robots import load_policy
+
+    class MockResp:
+        status_code = 404
+        text = "Not Found"
+
+    cfg = IngestionConfig(ingestion_mode="live", robots_strict_fail_closed=False)
+    policy = load_policy("https://permissive.test", cfg, fetcher=lambda url: MockResp())
+    assert policy.is_deny_all is False
+    assert policy.can_fetch("https://permissive.test/anything") is True
+
+
+def test_load_policy_permissive_on_network_error_when_configured() -> None:
+    from ingestion.config import IngestionConfig
+    from ingestion.robots import load_policy
+
+    def failing_fetcher(url: str):
+        raise TimeoutError("Robots fetch timed out")
+
+    cfg = IngestionConfig(ingestion_mode="live", robots_strict_fail_closed=False)
+    policy = load_policy("https://permissive.test", cfg, fetcher=failing_fetcher)
+    assert policy.is_deny_all is False
+    assert policy.can_fetch("https://permissive.test/anything") is True

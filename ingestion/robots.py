@@ -10,12 +10,15 @@ must not decide for itself that it may proceed.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 
 from ingestion.config import IngestionConfig
+
+logger = logging.getLogger("ingestion.robots")
 
 DEFAULT_USER_AGENT = "APIxBot"
 
@@ -25,19 +28,28 @@ class _Rule:
     pattern: str
     allow: bool
 
+    def __post_init__(self) -> None:
+        # RFC 9309 section 2.2.2: If the path value does not start with '/',
+        # it is assumed to have a '/' prepended.
+        if self.pattern and not self.pattern.startswith(("/", "*")):
+            self.pattern = f"/{self.pattern}"
+
     def matches(self, target: str) -> bool:
         """Only ``*`` and ``$`` are special in a robots.txt pattern.
 
         fnmatch is deliberately not used: it also treats ``?`` and ``[...]`` as
         wildcards, so a rule containing a literal query separator such as
         ``/search?`` would be silently reinterpreted as a character class.
+
+        RFC 9309 section 2.2.2 requires prefix matching starting from the
+        beginning of the URI path component.
         """
         anchored = self.pattern.endswith("$")
         body = self.pattern[:-1] if anchored else self.pattern
         regex = "".join(".*" if ch == "*" else re.escape(ch) for ch in body)
         if anchored:
             return re.fullmatch(regex, target) is not None
-        return re.search(regex, target) is not None
+        return re.match(regex, target) is not None
 
 
 @dataclass
@@ -232,12 +244,25 @@ def load_policy(
                 response = client.get(url, headers={"User-Agent": user_agent})
         status = int(getattr(response, "status_code", 0))
         if status >= 400:
-            if not getattr(config, "robots_strict_fail_closed", True) and status == 404:
+            if not getattr(config, "robots_strict_fail_closed", True) and status in (
+                404,
+                410,
+            ):
+                logger.warning(
+                    "robots.txt on %s returned HTTP %d; falling back to permissive policy because robots_strict_fail_closed=False",
+                    base_url,
+                    status,
+                )
                 return parse_robots_txt(url, "", user_agent)
             return RobotsPolicy.deny_all(url, f"robots.txt returned HTTP {status}")
         return parse_robots_txt(url, getattr(response, "text", "") or "", user_agent)
     except Exception as exc:  # noqa: BLE001
         if not getattr(config, "robots_strict_fail_closed", True):
+            logger.warning(
+                "robots.txt on %s fetch failed (%s); falling back to permissive policy because robots_strict_fail_closed=False",
+                base_url,
+                exc,
+            )
             return parse_robots_txt(url, "", user_agent)
         return RobotsPolicy.deny_all(url, f"{type(exc).__name__}: {exc}")
 
