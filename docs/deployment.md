@@ -6,15 +6,15 @@
 
 ## Table of Contents
 1. [Architecture & Deployment Topology](#1-architecture--deployment-topology)
-2. [FastAPI Backend Deployment on Render](#2-fastapi-backend-deployment-on-render)
+2. [FastAPI Backend Deployment on Google Compute Engine](#2-fastapi-backend-deployment-on-google-compute-engine)
 3. [React Dashboard Deployment on Vercel](#3-react-dashboard-deployment-on-vercel)
 4. [Distributed Scraper Automation on GitHub Actions](#4-distributed-scraper-automation-on-github-actions)
 5. [Production Proxy Pool & Scraping Infrastructure](#5-production-proxy-pool--scraping-infrastructure)
 6. [Audit Archive & Regulatory Retention (DGCA Rule 135)](#6-audit-archive--regulatory-retention-dgca-rule-135)
-7. [Nginx Reverse Proxy & WebSocket Streaming Gateway](#7-nginx-reverse-proxy--websocket-streaming-gateway)
+7. [Caddy Reverse Proxy & WebSocket Streaming Gateway](#7-caddy-reverse-proxy--websocket-streaming-gateway)
 8. [Environment Variables & Secrets Reference](#8-environment-variables--secrets-reference)
 9. [Secret Rotation & Security Protocol](#9-secret-rotation--security-protocol)
-10. [Cold-Start Mitigation & Performance Tuning](#10-cold-start-mitigation--performance-tuning)
+10. [Availability & Performance Tuning](#10-availability--performance-tuning)
 11. [Monitoring, Observability & Incident Response](#11-monitoring-observability--incident-response)
 12. [Local Containerized Deployment (Docker Compose)](#12-local-containerized-deployment-docker-compose)
 
@@ -22,7 +22,22 @@
 
 ## 1. Architecture & Deployment Topology
 
-The APIx platform is designed as a cloud-native, decoupled system distributed across resilient managed providers to achieve high availability, cost efficiency, and zero maintenance overhead:
+> **Live deployment (2026-09-26).** Frontend: `https://apix-dashboard-navy.vercel.app`
+> (Vercel) · API: `https://api.adityaai.dev` (FastAPI on a Google Compute Engine VM
+> behind Caddy). There is no Render deployment and no `onrender.com` URL anywhere in
+> this system. This guide explains the concepts — architecture, prerequisites,
+> schema/migrations, operational behaviour. The literal command sequence that produced
+> the live system is the runbook [`deployment_run_2026-09-26.md`](deployment_run_2026-09-26.md);
+> the auto-deploy wiring is [`ci_deploy.md`](ci_deploy.md) (backend) and
+> [`ci_deploy_frontend.md`](ci_deploy_frontend.md) (frontend). One source of truth per
+> concern: read the runbook for commands, this guide for understanding.
+>
+> **Data honesty (unchanged).** The dashboard is live but the fare data is synthetic —
+> there are no live airfare rows. Route and carrier weights are modelled, not published
+> DGCA figures. See the runbook §9 and `docs/data_provenance.md`.
+
+The APIx platform is a decoupled system: ingestion on ephemeral runners, the API on a
+single GCE VM behind Caddy, the dashboard on the Vercel edge network:
 
 ```mermaid
 flowchart TD
@@ -36,7 +51,7 @@ flowchart TD
         Synthetic --> Orch
     end
 
-    subgraph Backend["Render Web Service (FastAPI ASGI / Uvicorn 4 Workers)"]
+    subgraph Backend["GCE VM (FastAPI ASGI / Uvicorn behind Caddy)"]
         API["REST & WebSocket API Gateway<br/>(/api/v1)"]
         Dedup["Streaming Deduplication Engine<br/>(SHA-256 Content Hashing)"]
         Quant["Quant Econometric & Index Engine<br/>(Fisher, Laspeyres, Paasche, Anomaly Z-Score)"]
@@ -61,35 +76,33 @@ flowchart TD
 
 ---
 
-## 2. FastAPI Backend Deployment on Render
+## 2. FastAPI Backend Deployment on Google Compute Engine
 
-Render hosts the FastAPI ASGI application as an auto-scaling, managed containerized service.
+The production backend is a containerised FastAPI service on a shared Google Compute
+Engine VM (`/opt/apix`, compose project `apix-deploy`). It listens on the host loopback
+only (`127.0.0.1:8000`); Caddy terminates TLS for `https://api.adityaai.dev` and
+reverse-proxies to it. Postgres runs in the same compose project with no host port
+published, so it is unreachable from the internet. The VM is shared with unrelated
+services, so every `docker compose` invocation is scoped with `-p apix-deploy` and
+names only the services it touches — never an unscoped `down`.
 
-### 2.1 Service Configuration via Render Dashboard
-1. Log in to [Render Dashboard](https://dashboard.render.com/) and click **New +** -> **Web Service**.
-2. Connect your Git repository (`APIx`) and configure the primary service settings:
-   - **Name**: `apix-backend-api`
-   - **Region**: `Singapore (ap-southeast-1)` or `Frankfurt` (closest latency to Indian data sources).
-   - **Branch**: `main`
-   - **Root Directory**: Leave blank (repository root).
-   - **Runtime**: `Python 3` (or `Docker` using project Dockerfile).
-   - **Build Command**:
-     ```bash
-     pip install --upgrade pip && pip install -r requirements.txt
-     ```
-    - **Pre-Deploy Command** (executes schema initialization via `init_db()` calling `create_all`, then seeds DGCA baseline routes, traffic weights, and carrier market shares prior to routing live traffic. Fresh `init_db()` on an empty SQLite file creates 16 tables including `crawler_jobs` and `worker_heartbeats`; `create_all` is not a migration system; evidence: `/tmp/opencode/apix-verify/startup-empty.db`):
-     ```bash
-     python -m backend.app.db.seed
-     ```
-   - **Start Command**:
-     ```bash
-     uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT --workers 4 --proxy-headers --forwarded-allow-ips='*'
-     ```
-   - **Plan**: `Starter` ($7/mo) or `Standard` for persistent multi-core worker processing.
+### 2.1 Deploy path: CI-gated auto-deploy (primary)
 
-### 2.2 Health Check & Zero-Downtime Deploys
+Pushes to `main` deploy automatically. `.github/workflows/deploy-backend.yml` fires on
+`workflow_run` completion of the `APIx CI / Quality Gate` workflow and proceeds only
+when CI succeeded on `main` in this repository; `workflow_dispatch` allows a manual
+re-deploy. The workflow rsyncs the repo to `/opt/apix` (excluding the VM's gitignored
+`.env`, which holds the live secrets), builds the backend image, runs
+`alembic upgrade head` in a one-off container while the old backend still serves,
+recreates the backend, then polls `http://127.0.0.1:8000/health` until it returns 200.
+The full wiring is documented in [`ci_deploy.md`](ci_deploy.md). So "push to main to
+deploy" is accurate; a manual `pip install` on a server is not the production path —
+the `pip`/`uvicorn` commands in §12 are the local-development path.
+
+### 2.2 Health Check & Rollout Gating
 - **Health Check Path**: `/health`
-- Render periodically sends `GET /health` requests. When ready the response returns `200 OK` with JSON payload:
+- The deploy workflow polls `GET /health` after recreating the backend, and any monitor
+  can do the same against `https://api.adityaai.dev/health`. When ready the response returns `200 OK` with JSON payload:
   ```json
   {
     "status": "healthy",
@@ -98,15 +111,14 @@ Render hosts the FastAPI ASGI application as an auto-scaling, managed containeri
     "environment": "production"
   }
   ```
+  (plus a `timestamp`; evidence: `backend/app/main.py:175-190`).
 - Unhealthy states return 503: `Database unavailable` on unreachable DB or reachable-but-uninitialized schema, and the trigger path additionally returns 503 `No active crawler worker available` without a fresh `worker_heartbeats` lease. Trigger returns 401 without a key and 202 `QUEUED` only after a committed `crawler_jobs` row plus fresh heartbeat (evidence: `.omo/ulw-research/20260925-180203/evidence/api-8015-final.json`, `evidence/trigger-liveness-8014.json`, `evidence/trigger-idempotency-8014.json`, `tests/test_runtime_boundaries.py:93-106`).
-- If the pre-deploy migration or health check fails, Render retains the existing container and aborts deployment without downtime.
+- If the migration or the post-restart health gate fails, the deploy workflow fails loudly; the old container keeps serving until `up -d backend` recreates it, and data survives in named volumes regardless.
 
-### 2.3 Managed PostgreSQL / TimescaleDB Provisioning
-1. Click **New +** -> **PostgreSQL** on Render (or use an external TimescaleDB provider such as Timescale Cloud or Aiven).
-2. Configure database name: `apix_db`, user: `apix_user`.
-3. Copy the **Internal Database URL** for services in the same Render region:
-   - `postgres://apix_user:<password>@dpg-<id>-a/apix_db`
-4. Set `DATABASE_URL` using standard synchronous `postgresql://` URI (e.g. `postgresql://apix_user:<password>@.../apix_db`) matching SQLAlchemy 2.0 `create_engine()` connection requirements. Set `DATABASE_URL_SYNC` to the same URI.
+### 2.3 PostgreSQL / TimescaleDB in Compose
+1. Postgres runs as the `db` service of the compose project (TimescaleDB image — pinned to `timescale/timescaledb:2.14.2-pg16` in `docker-compose.deploy.yml`), with data in a named volume. On the VM it publishes no host port.
+2. Database name, user and password come from `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` (defaults `apix_user` / `apix_db`).
+3. Set `DATABASE_URL` to a synchronous `postgresql+psycopg2://` URI (e.g. `postgresql+psycopg2://apix_user:<password>@db:5432/apix_db`), matching the sync `create_engine()` in `backend/app/db/session.py:28`. `DATABASE_URL_SYNC` is read by nothing — `migrations/env.py` resolves `DATABASE_URL` only — so it is a no-op placeholder; see §8.1.
 
 ---
 
@@ -124,32 +136,27 @@ Vercel provides edge network hosting for the React 19 single-page application.
    - **Install Command**: `bun install` (or `npm install`)
 
 ### 3.2 Single Page Application (SPA) Routing Configuration
-To avoid HTTP 404 errors when users refresh deep routes (e.g. `/routes/DEL-BOM` or `/analytics`), create `frontend/vercel.json`:
+`frontend/vercel.json` contains only the SPA rewrite — no `headers` cache block, no
+`cleanUrls`, no `cname`:
 ```json
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
       "source": "/(.*)",
       "destination": "/index.html"
     }
-  ],
-  "headers": [
-    {
-      "source": "/assets/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    }
   ]
 }
 ```
+Vercel's Vite preset serves the static bundle but does not add SPA history fallback on
+its own, so without this rewrite a hard refresh (or a directly opened link) to any of
+the dashboard's 8 tabs would return 404 instead of loading `index.html` and letting
+the client-side router take over.
 
 ### 3.3 Frontend Environment Variables
 In **Project Settings** -> **Environment Variables**:
-- `VITE_API_BASE_URL`: `https://apix-backend-api.onrender.com/api/v1` (Production)
+- `VITE_API_BASE_URL`: `https://api.adityaai.dev` (Production — bare origin only; `frontend/src/services/apiClient.ts:35-46` appends `/api/v1` when the value lacks that suffix)
 - Configure preview environments to point to staging or preview backend URLs.
 
 ---
@@ -171,7 +178,7 @@ Navigate to **Settings** -> **Secrets and variables** -> **Actions** in your Git
 
 | Secret Name | Description | Example / Target |
 |:---|:---|:---|
-| `INGESTION_ENDPOINT_URL` | Production FastAPI base URL | `https://apix-backend-api.onrender.com` |
+| `INGESTION_ENDPOINT_URL` | Production FastAPI base URL | `https://api.adityaai.dev` |
 | `INGESTION_API_KEY` | Secret token matching backend config | `apix-prod-ingest-sec-9f8a7b6c5d4e3f2a1` |
 | `AMADEUS_CLIENT_ID` | Amadeus Developer API Key | Generated from Amadeus for Developers |
 | `AMADEUS_CLIENT_SECRET` | Amadeus Developer API Secret | Generated from Amadeus for Developers |
@@ -256,17 +263,20 @@ Each ingestion batch is stamped with a cryptographic SHA-256 digest:
 
 $$\text{BatchDigest} = \text{SHA256}\left(\sum_{k=1}^M \text{SHA256}(\text{fare\_id}_k \mathbin{\Vert} \text{price}_k \mathbin{\Vert} \text{carrier}_k \mathbin{\Vert} \text{timestamp}_k)\right)$$
 
-Digests are logged in the `ingestion_batches` audit table, enabling cryptographic proof of non-repudiation and chain of custody for regulatory inspection.
+Digests are logged in the `ingestion_batches` audit table, enabling cryptographic proof of non-repudiation and chain of custody for regulatory inspection. (Note: no `ingestion_batches` table exists in `backend/app/models/` as of this writing, so this digest logging is a design prescription, not verified behaviour.)
 
 ---
 
-## 7. Nginx Reverse Proxy & WebSocket Streaming Gateway
+## 7. Caddy Reverse Proxy & WebSocket Streaming Gateway
 
 ### 7.1 Real-Time Streaming Protocol Requirement
 The APIx frontend dashboard consumes high-frequency fare observations and price updates via WebSockets at `/api/v1/stream/fares` (RFC 6455). Standard HTTP reverse proxies assume short-lived request/response transactions and will terminate or buffer persistent connections unless configured with explicit protocol upgrade handshakes.
 
-### 7.2 Production Nginx Configuration
-The production Alpine Nginx web server (`Dockerfile` Stage 3) is configured as follows:
+### 7.2 Production edge: Caddy on the VM
+Public traffic terminates at Caddy on the GCE VM, which holds the Let's Encrypt certificate for `api.adityaai.dev` and reverse-proxies to the backend on the host loopback (`127.0.0.1:8000`); Postgres has no host binding. The Caddyfile lives on the VM at `/opt/caddy/Caddyfile` — it is not in this repo — and Caddy is shared with unrelated vhosts, so its config is applied with `caddy validate` then `caddy reload`, never a restart. Full detail, including the rollback procedure, is in the runbook (`deployment_run_2026-09-26.md` §§1, 10), and the loopback binding plus pinned DB image are in `docker-compose.deploy.yml:41-46`.
+
+### 7.3 Compose-local Nginx frontend server
+The config below is the compose-local frontend static server (`Dockerfile` Stage 3, `frontend` service) — it serves the SPA and proxies `/api/` for single-origin local deploys. It is not the production edge:
 
 ```nginx
 server {
@@ -304,7 +314,7 @@ server {
 }
 ```
 
-### 7.3 Technical Directives Breakdown
+### 7.4 Technical Directives Breakdown
 - `proxy_http_version 1.1`: Crucial because Nginx defaults to HTTP/1.0 for upstream connections, which strips hop-by-hop headers required for WebSocket handshakes.
 - `proxy_set_header Upgrade $http_upgrade`: Passes the client's `Upgrade: websocket` header to the ASGI backend (FastAPI/Uvicorn).
 - `proxy_set_header Connection "upgrade"`: Signals the backend that the connection is transitioning from HTTP/1.1 to full-duplex WebSocket framing.
@@ -315,7 +325,7 @@ server {
 
 ## 8. Environment Variables & Secrets Reference
 
-### 8.1 Backend Service (Render)
+### 8.1 Backend Service (GCE VM / Compose)
 
 CORS: `BACKEND_CORS_ORIGINS` defaults to `http://localhost:3000`, `http://localhost:5173`, `http://127.0.0.1:3000`, `http://127.0.0.1:5173` with credentials; evil origin `https://evil.example` is not reflected, evil preflight returns 400, and wildcard `*` raises ValidationError (evidence: `evidence/cors-and-trigger-8014.json`, `backend/app/core/config.py`). No deployment credentials are invented here.
 
@@ -323,13 +333,13 @@ CORS: `BACKEND_CORS_ORIGINS` defaults to `http://localhost:3000`, `http://localh
 |:---|:---:|:---|:---|
 | `ENVIRONMENT` | Yes | `production` | Execution environment mode (`development` \| `production` \| `testing`) |
 | `API_HOST` | Yes | `0.0.0.0` | ASGI bind host |
-| `API_PORT` | Yes | `8000` (Render overrides with `$PORT`) | ASGI bind port |
+| `API_PORT` | Yes | `8000` (served on `127.0.0.1:8000` on the VM via the deploy overlay; no `$PORT` indirection) | ASGI bind port |
 | `LOG_LEVEL` | No | `INFO` | Logging verbosity (`DEBUG` \| `INFO` \| `WARNING` \| `ERROR`) |
-| `DATABASE_URL` | Yes | `postgresql+asyncpg://user:pass@host:5432/apix_db` | Async connection string for FastAPI backend engine |
-| `DATABASE_URL_SYNC` | Yes | `postgresql://user:pass@host:5432/apix_db` | Synchronous URL for Alembic migrations & seed scripts |
+| `DATABASE_URL` | Yes | `postgresql+psycopg2://user:pass@host:5432/apix_db` | Sync connection string for the sync `create_engine` in `backend/app/db/session.py:28`. An `asyncpg` URL yields an async dialect whose first connection raises (`MissingGreenlet`), so the backend could never pass its DB health check |
+| `DATABASE_URL_SYNC` | No (unused) | `postgresql+psycopg2://user:pass@host:5432/apix_db` | **Read by nothing.** No Python code references it (`migrations/env.py:29-40` resolves `DATABASE_URL` only); kept as a no-op placeholder in compose/`.env.example`. Name the `psycopg2` driver explicitly — it is the driver the image ships (`requirements.txt`) |
 | `SECRET_KEY` | Yes | Cryptographic 64-char hex string | JWT token signing & session crypto |
 | `INGESTION_API_KEY` | Yes | `apix-prod-ingest-sec-9f8a7b6c5d4e3f2a1` | Shared secret for `/api/v1/ingestion/*` (`X-Ingestion-Key`) |
-| `BACKEND_CORS_ORIGINS` | Yes | `https://apix.vercel.app,http://localhost:3000,http://localhost:5173` | Allowed origins for browser CORS |
+| `BACKEND_CORS_ORIGINS` | Yes | `["https://apix-dashboard-navy.vercel.app"]` | JSON array of allowed browser origins. `backend/app/core/config.py:33-46` declares `list[str]`, which pydantic-settings parses as JSON — a comma-separated string parses to one invalid origin and every browser preflight fails; a literal `*` is rejected at startup |
 | `INDEX_BASE_PERIOD` | No | `2026-01` | Baseline reference period for Laspeyres/Fisher index |
 | `INDEX_BASE_VALUE` | No | `100.0` | Initial baseline index value |
 | `ANOMALY_ZSCORE_THRESHOLD` | No | `2.5` | Threshold for statistical anomaly flag |
@@ -344,13 +354,13 @@ CORS: `BACKEND_CORS_ORIGINS` defaults to `http://localhost:3000`, `http://localh
 
 | Variable | Required | Default / Example | Purpose |
 |:---|:---:|:---|:---|
-| `VITE_API_BASE_URL` | Yes | `https://apix-backend-api.onrender.com/api/v1` | Root endpoint for backend REST API |
+| `VITE_API_BASE_URL` | Yes | `https://api.adityaai.dev` | Bare backend origin; the client appends `/api/v1` (`frontend/src/services/apiClient.ts:35-46`) |
 
 ### 8.3 Ingestion Runners (GitHub Actions)
 
 | Variable / Secret | Required | Default / Example | Purpose |
 |:---|:---:|:---|:---|
-| `INGESTION_ENDPOINT_URL` | Yes | `https://apix-backend-api.onrender.com` | Target backend URL for batch delivery |
+| `INGESTION_ENDPOINT_URL` | Yes | `https://api.adityaai.dev` | Target backend URL for batch delivery |
 | `INGESTION_API_KEY` | Yes | Secret matching backend `INGESTION_API_KEY` | Auth header token `X-Ingestion-Key` |
 | `AMADEUS_CLIENT_ID` | Yes | Amadeus API key | Amadeus GDS OAuth client ID |
 | `AMADEUS_CLIENT_SECRET` | Yes | Amadeus API secret | Amadeus GDS OAuth client secret |
@@ -362,7 +372,7 @@ CORS: `BACKEND_CORS_ORIGINS` defaults to `http://localhost:3000`, `http://localh
 
 ## 9. Secret Rotation & Security Protocol
 
-To ensure continuous compliance and zero downtime, secrets must follow a defined rotation cadence.
+To ensure continuous compliance, secrets must follow a defined rotation cadence. (Note: ingestion-key rotation is not zero-downtime — see §9.2.)
 
 ### 9.1 Rotation Schedule
 - **Ingestion API Key (`INGESTION_API_KEY`)**: Rotated every 90 days.
@@ -370,30 +380,26 @@ To ensure continuous compliance and zero downtime, secrets must follow a defined
 - **Backend Application Key (`SECRET_KEY`)**: Rotated every 180 days.
 - **Database Credentials**: Rotated annually or immediately upon suspected compromise.
 
-### 9.2 Zero-Downtime `INGESTION_API_KEY` Rotation Procedure
-1. **Prepare Dual-Key Backend**:
-   - The backend `verify_ingestion_key` dependency supports validating against primary or secondary keys:
-     ```python
-     valid_keys = [settings.INGESTION_API_KEY, os.getenv("INGESTION_API_KEY_SECONDARY", "")]
-     if request_key not in valid_keys or not request_key:
-         raise HTTPException(status_code=403, detail="Invalid ingestion key")
-     ```
-2. **Generate New Key**:
+### 9.2 `INGESTION_API_KEY` Rotation Procedure
+The backend checks a single key: `verify_ingestion_key` compares `X-Ingestion-Key`
+against `settings.INGESTION_API_KEY` only (`backend/app/core/auth.py:8-24`). There is
+no `INGESTION_API_KEY_SECONDARY` dual-key support in the code, so rotation swaps the
+key rather than overlapping two valid keys — plan a minute of rejected ingestion
+traffic, not zero downtime:
+1. **Generate New Key**:
    ```bash
    python -c "import secrets; print(secrets.token_hex(32))"
    ```
-3. **Step 1: Set Secondary Key on Render**:
-   - Add `INGESTION_API_KEY_SECONDARY=<new_token>` in Render environment settings. Render redeploys seamlessly.
-4. **Step 2: Update GitHub Repository Secret**:
-   - Update `INGESTION_API_KEY` in GitHub Actions secrets with `<new_token>`.
-5. **Step 3: Trigger Scraper Smoke Test**:
-   - Run manual workflow dispatch to verify batch delivery with `<new_token>`.
-6. **Step 4: Promote New Key on Render**:
-   - Update Render `INGESTION_API_KEY=<new_token>` and remove `INGESTION_API_KEY_SECONDARY`.
+2. **Step 1: Set the new key on the VM**:
+   - Update `INGESTION_API_KEY` in `/opt/apix/.env` (mode 600) and recreate the backend (`docker compose -p apix-deploy -f docker-compose.yml -f docker-compose.deploy.yml up -d backend`). Note `ENVIRONMENT != "development"` refuses to boot with the published default key (`backend/app/core/config.py:65-81`), so never rotate *to* the default.
+3. **Step 2: Update GitHub Repository Secret**:
+   - Update `INGESTION_API_KEY` in Settings -> Secrets and variables -> Actions so the next scrape run posts with the new key.
+4. **Step 3: Trigger Scraper Smoke Test**:
+   - Run manual workflow dispatch to verify batch delivery with the new key; the old key now returns 401.
 
 ### 9.3 Emergency Compromise Runbook
 If credentials leak:
-1. Immediately change `INGESTION_API_KEY` in Render environment variables. This instantly drops active rogue connections.
+1. Immediately change `INGESTION_API_KEY` in the VM's `/opt/apix/.env` (mode 600) and recreate the backend container. This instantly drops active rogue connections.
 2. Update GitHub Secrets with the new key.
 3. Check PostgreSQL query logs for abnormal write bursts during the compromise window:
    ```sql
@@ -406,58 +412,42 @@ If credentials leak:
 
 ---
 
-## 10. Cold-Start Mitigation & Performance Tuning
+## 10. Availability & Performance Tuning
 
-### 10.1 Free/Starter Tier Spin-Down Handling
-Render starter and free-tier web services enter sleep mode after 15 minutes of inactivity. When a new request arrives, a cold start delay of 30–50 seconds may occur.
+### 10.1 No cold starts on this deployment
+Earlier revisions of this section described Render free/starter-tier sleep (15 minutes
+of inactivity, then a 30–50 s cold start) with keepalive-ping mitigations. None of
+that applies here: the backend is a persistent container on a GCE VM
+(`restart: unless-stopped` in both compose files), so there is nothing to keep warm
+and no UptimeRobot/GitHub-ping cron is needed. The rollout gate is the deploy
+workflow's post-restart `/health` poll (§2.2), which fails the deploy loudly instead
+of leaving a half-migrated stack serving.
 
-#### Mitigation Architecture:
-1. **Automated Ping Cron**:
-   Configure a periodic lightweight HTTP ping every 10 minutes to `/health`.
-   - **Using UptimeRobot / BetterStack**: Create a free HTTPS monitor targeting `https://apix-backend-api.onrender.com/health` with a 5-minute interval.
-   - **Using GitHub Actions Scheduled Ping** (optional backup):
-     ```yaml
-     name: Keepalive Ping
-     on:
-       schedule:
-         - cron: "*/14 * * * *"
-     jobs:
-       ping:
-         runs-on: ubuntu-latest
-         steps:
-           - run: curl -sf https://apix-backend-api.onrender.com/health || true
-     ```
-2. **Pre-warmed Engine State**:
-   During FastAPI startup lifespan, pre-load route weights and DGCA baseline coefficients into memory:
-   ```python
-   @asynccontextmanager
-   async def lifespan(app: FastAPI):
-       # Pre-load static weight dictionaries and route maps
-       app.state.routes = load_dgca_routes()
-       app.state.weights = load_traffic_weights()
-       yield
-   ```
-3. **Database Connection Pool Tuning**:
-   Configure SQLAlchemy connection pooling to handle reconnection gracefully:
-   ```python
-   engine = create_engine(
-       DATABASE_URL,
-       pool_size=10,
-       max_overflow=20,
-       pool_timeout=30,
-       pool_recycle=1800,
-       pool_pre_ping=True,  # Discards stale disconnected sockets
-   )
-   ```
+### 10.2 Database Connection Pool Tuning
+The app sets `pool_pre_ping=True` so stale sockets are discarded
+(`backend/app/db/session.py:28-33`). If the pool needs further tuning under load, the
+knobs are the standard `create_engine` arguments:
+```python
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=30,
+    pool_recycle=1800,
+    pool_pre_ping=True,  # Discards stale disconnected sockets
+)
+```
 
 ---
 
 ## 11. Monitoring, Observability & Incident Response
 
 ### 11.1 Health & Diagnostics Endpoints
-- `GET /health`: Liveness probe verifying process runtime and UTC clock.
-- `GET /`: Service metadata, API documentation links, and operational status.
-- `GET /api/v1/system/status`: Database connectivity, table row counts, latest ingestion timestamp, and quant index readiness.
+- `GET /health`: Readiness probe. Runs `probe_database_readiness` against `routes`, `crawler_jobs` and `worker_heartbeats` and returns 503 `Database unavailable` when the DB is unreachable or the schema is uninitialised (`backend/app/main.py:175-183`). This is what the deploy health-gate polls — not a process-clock check.
+- `GET /api/v1/health`: Richer API health under the versioned router — the same DB probe plus `records_ingested_today`, `active_scrapers` and `last_sync_timestamp` (`backend/app/api/v1/api.py:24-69`).
+- `GET /`: Service metadata with the versioned docs links (`backend/app/main.py:199-207`).
+- Interactive docs live at `/api/v1/docs` (and `/api/v1/redoc`); bare `/docs` 404s (`backend/app/main.py:38`).
+- Telemetry: `GET /api/v1/ingestion/telemetry` (also mounted at `/api/v1/telemetry/telemetry`) for crawler and proxy-pool health; `POST /api/v1/ingestion/trigger` (also `/api/v1/telemetry/trigger`) enqueues a scrape run, gated on `X-Ingestion-Key`. There is no `GET /api/v1/system/status`.
 
 ### 11.2 Logging Standards
 All backend and ingestion logs output formatted structured logs with ISO 8601 timestamps, log level, correlation IDs, and context:
@@ -508,14 +498,18 @@ docker compose logs -f
 ```
 
 ### 12.2 Exposed Services
-- **FastAPI API & Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **FastAPI API & Docs**: [http://localhost:8000/api/v1/docs](http://localhost:8000/api/v1/docs)
 - **Frontend SPA Dashboard**: [http://localhost:3000](http://localhost:3000)
 - **PostgreSQL Database**: `localhost:5432` (`user: apix_user`, `password: apix_password`, `database: apix_db`)
 
 ### 12.3 Executing Migrations & Seeding in Docker
 ```bash
-# Run database migrations
-docker compose exec backend alembic upgrade head
+# Run database migrations from the repo root, pointed at the Compose DB.
+# (The backend image ships only backend/, ingestion/ and pyproject.toml
+# — Dockerfile:36-39 — so alembic.ini/migrations/ are not inside the
+# container; the production deploy bind-mounts them for the same reason.
+# See .github/workflows/deploy-backend.yml.)
+DATABASE_URL="postgresql+psycopg2://apix_user:apix_password@localhost:5432/apix_db" alembic upgrade head
 
 # Seed DGCA baseline routes and traffic weights
 docker compose exec backend python -m backend.app.db.seed
@@ -538,7 +532,7 @@ docker compose run --rm --no-deps scheduler python -m ingestion.scheduler --dry-
 The profile-gated `scraper` service is an on-demand orchestrator run. It is not the daily schedule. Leave it off when the scheduler service is up.
 
 ### 12.5 Crawler Worker Service
-The Compose `apix-worker` service runs `command: ["python", "-m", "ingestion.worker"]` (`docker-compose.yml`) and consumes the durable `crawler_jobs` queue with `worker_heartbeats` leases (`ingestion/worker.py`). Run standalone as `python -m ingestion.worker`. The API trigger requires this worker: without a fresh heartbeat it returns 503, and 202 `QUEUED` follows a committed job row (evidence: `evidence/trigger-liveness-8014.json`, `evidence/trigger-idempotency-8014.json`). Live OTA execution through the worker is unverified (synthetic-mode run only). Retention cleanup uses `synchronize_session="fetch"` (evidence: `.debug-journal.md` 2026-09-25T14:40Z). Current isolated suite is 226 passed with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`; older counts are historical. **Live scraping: what is real and what is blocked.** Genuine data does arrive. Playwright captures `https://www.spicejet.com/api/v3/search/availability` (HTTP 200, 17777 bytes, `data.trips[]`) and flight identity extracts unambiguously (`SG 815`, DEL 09:50 to BOM 12:25). Two blockers stop a live fare from being persisted. First, client-side bot defence: `makemytrip.com` resolves and serves pages from this host, but Akamai rejects the request. Measured three ways: stock `curl` gets `403`, Playwright's bundled Chromium is reset with `net::ERR_HTTP2_PROTOCOL_ERROR`, and driving the distro build at `/usr/bin/chromium` returned HTTP 200 with 500864 bytes of real page content. The scraper now prefers a system Chromium via `resolve_launch_kwargs` with a `playwright_browser_executable` override, but that unblock is not durable: retested under repetition the same client returned 0 of 3 successes, so sustained probing tips the egress IP into a temporary Akamai throttle. Separately, `api.spicejet.com` is not blocked at all, it is NXDOMAIN on both 1.1.1.1 and 8.8.8.8, meaning the hostname does not exist; no provider change can make a nonexistent hostname resolve. Second, SpiceJet publishes no structured fare field; the price is embedded in an opaque key decoding to fragments such as `USAV~5511~~0~665~` and `X!0:48004:1004:854:5994:2364:1524:895:280`, and the mapping is undocumented, so no fare was guessed. Separately, a critical provenance defect was found and fixed: `amadeus.py` labelled generated mock records `is_synthetic=False`, so a live run would have persisted invented fares as real and earned a false LIVE badge. Provenance now follows the payload, and `scripts/audit_provenance.py` fails closed if any row claims to be live without corroborating telemetry, a scraping run, proxy evidence and scrape-time diversity (evidence: `evidence/live-ingestion-verification.json`, `evidence/provenance-audit.json`). Preserved limitations include sparse FKs, role-separation and false-success residuals, unknown-route 200 behavior, and duplicate WebSocket mounts. **CRITICAL, partially fixed: `GET /api/v1/indices/routes` served fabricated airfares as measured data.** **Fixed:** the swallowed `except Exception: pass` that returned the entire hardcoded seed list on any failure is replaced by a 503 `Database unavailable`, and a reachable database with no active routes now reports zero coverage instead of seven invented corridors. Verified at runtime on a current-source instance and locked by two regression tests (`test_routes_overview_does_not_fabricate_when_database_is_unavailable`, `test_routes_overview_reports_no_coverage_instead_of_seeded_corridors`). **Still open:** a route that has no `RouteDailyIndex` is still replaced by its hardcoded `DOMESTIC_ROUTES_SEED` entry or an invented `avg_fare_inr=5000.0` default, and `/api/v1/indices/routes/{route_code}/history` applies the same seed fallback including an invented base index of 108.0. On a sparse database 7 of 7 served routes matched the hardcoded literals exactly, so the whole response was invented. That part needs a product decision, because `RouteOverviewItem` requires `current_index` and `avg_fare_inr` (evidence: `evidence/indices-routes-fabricated-fares.json`). The frontend was re-measured directly against the frozen production build (24 of 24 tab renders, zero console errors, focus contrast minimum 17.93:1), which is first-party measurement rather than an independent reviewer pass, so no independent visual PASS or Lighthouse result is claimed.
+The Compose `apix-worker` service runs `command: ["python", "-m", "ingestion.worker"]` (`docker-compose.yml`) and consumes the durable `crawler_jobs` queue with `worker_heartbeats` leases (`ingestion/worker.py`). Run standalone as `python -m ingestion.worker`. The API trigger requires this worker: without a fresh heartbeat it returns 503, and 202 `QUEUED` follows a committed job row (evidence: `evidence/trigger-liveness-8014.json`, `evidence/trigger-idempotency-8014.json`). Live OTA execution through the worker is unverified (synthetic-mode run only). Retention cleanup uses `synchronize_session="fetch"` (evidence: `.debug-journal.md` 2026-09-25T14:40Z). Current suite is 388 passed (`pytest -q`, matching the README badge); older 226 counts are historical. **Live scraping: what is real and what is blocked.** Genuine data does arrive. Playwright captures `https://www.spicejet.com/api/v3/search/availability` (HTTP 200, 17777 bytes, `data.trips[]`) and flight identity extracts unambiguously (`SG 815`, DEL 09:50 to BOM 12:25). Two blockers stop a live fare from being persisted. First, client-side bot defence: `makemytrip.com` resolves and serves pages from this host, but Akamai rejects the request. Measured three ways: stock `curl` gets `403`, Playwright's bundled Chromium is reset with `net::ERR_HTTP2_PROTOCOL_ERROR`, and driving the distro build at `/usr/bin/chromium` returned HTTP 200 with 500864 bytes of real page content. The scraper now prefers a system Chromium via `resolve_launch_kwargs` with a `playwright_browser_executable` override, but that unblock is not durable: retested under repetition the same client returned 0 of 3 successes, so sustained probing tips the egress IP into a temporary Akamai throttle. Separately, `api.spicejet.com` is not blocked at all, it is NXDOMAIN on both 1.1.1.1 and 8.8.8.8, meaning the hostname does not exist; no provider change can make a nonexistent hostname resolve. Second, SpiceJet publishes no structured fare field; the price is embedded in an opaque key decoding to fragments such as `USAV~5511~~0~665~` and `X!0:48004:1004:854:5994:2364:1524:895:280`, and the mapping is undocumented, so no fare was guessed. Separately, a critical provenance defect was found and fixed: `amadeus.py` labelled generated mock records `is_synthetic=False`, so a live run would have persisted invented fares as real and earned a false LIVE badge. Provenance now follows the payload, and `scripts/audit_provenance.py` fails closed if any row claims to be live without corroborating telemetry, a scraping run, proxy evidence and scrape-time diversity (evidence: `evidence/live-ingestion-verification.json`, `evidence/provenance-audit.json`). Preserved limitations include sparse FKs, role-separation and false-success residuals, unknown-route 200 behavior, and duplicate WebSocket mounts. **CRITICAL, partially fixed: `GET /api/v1/indices/routes` served fabricated airfares as measured data.** **Fixed:** the swallowed `except Exception: pass` that returned the entire hardcoded seed list on any failure is replaced by a 503 `Database unavailable`, and a reachable database with no active routes now reports zero coverage instead of seven invented corridors. Verified at runtime on a current-source instance and locked by two regression tests (`test_routes_overview_does_not_fabricate_when_database_is_unavailable`, `test_routes_overview_reports_no_coverage_instead_of_seeded_corridors`). **Still open:** a route that has no `RouteDailyIndex` is still replaced by its hardcoded `DOMESTIC_ROUTES_SEED` entry or an invented `avg_fare_inr=5000.0` default, and `/api/v1/indices/routes/{route_code}/history` applies the same seed fallback including an invented base index of 108.0. On a sparse database 7 of 7 served routes matched the hardcoded literals exactly, so the whole response was invented. That part needs a product decision, because `RouteOverviewItem` requires `current_index` and `avg_fare_inr` (evidence: `evidence/indices-routes-fabricated-fares.json`). The frontend was re-measured directly against the frozen production build (24 of 24 tab renders, zero console errors, focus contrast minimum 17.93:1), which is first-party measurement rather than an independent reviewer pass, so no independent visual PASS or Lighthouse result is claimed.
 
 ---
 *Maintained by APIx Architecture & Engineering Operations (SIH 2026)*
@@ -559,7 +553,7 @@ This is a mitigation, not a guarantee. The upstream edge can still throttle the 
 tables that already exist. Any deployment against an existing database must therefore run the migration chain first:
 
 ```bash
-DATABASE_URL="postgresql://..." alembic upgrade head
+DATABASE_URL="postgresql+psycopg2://..." alembic upgrade head
 ```
 
 `migrations/env.py` resolves the URL from the `DATABASE_URL` environment variable and falls back to the app's

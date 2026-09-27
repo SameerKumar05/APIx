@@ -96,8 +96,10 @@ Advance purchase windows capture the steep non-linear price trajectory character
 - **$T+1$ (Last-Minute / Emergency Window, Weight: $0.20$):** Departure within 24–48 hours. Captures severe surge pricing, supply inelasticity, and distress travel ($\times 1.80 - \times 2.50$ baseline multiplier; calibrated default: $\times 2.15$).
 - **$T+7$ (Near-Term / Corporate Window, Weight: $0.32$):** Departure in 4–7 days. Captures short-notice business travel, commercial urgency, and corporate fare adjustments ($\times 1.30 - \times 1.65$ baseline multiplier; calibrated default: $\times 1.45$).
 - **$T+15$ (Medium-Term / Standard Window, Weight: $0.26$):** Departure in 8–15 days. Reflects planned personal and semi-flexible business travel ($\times 1.10 - \times 1.30$ baseline multiplier; calibrated default: $\times 1.18$).
-- **$T+30$ (Baseline / Advance Leisure Window, Weight: $0.14$)
-- **$T+45$ (Far-Planned / Corporate Window, Weight: $0.08$):** Departure in 16–30 days. Reflects base fare bucket inventory and early-bird leisure purchases used for Laspeyres/Paasche base price indexing ($\times 0.95 - \times 1.05$ baseline multiplier; calibrated default: $\times 1.00$).
+- **$T+30$ (Baseline / Advance Leisure Window, Weight: $0.14$):** Departure in 16–30 days. Reflects base fare bucket inventory and early-bird leisure purchases used for Laspeyres/Paasche base price indexing ($\times 0.95 - \times 1.05$ baseline multiplier; calibrated default: $\times 1.00$).
+- **$T+45$ (Far-Planned / Corporate Window, Weight: $0.08$):** Departure in 31–45 days (45 days advance). Reflects planned early purchase and far-planned corporate travel policy inventory ($\times 0.92 - \times 1.02$ baseline multiplier; calibrated default: $\times 0.96$).
+
+_Basis: the T+30 description is restored from the sibling-row pattern and `ingestion/config.py:155-161` (1-month advance booking, baseline index fare, $\times 0.95 - \times 1.05$, default $\times 1.00$) — the "16–30 days" text previously attached to T+45 belongs to T+30. T+45 is 45 days advance per `ingestion/config.py:163-169` (6-week advance, $\times 0.92 - \times 1.02$, default $\times 0.96$)._
 
 ---
 
@@ -108,7 +110,7 @@ The ingestion architecture coordinates durable queue dispatch, asynchronous sche
 ```mermaid
 flowchart TD
     subgraph Scheduling["Distributed Task Scheduler (scheduler.py)"]
-        APS["AsyncIOScheduler (APScheduler)<br/>• 40 Pre-registered Slot Jobs<br/>• Interval (6h) / Cron (0 2,8,14,20 * * *)<br/>• Production Jitter U(5s, 15s)<br/>• Ad-hoc Trigger APIs"]
+        APS["AsyncIOScheduler (APScheduler)<br/>• 50 Pre-registered Slot Jobs<br/>• Interval (6h) / Cron (0 2,8,14,20 * * *)<br/>• Production Jitter U(5s, 15s)<br/>• Ad-hoc Trigger APIs"]
     end
 
     subgraph ProxyLayer["Proxy Management (proxy_pool.py)"]
@@ -323,7 +325,7 @@ $$\text{BaseFare}_{r, w} = \left[ 2200 + (\text{Distance}_{r,\text{km}} \times 3
 
 Where:
 - $\text{Distance}_{r,\text{km}}$: Great-circle route corridor distance (e.g., DEL-BOM: 1,148 km; DEL-BLR: 1,740 km).
-- $M_{w}$: Advance purchase window multiplier ($T+1: 2.15, T+7: 1.45, T+15: 1.18, T+30: 1.00$).
+- $M_{w}$: Advance purchase window multiplier ($T+1: 2.15, T+7: 1.45, T+15: 1.18, T+30: 1.00, T+45: 0.96$).
 - $F_{\text{airline}}$: Calibrated airline factor based on fleet operating costs ($6\text{E}: 1.00, \text{AI}: 1.18, \text{IX}: 0.98, \text{QP}: 0.96, \text{SG}: 0.95$).
 - $\epsilon \sim \mathcal{N}(0, 0.04)$: Deterministic Gaussian market spread.
 
@@ -331,14 +333,15 @@ Where:
 
 ### 8. Distributed Task Scheduler (`ingestion/scheduler.py`) and Standalone Worker (`ingestion/worker.py`)
 
-The distributed scheduler is built upon `APScheduler` (`AsyncIOScheduler`), operating as an asynchronous daemon capable of running standalone or embedded within the APIx backend process. For trigger truth, the durable path is authoritative: the standalone worker `python -m ingestion.worker` polls `crawler_jobs` with atomic claims, holds `worker_heartbeats` leases, sweeps stale leases, and dispatches via `IngestionClient`. Current isolated suite covering this path is 226 passed with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`; older counts are historical.
+The distributed scheduler is built upon `APScheduler` (`AsyncIOScheduler`), operating as an asynchronous daemon capable of running standalone or embedded within the APIx backend process. For trigger truth, the durable path is authoritative: the standalone worker `python -m ingestion.worker` polls `crawler_jobs` with atomic claims, holds `worker_heartbeats` leases, sweeps stale leases, and dispatches via `IngestionClient`. Current suite covering this path is 388 passed with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`; older counts are historical.
 
 #### 8.1 Key Capabilities & Lifecycle Architecture
 - **Slot Job Registration:** Pre-registers all 50 discrete route-window combinations as individual jobs with unique deterministic identifiers (`slot_DEL_BOM_T+1`, `slot_BOM_DEL_T+7`, etc.).
+- **Stale source comments (report-only, not fixed here):** the scheduler's own docstrings in `ingestion/scheduler.py:4,161,192,221,516` still say "40"/"4 horizons". Those are source files and out of scope for this docs pass; the runtime count is derived from `BOOKING_WINDOWS` (`ingestion/scheduler.py:175`), i.e. 10 routes × 5 windows = 50.
 - **Interval & Cron Triggers:**
   - Standard recurring sweep: Dispatches scheduled sweeps every 6 hours (`interval_minutes=360`).
   - Off-peak cron sweeps: Configurable via standard cron expressions (`0 2,8,14,20 * * *`).
-- **Jittered Staggering:** Staggers slot execution with randomized delays ($\mathcal{U}(5\text{s}, 15\text{s})$) to avoid bursting all 40 queries simultaneously.
+- **Jittered Staggering:** Staggers slot execution with randomized delays ($\mathcal{U}(5\text{s}, 15\text{s})$) to avoid bursting all 50 queries simultaneously.
 - **Normalization Engine:** Automatically maps legacy alias strings to canonical codes (e.g., `'1-3d'`, `'1d'`, `'t1'` $\to$ `'T+1'`; `'4-7d'` $\to$ `'T+7'`; `'DEL_BOM'` $\to$ `'DEL-BOM'`).
 - **Thread Sandboxing:** Bridges synchronous Playwright/HTTP scraping operations into the asynchronous event loop via `asyncio.to_thread()`, ensuring network blocking does not stall FastAPI API workers or WebSocket telemetry broadcasters.
 - **Ad-Hoc Dispatches:**
@@ -356,7 +359,7 @@ Captures execution diagnostics for every individual slot scrape attempt:
 - `id`: Primary key (`Integer`, autoincrement).
 - `crawler_name`: Scraper identifier (`makemytrip`, `easemytrip`, `spicejet`, `amadeus`, `synthetic`).
 - `route`: Route corridor string (e.g. `DEL-BOM`).
-- `booking_window`: Window code (`T+1`, `T+7`, `T+15`, `T+30`).
+- `booking_window`: Window code (`T+1`, `T+7`, `T+15`, `T+30`, `T+45`).
 - `status`: Execution status (`SUCCESS`, `FAILED`, `PARTIAL`, `TIMEOUT`, `fallback_amadeus`, `fallback_synthetic`).
 - `response_time_ms`: Total scraping round-trip duration in milliseconds.
 - `proxy_ip`: IP address or host of the proxy server utilized.

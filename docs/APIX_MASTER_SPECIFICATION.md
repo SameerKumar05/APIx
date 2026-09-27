@@ -124,7 +124,7 @@ flowchart TD
     META <--> GAP
 
     subgraph DeliveryLayer ["API & User Interface Services"]
-        REST["FastAPI REST Endpoints<br/>(/api/v1/econometrics/*, /api/v1/index)"]
+        REST["FastAPI REST Endpoints<br/>(/api/v1/econometrics/*, /api/v1/indices/*)"]
         WS["WebSocket Streaming Server<br/>(WS /api/v1/stream/fares)"]
         DASH["React / Vite Management Dashboard<br/>(Interactive Heatmaps, Alert Dockets)"]
         NGINX["Nginx Alpine Edge Proxy<br/>(WebSocket Upgrade Headers)"]
@@ -552,7 +552,7 @@ erDiagram
 
 ### 14 Production Table Catalogue (plus 2 queue tables = 16 on fresh startup):
 1. `routes`: Domestic city-pair corridors with DGCA base weights, passenger volumes, and airport identifiers.
-2. `airlines`: Scheduled air carriers with DGCA domestic market shares (IndiGo 62%, Air India 20%, Air India Express 8%, Akasa 5%, SpiceJet 4%).
+2. `airlines`: Scheduled air carriers with modelled market shares (IndiGo 62%, Air India 20%, Air India Express 8%, Akasa 5%, SpiceJet 4%, summing to 99) as seeded in `backend/app/db/seed.py:107-139`. **Unresolved code inconsistency:** `backend/app/services/index_engine.py:28-34` and `ingestion/config.py:175-212` use a different share set (0.60/0.15/0.10/0.10/0.05, summing to 1.00) whose comment claims to mirror the seed. Both sets are recorded here without reconciliation.
 3. `raw_fares`: Deduplicated flight fare quotes partitioned by `recorded_at` with deterministic `hash_id`.
 4. `route_daily_indices`: Daily route-level Fisher, Paasche, and Laspeyres price indices.
 5. `national_daily_indices`: Composite national airfare price index combining routes via DGCA traffic weights.
@@ -592,8 +592,8 @@ APIx provides high-performance asynchronous REST endpoints implemented via **Fas
 | **GET** | `/api/v1/econometrics/elasticity` | Booking horizon elasticity curves ($T+1 \to T+30$) | `route_code` |
 | **GET** | `/api/v1/econometrics/dgca-violations` | Statutory Rule 135 price surges and evidence | `severity`, `min_surge_multiple` |
 | **GET** | `/api/v1/anomalies/dgca-violations` | Canonical alias for regulatory violations | `status`, `route_code` |
-| **GET** | `/api/v1/index` | Current and historical composite national airfare index | `days`, `base_period` |
-| **GET** | `/api/v1/routes` | Route catalogue, current medians, and corridor weights | None |
+| **GET** | `/api/v1/indices/national/latest` | Current composite national airfare index | None |
+| **GET** | `/api/v1/indices/routes` | Route catalogue, current medians, and corridor weights | None |
 | **GET** | `/api/v1/analytics/arbitrage` | OTA vs Airline Direct price spread opportunities | `min_spread_inr` |
 | **POST** | `/api/v1/ingestion/batch` | Authenticated batch fare ingestion from scrapers | Header `X-Ingestion-Key` |
 
@@ -734,9 +734,9 @@ All configuration settings are centralized via Pydantic `BaseSettings`:
 - `INGESTION_API_KEY`: Authentication secret for batch scraping ingestion.
 - `BACKEND_CORS_ORIGINS`: Permitted CORS origin list (defaulting to dashboard domains).
 - `AMADEUS_CLIENT_ID` & `AMADEUS_CLIENT_SECRET`: OAuth credentials for Tier 2 GDS API.
-- `INDEX_BASE_PERIOD`: Economic base comparison quarter (default `"2024-Q1"`).
+- `INDEX_BASE_PERIOD`: Economic base comparison period (default `"2026-01"`).
 - `INDEX_BASE_VALUE`: Baseline index reference point (default `100.0`).
-- `ANOMALY_ZSCORE_THRESHOLD`: Statistical surge threshold (default `3.0`).
+- `ANOMALY_ZSCORE_THRESHOLD`: Statistical surge threshold (default `2.5`).
 
 ---
 
@@ -745,7 +745,7 @@ All configuration settings are centralized via Pydantic `BaseSettings`:
 APIx has completed rigorous multi-stage verification across empirical econometric suites, database relational invariants, deduplication performance, and API route contracts.
 
 ```mermaid
-pie title APIx Test Suite Breakdown (Current 226 Passing; Historical Split Below Was 188)
+pie title APIx Test Suite Breakdown (Current 388 Passing; Historical Split Below Was 188)
     "Econometrics & Math Invariants" : 65
     "API & Router Contracts" : 51
     "Ingestion, Crawlers & Repo" : 39
@@ -769,7 +769,7 @@ Current: **388 passed** with two Starlette TestClient deprecation warnings on `/
 | `scripts/test_api_endpoints.py` | Core FastAPI routers, index endpoints, route catalogue | **PASSED** | **13 / 13 passed** |
 | `scripts/test_api_cycle3.py` | Streaming telemetry, proxy health, batch ingestion | **PASSED** | **16 / 16 passed** |
 | `scripts/test_api_cycle4.py` | Econometric indices, CPI gap, elasticity, DGCA violations | **PASSED** | **22 / 22 passed** |
-| **Combined Verification** | **All Invariant Suites & Unit Suites** | **PASSED** | **23 / 23 Invariant Steps \| 188 Unit Tests** |
+| **Combined Verification** | **All Invariant Suites & Unit Suites** | **HISTORICAL** | **23 / 23 Invariant Steps \| 188 Unit Tests (superseded; the 23/23 harness is historical per §1)** |
 
 ---
 

@@ -304,7 +304,7 @@ For empirical discrete horizon transitions between $h_1$ and $h_2$ (e.g., $T+1 \
 $$E_{\text{arc}}(h_1, h_2) = \frac{\frac{Q(h_2) - Q(h_1)}{(Q(h_1) + Q(h_2)) / 2}}{\frac{P(h_2) - P(h_1)}{(P(h_1) + P(h_2)) / 2}} = \frac{Q(h_2) - Q(h_1)}{P(h_2) - P(h_1)} \cdot \frac{P(h_1) + P(h_2)}{Q(h_1) + Q(h_2)}$$
 
 #### 5.4 Calibrated Empirical Elasticity Profile across Horizons
-Empirical estimation against DGCA quarterly passenger traffic and APIx multi-source transaction scrapes yields the following profile:
+The model's calibrated prior profile (assumed, not estimated from observed demand — see the note below the table):
 
 | Booking Horizon ($h$) | Customer Segment | Dominant Motive | Calibrated $E_d$ Range | Nominal $|E_d|$ | Elasticity Regime |
 |:---|:---|:---|:---:|:---:|:---|
@@ -312,6 +312,8 @@ Empirical estimation against DGCA quarterly passenger traffic and APIx multi-sou
 | **$T+7$ (Day 7)** | Near-term Business | Planned Meetings | $-0.55 \text{ to } -0.75$ | **$0.65$** | **Moderately Inelastic** ($0.5 \le |E_d| < 0.8$) |
 | **$T+15$ (Day 15)** | Standard Planned | Mixed Business/Personal | $-0.85 \text{ to } -1.15$ | **$1.00$** | **Unit Elastic Boundary** ($0.8 \le |E_d| \le 1.2$) |
 | **$T+30$ (Day 30)** | Leisure / Holiday | Early Vacation / Family | $-1.35 \text{ to } -1.80$ | **$1.55$** | **Highly Elastic** ($|E_d| > 1.2$) |
+
+_Model assumption, not an empirical finding: the $E_d$ ranges above are calibrated priors — no passenger-quantity (demand) data exists anywhere in this system (volumes are modelled weights, and no `route_elasticity` row exists in production per issue #1), so arc elasticities cannot have been estimated from observation. The **sign/direction** is consistent with live seeded fares, which fall monotonically with advance days (production lead-time curve for DEL-BOM, verified 2026-09-27: avg ₹10,814 at T+1 → ₹4,858 at T+45, i.e. fares rise toward departure as the model asserts). The **magnitudes** are assumed._
 
 #### 5.5 Lead-Time Elasticity Transition Function & Monotonicity Proof
 APIx models continuous elasticity $E_d(h)$ for arbitrary lead days $h \in [1, 30]$ using a calibrated logistic sigmoid curve:
@@ -372,7 +374,9 @@ $$\sum_h w_h = 0.20 + 0.32 + 0.26 + 0.14 + 0.08 = 1.000$$
 
 The city-pair weights in `data/dgca_passenger_traffic_weights.csv` and the corridor literals in `backend/app/db/seed.py` are modelled. They are the output of `ingestion/loaders/dgca_traffic_loader.py::_generate_builtin_dgca_series` (base volume times a seasonal factor), not a DGCA download. The file declares `provenance=generated`. Do not describe them as official DGCA market share.
 
-The bundled CPI file `data/mospi_cpi_historical_2024_2026.json` is not an official series. It was withdrawn because its values contradicted NSO press notes. A comparison against it is not a MoSPI benchmark.
+The bundled CPI file `data/mospi_cpi_historical_2024_2026.json` is not an official series. It was withdrawn because its values contradicted NSO press notes (`data/mospi_cpi_historical_2024_2026.json`: `"status": "withdrawn"`; readers must not plot its rows as official per `backend/app/services/mospi_provenance.py`). A comparison against it is MODELLED, not a MoSPI benchmark — and the withdrawn series must never be presented as current.
+
+That framing covers all of §6 below: the 38-day lead, the $r = 0.89$ cross-correlation peak, and the VAR Granger-causality figures (§6.3–§6.4) are modelled calibrations, not findings validated against an official MoSPI release. Live, there is no official MoSPI side to compare against — the production indices endpoint returns `"mospi_cpi": null` (verified 2026-09-27). Any future claim of a measured APIx-vs-MoSPI gap requires 30 days of Fisher index history (see `scripts/backtest_vs_mospi.py`, which exits non-zero until then).
 
 ### 6. MoSPI CPI Transport Sub-Index vs APIx Divergence Tracking
 
@@ -575,7 +579,7 @@ CREATE TABLE dgca_violations (
     airline_code VARCHAR(10) NOT NULL,
     flight_number VARCHAR(20) NOT NULL,
     flight_date DATE NOT NULL,
-    window VARCHAR(10) NOT NULL,              -- 'T+1', 'T+7', 'T+15', 'T+30'
+    window VARCHAR(10) NOT NULL,              -- 'T+1', 'T+7', 'T+15', 'T+30', 'T+45'
     fare_inr FLOAT NOT NULL,
     median_baseline_fare FLOAT NOT NULL,
     surge_multiple FLOAT NOT NULL,            -- fare_inr / median_baseline_fare
@@ -588,6 +592,8 @@ CREATE INDEX ix_dgca_violations_route ON dgca_violations (route_code);
 CREATE INDEX ix_dgca_violations_airline ON dgca_violations (airline_code);
 CREATE INDEX ix_dgca_violations_date ON dgca_violations (flight_date);
 ```
+
+_Note: the three `route_elasticity` segment columns (`t1_t7`, `t7_t15`, `t15_t30`) are correct as-is — elasticity is measured over three inter-window transitions between four horizons (T+1 → T+7 → T+15 → T+30), not over five booking windows, so T+45 has no segment column by design (`backend/app/models/econometrics.py:206-220`). Do not "correct" this into a bug._
 
 #### 8.2 Backend REST API Contracts
 
@@ -624,7 +630,7 @@ In accordance with BackendApiDev-4's router implementation in `backend/app/api/v
 ```
 
 ##### 2. GET `/api/v1/econometrics/cpi-divergence`
-**Sample Response Payload:**
+**Sample Response Payload (illustrative — the MoSPI side is modelled, per the withdrawn-series note above, not an official release):**
 ```json
 {
   "evaluation_period": "2026-03",
@@ -644,7 +650,9 @@ In accordance with BackendApiDev-4's router implementation in `backend/app/api/v
 ```
 
 ##### 3. GET `/api/v1/econometrics/elasticity`
-**Sample Response Payload:**
+> **Illustrative shape, not a live response.** Live, `GET /api/v1/econometrics/elasticity` currently returns `{"gradient_points":[],"curves":[],"data_available":false}` (verified 2026-09-27 against production), because the endpoint returns empty when no `route_elasticity` row exists (`backend/app/api/v1/endpoints/econometrics.py:572-581`) and nothing in the production path writes one — the pipeline computes elasticity in-memory (`backend/app/services/index_pipeline.py:734-742`) and discards it at persist time; only test scripts call `upsert_route_elasticity`. Tracked as GitHub issue #1. The payload below is retained as documentation of the intended shape.
+
+**Intended-shape payload (synthetic example):**
 ```json
 {
   "route_code": "DEL-BOM",
@@ -693,7 +701,7 @@ In accordance with BackendApiDev-4's router implementation in `backend/app/api/v
 
 ### 9. Verification, Open Findings, and Mathematical Proof Reference
 
-Current isolated suite: **226 passed** with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`. Older counts are historical. The mathematical invariants and econometric specifications established in this document are codified and continuously verified by `scripts/test_econometric_specs.py`.
+Current suite: **388 passed** with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`. Older counts are historical. The mathematical invariants and econometric specifications established in this document are codified and continuously verified by `scripts/test_econometric_specs.py`.
 
 The test suite validates seven fundamental mathematical assertions:
 1. **Assertion 1 (Index Axioms):** Identity, proportionality, time reversal, and factor reversal tests.

@@ -9,7 +9,7 @@
 The **Consumer Price Index (CPI)** published by the Ministry of Statistics and Programme Implementation (MoSPI) serves as India's benchmark indicator for macroeconomic inflation and monetary policy formulation by the Reserve Bank of India (RBI). However, the airfare component in the current CPI framework suffers from severe structural limitations:
 1. **Low Frequency & High Latency:** Monthly manual reporting fails to capture high-velocity price fluctuations driven by dynamic pricing algorithms.
 2. **Narrow Sample Coverage:** Currently calculated using manual surveys from select travel agents covering merely ~10% of airline ticketing volume.
-3. **Absence of Booking Window Horizons:** Real-world airfares vary drastically based on purchase lead time ($T+1, T+7, T+15, T+30$). Legacy CPI ignores booking horizon dynamics entirely.
+3. **Absence of Booking Window Horizons:** Real-world airfares vary drastically based on purchase lead time ($T+1, T+7, T+15, T+30, T+45$). Legacy CPI ignores booking horizon dynamics entirely.
 4. **State-Level vs. Route-Level Granularity:** Airfare inflation is heavily route-dependent and concentrated along high-density trunk routes (e.g., DEL-BOM, BLR-DEL).
 
 #### 1.2 The APIx Mission
@@ -60,9 +60,9 @@ flowchart TD
 
     subgraph API ["6. API Gateway Layer (FastAPI)"]
         GATEWAY["FastAPI REST & WebSocket Gateway"]
-        ROUTES_API["/api/v1/routes & /api/v1/analytics"]
-        INDEX_API["/api/v1/index & /api/v1/trends"]
-        ALERTS_API["/api/v1/anomalies & /api/v1/ingestion"]
+        ROUTES_API["/api/v1/indices/routes & /api/v1/analytics/*"]
+        INDEX_API["/api/v1/indices/national/* & /api/v1/econometrics/*"]
+        ALERTS_API["/api/v1/anomalies/* & /api/v1/ingestion/*"]
     end
 
     subgraph UI ["7. Frontend Analytics Dashboard (React + Vite)"]
@@ -111,7 +111,7 @@ sequenceDiagram
     Qnt->>Qnt: Compute Weighted Median, Laspeyres, Paasche, and Fisher Indices
     Qnt->>Qnt: Run Z-Score anomaly detection against 30-day rolling baseline
     Qnt->>DB: Store computed airfare_indices & anomaly_alerts
-    UI->>API: Request /api/v1/index & /api/v1/routes?origin=DEL&dest=BOM
+    UI->>API: Request /api/v1/indices/national/latest & /api/v1/indices/routes
     API->>DB: Fetch indexed metrics & aggregate curves
     API->>UI: Return JSON payload with index numbers, trends & alerts
 ```
@@ -121,7 +121,7 @@ sequenceDiagram
 ### 4. Mathematical Formulation of the Airfare Price Index
 
 #### 4.1 Route Representative Fare
-For route $r$ observed at time $t$ across booking horizon $h \in \{1, 7, 15, 30\}$ days, multiple carriers and OTAs report fares $\{p_{r,h,k}\}_{k=1}^m$. To eliminate outlier scraping artifacts, the representative fare $P_{t,r,h}$ is calculated using the **Weighted Median** of deduplicated quotes:
+For route $r$ observed at time $t$ across booking horizon $h \in \{1, 7, 15, 30, 45\}$ days, multiple carriers and OTAs report fares $\{p_{r,h,k}\}_{k=1}^m$. To eliminate outlier scraping artifacts, the representative fare $P_{t,r,h}$ is calculated using the **Weighted Median** of deduplicated quotes:
 
 $$P_{t,r,h} = \text{WeightedMedian}\left(\{p_{r,h,k}\}_{k=1}^m\right)$$
 
@@ -135,7 +135,9 @@ Domestic air travel in India exhibits distinct purchasing horizon weights $w_h$ 
 
 Note that $\sum_{h \in \{1, 7, 15, 30, 45\}} w_h = 0.20 + 0.32 + 0.26 + 0.14 + 0.08 = 1.00$. The route aggregate price at period $t$ is:
 
-$$P_{t,r} = \sum_{h \in \{1, 7, 15, 30\}} w_h \cdot P_{t,r,h}$$
+$$P_{t,r} = \sum_{h \in \{1, 7, 15, 30, 45\}} w_h \cdot P_{t,r,h}$$
+
+The engine computes the weighted sum over the windows actually present, renormalised to 1.0: for present set $S$, $P_{t,r} = \sum_{h \in S}(w_h/\sum_{k \in S}w_k)\cdot P_{t,r,h}$. The five-horizon form above is therefore exact only when all five windows are present (evidence: `backend/app/services/index_engine.py:614-635`).
 
 #### 4.3 Route Traffic Weighting & Index Aggregation
 Let $Q_{0,r}$ represent the baseline passenger traffic volume on route $r$ derived from DGCA quarterly traffic reports, and $Q_{t,r}$ represent current period traffic estimates.
@@ -467,7 +469,7 @@ flowchart TD
 
     subgraph APP ["Application Tier"]
         FRONTEND["Frontend Static Build<br/>(React 19 + Vite SPA)"]
-        BACKEND["FastAPI Application Backend<br/>(Uvicorn ASGI Workers, 4 Procs)"]
+        BACKEND["FastAPI Application Backend<br/>(Uvicorn ASGI, Single Deployed Worker)"]
     end
 
     subgraph WORKERS ["Ingestion Worker Cluster (Durable Queue)"]
@@ -487,7 +489,7 @@ flowchart TD
     NGINX -->|"Static Assets"| FRONTEND
     NGINX -->|"/api/v1 Reverse Proxy"| BACKEND
 
-    BACKEND -->|"asyncpg Connection Pool"| DB_SERVER
+    BACKEND -->|"Sync SQLAlchemy Session (psycopg2)"| DB_SERVER
     INGEST_WORKER -->|"Persist Scraped Quotes"| DB_SERVER
     GDS_CONNECTOR -->|"Persist GDS Quotes"| DB_SERVER
     SCHEDULER -->|"Trigger Pipeline Jobs"| INGEST_WORKER
@@ -498,7 +500,7 @@ flowchart TD
 
 #### 6.1 Container Specifications
 - **`apix-backend`:** FastAPI application exposing RESTful JSON and WebSocket streaming endpoints. Health returns 503 `Database unavailable` on unreachable or uninitialized DB; trigger returns 401 without a key, 503 without a fresh worker or unavailable DB, and 202 `QUEUED` only after a committed `crawler_jobs` row plus fresh `worker_heartbeats` signal (evidence: `evidence/api-8015-final.json`, `evidence/trigger-liveness-8014.json`, `evidence/trigger-idempotency-8014.json`).
-- **`apix-database`:** PostgreSQL 16 instance storing relational metadata, econometric series, and time-series fares. Current isolated suite is 226 passed with one Starlette TestClient deprecation warning on `/tmp/opencode/apix-verify/final3.db`; older 187/188/190/194 counts are historical.
+- **`apix-database`:** PostgreSQL 16 instance storing relational metadata, econometric series, and time-series fares. Current isolated suite is 388 passed with two Starlette TestClient deprecation warnings on `/tmp/opencode/apix-verify/final3.db`; older 226/187/188/190/194 counts are historical.
 - **`apix-ingestion`:** Headless Playwright worker container equipped with Chromium dependencies and APScheduler daemon.
 - **`apix-worker` (Compose):** Runs `python -m ingestion.worker`, consuming `crawler_jobs` with atomic claims and `worker_heartbeats` leases; the standalone command is also `python -m ingestion.worker`. The API no longer calls a process-local scheduler. Live OTA execution is unverified (synthetic-mode worker only).
 - **`apix-frontend`:** React 19 + TypeScript + Vite single page application with Tailwind CSS and Recharts / Leaflet. The Arbitrage search crash, route zero-coercion, status-vocabulary, anomaly-type, focus-contrast and preview-proxy defects are fixed. The frontend was re-measured directly against the frozen production build: 24 of 24 tab renders across 375/768/1280 with zero console errors, zero crashes and zero synthetic-zero fare tokens, and focus-ring contrast at a minimum of 17.93:1 over 24 tab stops. That is first-party measurement, not an independent reviewer pass, so no independent visual PASS and no Lighthouse result is claimed.

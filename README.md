@@ -122,7 +122,10 @@ of that statement. Time reversal *is* asserted.
 | [Architecture](docs/architecture.md) | Component design, data flow, schema |
 | [Scraping architecture](docs/scraping_architecture.md) | Scraping topology, compliance, anti-bot handling |
 | [Econometrics and CPI gap](docs/econometrics_and_cpi_gap.md) | Index formulae, lead-time elasticity, MoSPI divergence |
-| [Deployment](docs/deployment.md) | Setup, schema migrations, operations |
+| [Deployment](docs/deployment.md) | Concepts, schema migrations, operations (GCE + Vercel) |
+| [Deployment runbook](docs/deployment_run_2026-09-26.md) | Literal 2026-09-26 command sequence that produced the live system |
+| [Backend auto-deploy](docs/ci_deploy.md) | CI-gated GCE deploy wiring (`deploy-backend.yml`) |
+| [Frontend auto-deploy](docs/ci_deploy_frontend.md) | Vercel deploy wiring (`deploy-frontend.yml`) |
 
 ## Operational commands
 

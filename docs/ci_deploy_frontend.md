@@ -125,6 +125,21 @@ and the [`vercel deploy` CLI reference](https://vercel.com/docs/cli/deploy)):
   `VERCEL_TOKEN` job env var (never a `--token` command-line flag, never
   echoed; masked in logs). `--prebuilt` means Vercel does **not** rebuild —
   one build, in the runner.
+- **Vercel CLI pinned to `59.23.2`, never `@latest`** (`deploy-frontend.yml:115`):
+  `vercel@latest` floated to 60.1.3 on the runner and `vercel build` died with
+  `Error: spawn sh ENOENT`; 59.23.2 builds this project cleanly. Upgrade
+  deliberately after verifying locally.
+- **`oven-sh/setup-bun` (pinned to bun `1.4`) is REQUIRED, not redundant**
+  (`deploy-frontend.yml:98-107`): `vercel build` detects `frontend/bun.lock` and
+  delegates to `bun install`, so bun must exist on the runner — without it the
+  build dies with `sh: 1: bun: not found` (exit 127). Pinned to 1.4 (not `latest`)
+  because the lockfile is `lockfileVersion: 2`, which needs bun ≥ 1.3.
+  (Removing the step was tried in `1d07826` and reverted in `e2295c2` — the
+  earlier `spawn sh ENOENT` was this same missing-binary problem surfacing badly.)
+- **All `vercel` commands run from the REPO ROOT** (`deploy-frontend.yml:117-120`):
+  the project's Root Directory is already `frontend`, so invoking the CLI from
+  inside `frontend/` makes it resolve the project root to `frontend/frontend`,
+  which fails with `Error: spawn sh ENOENT` (fixed in `19b5c74`).
 - All third-party actions pinned to full commit SHAs (checkout v4, setup-node
   v5, setup-bun v2 — SHAs recorded in comments).
 - `VITE_API_BASE_URL` is set as a (public, client-baked) workflow env var so

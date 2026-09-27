@@ -95,6 +95,20 @@ Current docs: `https://porkbun.com/llms/dns`. The older
 
 ## 4. Deploying the backend
 
+Every `ssh volt-rust` below resolves through an `~/.ssh/config` alias on the
+**operator machine** -- `volt-rust` is not a DNS name:
+
+```ssh-config
+Host volt-rust
+  HostName 34.131.69.223
+  User adi-IL
+  Port 22
+  IdentitiesOnly yes
+```
+
+(Same host and user the backend CI deploy targets as `GCE_SSH_HOST` /
+`GCE_SSH_USER` in `docs/ci_deploy.md`.)
+
 ```bash
 # 1. transfer (secrets and build output stay behind)
 # WARNING: --exclude .env is MANDATORY. /opt/apix/.env holds the live secrets and is
@@ -120,7 +134,51 @@ ssh volt-rust 'cd /opt/apix && docker compose -p apix-deploy \
   -f docker-compose.yml -f docker-compose.deploy.yml run --rm backend \
   alembic upgrade head'
 
-# 5. seed, then serve
+# 5. seed (FRESH database only), then serve.
+# The seed is REQUIRED on first deploy against an empty volume and UNDESIRABLE
+# on an existing one: seed_all() upserts idempotently, but re-running the
+# synthetic generation + pipeline recomputes a day you already have. On a
+# redeploy, skip 5a-5c and go straight to 5d.
+# 5a. reference data: 10 routes + 5 airlines. __main__ (backend/app/db/seed.py:220-228)
+#     runs init_db() then seed_all() (seed.py:203-217); the init_db() create_all is a
+#     no-op once step 4's migrations have run.
+ssh volt-rust 'cd /opt/apix && docker compose -p apix-deploy \
+  -f docker-compose.yml -f docker-compose.deploy.yml run --rm backend \
+  python -m backend.app.db.seed'
+# 5b-5c. synthetic fares for ONE date, then the index pipeline for that date.
+# Entrypoints, all verified in code (no invented flags):
+#   SyntheticFlightGenerator(seed=42).generate_all_slots()
+#     (ingestion/crawlers/synthetic.py:233-260; 10 routes x 5 windows = 50 slots)
+#   bulk_insert_raw_fares(db, records, batch_id=...)
+#     (backend/app/db/ingestion_repo.py:370-396; INSERT ... ON CONFLICT DO NOTHING)
+#   run_daily_index_pipeline(db, calculation_date="YYYY-MM-DD")
+#     (backend/app/services/index_pipeline.py:391-410; str, date, or None for today).
+# This runs INSIDE the backend container, so DATABASE_URL comes from the compose
+# environment (the VM .env via the deploy overlay), never the operator shell.
+# Date coupling that matters: the loader accepts fares whose flight_date EQUALS the
+# date OR whose scraped_at falls on it (index_pipeline.py:197-219), and scraped_at
+# is stamped at insert time -- inserting and piping the same UTC day just works.
+# CALC_DATE 2026-09-26 is the single date this run seeded; change deliberately.
+ssh volt-rust bash -s <<'REMOTE_EOF'
+set -euo pipefail
+cd /opt/apix
+docker compose -p apix-deploy -f docker-compose.yml -f docker-compose.deploy.yml \
+  run --rm backend python - <<'PYEOF'
+from backend.app.db.session import SessionLocal
+from backend.app.db.ingestion_repo import bulk_insert_raw_fares
+from backend.app.services.index_pipeline import run_daily_index_pipeline
+from ingestion.crawlers.synthetic import SyntheticFlightGenerator
+
+CALC_DATE = "2026-09-26"
+with SessionLocal() as db:
+    slots = SyntheticFlightGenerator(seed=42).generate_all_slots()
+    records = [r for s in slots for r in s.records]
+    print("fares:", bulk_insert_raw_fares(db, records, batch_id=f"seed-{CALC_DATE}"))
+    summary = run_daily_index_pipeline(db, calculation_date=CALC_DATE)
+    print("pipeline:", summary["status"], summary["calculation_date"])
+PYEOF
+REMOTE_EOF
+# 5d. serve
 ssh volt-rust 'cd /opt/apix && docker compose -p apix-deploy \
   -f docker-compose.yml -f docker-compose.deploy.yml up -d backend frontend'
 ```
@@ -139,6 +197,18 @@ edited for deploy concerns. It:
 - runs **only** `db`, `backend`, `frontend`.
 
 `worker`, `scheduler` and `scraper` are deliberately excluded. See §8.
+
+### What the `frontend` container is (and is not)
+
+The `frontend` service is an **on-VM copy of the SPA behind nginx on
+`127.0.0.1:3001`, with no Caddy route pointing at it** -- nothing public reaches
+it. The public dashboard is the Vercel deployment (§1); this container is a local
+fallback / smoke-test copy you can `curl` from the VM itself. Port `3001`, not
+`3000`: the base file publishes `3000:80`, but on this host port 3000 is already
+held by the node process backing `review.adityaai.dev`
+(`docker-compose.deploy.yml:60-64`), so the overlay rebinds it. Do not "fix" it
+back to 3000, and do not add a Caddy route for it without a matching
+`BACKEND_CORS_ORIGINS` update -- the backend allowlist names the Vercel origin (§6).
 
 ---
 
@@ -203,7 +273,16 @@ an existing Postgres volume the app therefore comes up "healthy" while every ful
 Run migrations against a genuinely empty database *before* the first backend start, or
 `create_all` wins the race and `upgrade head` fails with `DuplicateTable`.
 
-Result: revision `b8c3d2e7a004 (head)`, **17 tables**, `alembic_version` populated.
+Result: revision `b8c3d2e7a004 (head)`, **16 tables**, `alembic_version` populated.
+
+Table-count precision: `Base.metadata` (populated by `backend/app/models/__init__.py`)
+defines exactly **16** model tables -- airlines, anomaly_alerts, crawler_jobs,
+worker_heartbeats, econometric_indices, mospi_cpi_series, route_elasticity,
+dgca_violations, dgca_traffic_weights, scraper_telemetry, proxy_health_records,
+scraping_runs, routes, route_daily_indices, national_daily_indices, raw_fares
+(one `__tablename__` each, verified by grep). A live psql `\dt` listing may show a
+17th relation, `alembic_version`, which Alembic itself writes on `upgrade head`
+and which is not a model table -- quote which number you mean.
 
 ### Seeded dataset
 
@@ -219,7 +298,18 @@ Result: revision `b8c3d2e7a004 (head)`, **17 tables**, `alembic_version` populat
 | `national_daily_indices` | 3 |
 | `econometric_indices` | 1 |
 
+(`national_daily_indices` 3 = one row per index type -- laspeyres, paasche, fisher --
+for the single date; the pipeline persists all three per day in
+`backend/app/services/index_pipeline.py:752-795`.)
+
 > **This is synthetic data, not live airfares.** See §9.
+
+> **Single-date seed.** Every row above is for **one** calculation date,
+> **2026-09-26**. Live, `GET /api/v1/indices/national/history?days=30` returns
+> exactly **1 point** (`index_date 2026-09-26`), not 30 -- history-backed outputs
+> are therefore thin until the daily pipeline (or cron) accumulates more dates.
+> "The seed worked" (rows exist) is not "the seed fully worked" (a month of
+> history): on any re-verify, check `total_points`, not just `data_available`.
 
 ### Verification performed
 
@@ -252,6 +342,15 @@ existing browser stack for the ~4 GB of free memory.
 
 The scheduler still exists as a GitHub Actions cron (`.github/workflows/scrape.yml`).
 
+> **The scheduled scrape does not currently populate production.** The repo's
+> Actions secrets (`gh secret list`, 2026-09-27) hold only `GCE_SSH_*` and
+> `VERCEL_TOKEN` -- none of the secrets the scrape job reads
+> (`INGESTION_ENDPOINT_URL`, `INGESTION_API_KEY`, `AMADEUS_CLIENT_ID/SECRET`
+> in `.github/workflows/scrape.yml:90-95`) are configured, so the daily run has
+> no endpoint to post to and no live-source credentials. Even configured, airline
+> sites block datacentre IPs (above). Do not assume daily ingestion is live
+> because the cron exists.
+
 ---
 
 ## 9. Honesty caveats
@@ -267,13 +366,58 @@ The dashboard is live and fully functional, but be precise about what it shows:
   `provenance=generated`.
 - **Fisher factor reversal still fails** by design; it is a known model defect, not a
   regression.
+- **The "Booking Elasticity" tab is empty by construction right now.** Live,
+  `GET /api/v1/econometrics/elasticity` returns
+  `{"gradient_points":[],"curves":[],"data_available":false}` (verified
+  2026-09-27), so the dashboard tab draws axes with no series. Tracked as GitHub
+  issue #1 (open). Root cause, verified in code: the endpoint returns the empty
+  payload whenever no `route_elasticity` row exists
+  (`backend/app/api/v1/endpoints/econometrics.py:572-581`, via
+  `get_latest_route_elasticity`, `backend/app/db/econometrics_repo.py:586-597`);
+  the daily pipeline computes lead-time elasticity in memory
+  (`backend/app/services/index_pipeline.py:734-742`) but persists only
+  route/national indices, anomalies and the `EconometricIndex` row -- nothing in
+  the production path (`backend/`, `ingestion/`) ever calls
+  `upsert_route_elasticity` (`backend/app/db/econometrics_repo.py:472`); only
+  test scripts do. Fixing it means persisting a `route_elasticity` row per
+  corridor per day, not fixing the chart.
 
 A first-time visitor with no context may read the dashboard as a live airfare feed. It is
 not. Consider a banner stating the data provenance on the dashboard itself.
 
 ---
 
-## 10. Rollback
+## 10. Caddy: adding a site (forward path) and rollback
+
+### Adding or changing a site
+
+The rollback below restores a backup that only this procedure creates -- no other
+documented path creates it. **Back up BEFORE editing, every time.**
+
+```bash
+# 1. back up the live config FIRST (rollback restores exactly this file)
+ssh volt-rust 'sudo cp /opt/caddy/Caddyfile /opt/caddy/Caddyfile.bak-$(date +%F-%H%M%S) && ls -l /opt/caddy/Caddyfile.bak-*'
+
+# 2. add the site block alongside the existing mcp./review. blocks in
+#    /opt/caddy/Caddyfile (host path; inside the container it is served as
+#    /etc/caddy/Caddyfile). Top-level site block, after the existing ones;
+#    target per the §1 topology (Caddy :443 reverse_proxy to 127.0.0.1:8000).
+#    No explicit TLS block is needed: Caddy issues/renews via ACME automatically.
+```
+
+```caddyfile
+api.adityaai.dev {
+	reverse_proxy 127.0.0.1:8000
+}
+```
+
+```bash
+# 3. validate, THEN reload -- in this order, every time
+ssh volt-rust 'sudo docker exec caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile'
+ssh volt-rust 'sudo docker exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile'
+```
+
+### Rollback
 
 ```bash
 # stop the APIx stack only; never run unscoped `docker compose down`
@@ -281,13 +425,20 @@ ssh volt-rust 'cd /opt/apix && docker compose -p apix-deploy \
   -f docker-compose.yml -f docker-compose.deploy.yml down'
 # data survives: the named volumes are untouched unless you add `-v`
 
-# remove the public route, keeping mcp./review. serving
-ssh volt-rust 'sudo cp /opt/apix/Caddyfile.bak-<ts> /opt/caddy/Caddyfile && \
+# remove the public route, keeping mcp./review. serving.
+# Caddyfile.bak-2026-09-26-215955 is the real pre-api-block backup from this run;
+# substitute the timestamp if rolling back a later change.
+ssh volt-rust 'sudo cp /opt/caddy/Caddyfile.bak-2026-09-26-215955 /opt/caddy/Caddyfile && \
   sudo docker exec caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile && \
   sudo docker exec caddy caddy reload  --config /etc/caddy/Caddyfile --adapter caddyfile'
 
-# frontend
-cd frontend && vercel --prod --scope aditya-ai-architects-projects rollback
+# frontend: re-point production at a previous deployment. Run from the REPO ROOT,
+# not frontend/ (the Vercel project's Root Directory is `frontend`, so running
+# inside frontend/ resolves to frontend/frontend and fails). `rollback` takes the
+# deployment ID or URL as its argument (verified: `vercel rollback --help`,
+# CLI 59.23.2) -- find it with `vercel ls` or in the dashboard, then:
+vercel rollback <previous-deployment-url-or-id> --scope aditya-ai-architects-projects
+# (The dashboard's deployment "Rollback" button does the same thing.)
 ```
 
 Caddy backups live at `/opt/caddy/Caddyfile.bak-<timestamp>`.
@@ -295,8 +446,10 @@ Caddy backups live at `/opt/caddy/Caddyfile.bak-<timestamp>`.
 > **Never `docker restart caddy`, `caddy stop`, or recreate the container.** Caddy serves
 > `mcp.adityaai.dev` and `review.adityaai.dev` from the same config; any of those would
 > drop both. `caddy validate` then `caddy reload` is non-disruptive. Note that Caddy
-> **ignores `SIGHUP`** — use `caddy reload`, and re-specify `--config` every time because
-> it does not watch the file on disk.
+> **ignores `SIGHUP`** -- use `caddy reload` (`SIGUSR1` also triggers a reload, but it
+> stops working after a `caddy reload` that used a different filename, so prefer the
+> explicit command). Re-specify `--config` on every reload: `caddy reload` re-reads
+> the file passed via `--config` and does not watch the file on disk.
 
 ---
 
@@ -363,8 +516,11 @@ ssh volt-rust 'cd /opt/apix && docker compose -p apix-deploy \
 # erases it (verified with rsync --dry-run: '*deleting .env') and the next deploy
 # loses every credential. Note the leading ./ - without a local source, rsync
 # merely LISTS the remote instead of syncing.
+# Same excludes as §4 and the CI workflow (deploy-backend.yml): local-only
+# *.db / evidence/ / artifacts/ must never sync to the VM.
 rsync -az --delete --exclude .git --exclude .venv --exclude node_modules \
-  --exclude frontend/dist --exclude .env --exclude backups/ \
+  --exclude frontend/dist --exclude '*.db' --exclude evidence/ \
+  --exclude artifacts/ --exclude .env --exclude backups/ \
   ./ volt-rust:/opt/apix/
 ssh volt-rust 'cd /opt/apix && docker compose -p apix-deploy \
   -f docker-compose.yml -f docker-compose.deploy.yml up -d --build backend'

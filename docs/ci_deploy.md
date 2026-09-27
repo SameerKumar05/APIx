@@ -51,10 +51,10 @@ Rotate it on any suspected leak by replacing both the secret and the VM entry.
 As `adi-IL` on the VM (deploy user already has passwordless sudo):
 
 ```bash
-# 1. restricted deploy key: this host only, non-interactive commands only
+# 1. restricted deploy key: non-interactive, no forwarding, no pty
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
 cat >> ~/.ssh/authorized_keys <<'EOF'
-restrict,pty,from="<github-runner-egress-or-jump-host>" <contents of apix-deploy-key.pub>
+no-agent-forwarding,no-port-forwarding,no-pty,no-X11-forwarding,no-user-rc <contents of apix-deploy-key.pub>
 EOF
 chmod 600 ~/.ssh/authorized_keys
 # 2. confirm the tree and secrets the workflow depends on
@@ -65,9 +65,21 @@ sudo -n true                     # must succeed: passwordless sudo for docker
 
 Notes:
 
-- `restrict` disables port/agent/X11 forwarding; add `from="..."` scoping
-  when the runner egress range is known. The workflow only needs
-  `ssh` + `rsync` + passwordless `sudo docker ...`.
+- Each option strips one interactive capability from this key (the deploy needs
+  only non-interactive `ssh` + `rsync` + passwordless `sudo docker ...`, which the
+  workflow runs through `ssh host bash -s` pipes, never a login shell):
+  `no-agent-forwarding` (no `-A` agent socket on the VM),
+  `no-port-forwarding` (no `-L`/`-R` tunnels in either direction),
+  `no-pty` (no interactive terminal -- without this the key could open a shell),
+  `no-X11-forwarding` (no GUI forwarding), `no-user-rc` (skip `~/.ssh/rc`
+  execution at login).
+- Do NOT "simplify" this to `restrict,pty,...`: under `restrict`, naming `pty`
+  RE-ENABLES pty allocation -- the opposite of the intent. This key must never
+  hold a terminal.
+- There is deliberately no `from="..."` source restriction: GitHub-hosted runner
+  egress IPs are not a fixed range, so any value written here would be an
+  unfillable placeholder that either breaks deploys or provides false scoping.
+  (If deploys ever move behind a fixed jump host, add `from="<that-host>"` then.)
 - The workflow asserts `/opt/apix/.env` exists before doing anything and
   rsync excludes `.env`, so a deploy can never delete or overwrite VM secrets.
 

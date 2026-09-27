@@ -123,6 +123,16 @@ before the loader will treat it as official. DGCA does publish real monthly
 city-pair passenger traffic as free XLSX with no login, and pointing the loader
 at such a file is the intended upgrade path.
 
+## Withdrawn comparisons and known index limits
+
+**The bundled MoSPI CPI series is withdrawn.** `data/mospi_cpi_historical_2024_2026.json` declares `"status": "withdrawn"`: its stored values contradicted NSO press notes, and the file now carries no records. Any comparison plotted against it is modelled, not a MoSPI benchmark, and the withdrawn values must never be presented as a current official release.
+
+**DGCA publishes no reusable fare dataset.** Its Tariff Monitoring Unit monitors fares but releases no dataset, dashboard, or route list — so no measured back-test against DGCA fares exists. (DGCA *traffic* volumes are a separate matter: real monthly city-pair XLSX files exist and are the intended replacement for the modelled weights above; fare levels do not.)
+
+**The Fisher index here fails factor reversal by design.** The Paasche leg is textbook; the Laspeyres leg is a fixed-weight mean of price relatives rather than a true Laspeyres, so `P_F x Q_F == V_t / V_0` does not hold for the engine pair. `tests/test_factor_reversal.py` proves both halves (`test_factor_reversal_holds_for_the_true_laspeyres_paasche_pair` passes for the true pair; `test_engine_fisher_pair_does_not_satisfy_factor_reversal` proves the engine pair fails). Time reversal is asserted.
+
+**Deployed fares are synthetic by name.** The fallback that produces every fare in the system today is `SyntheticFlightGenerator` (`ingestion/crawlers/synthetic.py:52`), reached only after the live scrapers yield zero records, and its output is persisted with `is_synthetic=true`. The route/traffic weights likewise carry `provenance=generated` from `ingestion/loaders/dgca_traffic_loader.py` — modelled literals, not a DGCA download.
+
 ## Evidence paths
 
 Paths like `evidence/live-ingestion-verification.json` refer to local verification
