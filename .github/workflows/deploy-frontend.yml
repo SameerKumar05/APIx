@@ -65,9 +65,6 @@ jobs:
       # Vercel CLI reads VERCEL_TOKEN directly: the secret never appears on a
       # command line (no `ps` exposure) and GitHub masks it in logs.
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - name: Checkout CI-tested SHA
         # Pinned to actions/checkout v4 (2026-07-16). Do not float tags.
@@ -84,7 +81,7 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
-          elif git diff --name-only HEAD~1 HEAD -- . | grep -q .; then
+          elif git diff --name-only HEAD~1 HEAD -- frontend | grep -q .; then
             echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
@@ -106,6 +103,10 @@ jobs:
         # upgrade deliberately after verifying locally.
         run: npm install --global vercel@59.23.2
 
+        # NOTE: these run from the REPO ROOT, not frontend/. The project's Root
+        # Directory is already 'frontend', so invoking the CLI from inside frontend/
+        # makes it resolve the project root to frontend/frontend, which does not
+        # exist -- it died with 'Error: spawn sh ENOENT' on the first real run.
       - name: Pull Vercel project settings and production env
         if: steps.changes.outputs.frontend_changed == 'true'
         # Pulls VITE_API_BASE_URL (production) from the Vercel project env
