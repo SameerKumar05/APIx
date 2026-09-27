@@ -362,7 +362,9 @@ class SpiceJetScraper(BaseScraper):
                             pass
                     if "tax" in fd or "taxes" in fd:
                         try:
-                            taxes_val = self.normalize_fare(fd.get("tax") or fd.get("taxes"))
+                            taxes_val = self.normalize_fare(
+                                fd.get("tax") or fd.get("taxes")
+                            )
                         except ValueError:
                             pass
                 elif "baseFare" in item:
@@ -372,7 +374,9 @@ class SpiceJetScraper(BaseScraper):
                         pass
                 if taxes_val is None and ("tax" in item or "taxes" in item):
                     try:
-                        taxes_val = self.normalize_fare(item.get("tax") or item.get("taxes"))
+                        taxes_val = self.normalize_fare(
+                            item.get("tax") or item.get("taxes")
+                        )
                     except ValueError:
                         pass
 
@@ -710,7 +714,9 @@ class SpiceJetScraper(BaseScraper):
                 flight_date=r.flight_date,
                 duration_minutes=r.duration_minutes,
                 base_fare=round(r.base_fare * 0.95, 2) if r.base_fare else None,
-                taxes_and_fees=round(r.taxes_and_fees * 0.95, 2) if r.taxes_and_fees else None,
+                taxes_and_fees=(
+                    round(r.taxes_and_fees * 0.95, 2) if r.taxes_and_fees else None
+                ),
                 is_synthetic=True,
                 source_platform="spicejet",
             )

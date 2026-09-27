@@ -44,7 +44,9 @@ Base.metadata.create_all(bind=engine)
 # freshly created database. Fares escalate toward departure so the gradient has the
 # descending-demand shape the assertions below check.
 with SessionLocal() as fare_db:
-    fare_db.query(RawFare).filter(RawFare.hash_id.like("cycle4-%")).delete(synchronize_session=False)
+    fare_db.query(RawFare).filter(RawFare.hash_id.like("cycle4-%")).delete(
+        synchronize_session=False
+    )
     fare_db.commit()
     for window, fare in (
         ("T+30", 4000.0),

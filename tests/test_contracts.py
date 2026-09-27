@@ -695,4 +695,3 @@ class TestApiResponseSchemas:
         assert resp.data_available is True
         assert resp.sectors[0].surge_multiplier == 1.77
         assert resp.matrix[0].days_before_departure == 1
-

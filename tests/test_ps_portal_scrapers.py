@@ -241,7 +241,9 @@ def test_valid_iata_codes_includes_maa() -> None:
 
 
 @pytest.mark.parametrize("cls", SCRAPERS, ids=lambda cls: cls.SOURCE_NAME)
-def test_parse_preserves_base_fare_and_taxes_when_supplied(cls: type[PortalScraper]) -> None:
+def test_parse_preserves_base_fare_and_taxes_when_supplied(
+    cls: type[PortalScraper],
+) -> None:
     scraper = _scraper(cls)
     priced = scraper.parse_flight_json(
         {
@@ -266,4 +268,3 @@ def test_parse_preserves_base_fare_and_taxes_when_supplied(cls: type[PortalScrap
     assert priced[0].base_fare == 3500.0
     assert priced[0].taxes_and_fees == 1010.5
     assert priced[0].fare_split_basis == "measured"
-

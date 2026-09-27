@@ -142,6 +142,7 @@ def test_demonstrates_30_day_backtest_with_valid_metrics(tmp_path):
     """
     import math
     from datetime import date, timedelta
+
     start_date = date(2026, 8, 20)
     apix_rows = []
     for i in range(35):
@@ -167,4 +168,3 @@ def test_demonstrates_30_day_backtest_with_valid_metrics(tmp_path):
     assert res.mape >= 0.0
     assert res.r_squared is not None
     assert res.direction_agreement_pct is not None
-

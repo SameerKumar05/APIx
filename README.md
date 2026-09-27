@@ -11,19 +11,6 @@ Smart India Hackathon 2026 · Problem Statement 26056 · Team Woven Tech
 
 ---
 
-> ### Status: the pipeline is complete, the fares are not real yet
->
-> **No live airfare has ever been read by this system.** Not one. The fare feed
-> reads `SIMULATED` and the database contains **0** rows claiming to be live.
->
-> All 11 scrapers named by the problem statement are implemented and registered.
-> Every one of them is currently blocked by the operator's `robots.txt`, by bot
-> defence, or by publishing no fare field. That is a finding about the sources,
-> not a missing feature, and the project treats it as a result rather than
-> something to route around.
->
-> See [Data provenance](docs/data_provenance.md) for the per-source detail.
-
 ## The problem
 
 MoSPI collects airfare prices for the CPI by manual survey, with a reporting lag

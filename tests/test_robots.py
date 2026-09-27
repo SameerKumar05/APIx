@@ -248,4 +248,3 @@ def test_robots_strict_fail_closed_disabled_allows_on_404_or_error() -> None:
     policy_err = load_policy("https://permissive.test", cfg, fetcher=failing_fetcher)
     assert policy_err.is_deny_all is False
     assert policy_err.can_fetch("https://permissive.test/flights") is True
-

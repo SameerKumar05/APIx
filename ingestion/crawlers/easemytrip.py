@@ -327,7 +327,9 @@ class EaseMyTripScraper(BaseScraper):
                         pass
                 if item.get("Tax") is not None or item.get("Taxes") is not None:
                     try:
-                        taxes_val = self.normalize_fare(item.get("Tax") or item.get("Taxes"))
+                        taxes_val = self.normalize_fare(
+                            item.get("Tax") or item.get("Taxes")
+                        )
                     except ValueError:
                         pass
 

@@ -643,5 +643,3 @@ async def get_sector_heatmap(
     except SQLAlchemyError as exc:
         db.rollback()
         raise _unavailable() from exc
-
-

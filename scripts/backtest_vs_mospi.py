@@ -266,12 +266,13 @@ def ensure_demonstration_data(db_path: str) -> bool:
             count = conn.execute(
                 "SELECT COUNT(DISTINCT index_date) FROM national_daily_indices WHERE lower(coalesce(index_type,'')) = 'fisher'"
             ).fetchone()[0]
-            mospi_count = conn.execute("SELECT COUNT(*) FROM mospi_cpi_series").fetchone()[0]
+            mospi_count = conn.execute(
+                "SELECT COUNT(*) FROM mospi_cpi_series"
+            ).fetchone()[0]
             if count >= REQUIRED_WINDOW_DAYS and mospi_count >= 1:
                 return False  # Already satisfied
 
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS national_daily_indices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 index_date DATE NOT NULL,
@@ -288,10 +289,8 @@ def ensure_demonstration_data(db_path: str) -> bool:
                 calculation_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS mospi_cpi_series (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 year_month VARCHAR(7) NOT NULL UNIQUE,
@@ -302,8 +301,7 @@ def ensure_demonstration_data(db_path: str) -> bool:
                 source VARCHAR(100) NOT NULL,
                 created_at DATETIME
             )
-            """
-        )
+            """)
 
         # Seed 35 days of daily indices spanning 2026-08-20 to 2026-09-23
         start_date = date(2026, 8, 20)
@@ -463,7 +461,8 @@ def run(db_path: str, required_days: int = REQUIRED_WINDOW_DAYS) -> BacktestResu
             sum(abs(x - y) for x, y in zip(a, m_)) / len(shared), 4
         )
         result.direction_agreement_pct = round(
-            100.0 * sum(1 for x, y in zip(a, m_) if (x >= 0) == (y >= 0)) / len(shared), 2
+            100.0 * sum(1 for x, y in zip(a, m_) if (x >= 0) == (y >= 0)) / len(shared),
+            2,
         )
 
         shared_levels = sorted(set(apix) & set(mospi))
@@ -471,7 +470,10 @@ def run(db_path: str, required_days: int = REQUIRED_WINDOW_DAYS) -> BacktestResu
             a_lvl = [apix[m] for m in shared_levels]
             m_lvl = [mospi[m] for m in shared_levels]
             result.rmse = round(
-                math.sqrt(sum((x - y) ** 2 for x, y in zip(a_lvl, m_lvl)) / len(shared_levels)), 4
+                math.sqrt(
+                    sum((x - y) ** 2 for x, y in zip(a_lvl, m_lvl)) / len(shared_levels)
+                ),
+                4,
             )
             result.mape = round(
                 sum(abs((x - y) / y) * 100.0 for x, y in zip(a_lvl, m_lvl) if y != 0)
@@ -560,7 +562,9 @@ def run(db_path: str, required_days: int = REQUIRED_WINDOW_DAYS) -> BacktestResu
     rmse = math.sqrt(sum((x - y) ** 2 for x, y in zip(xs, ys)) / n_pts)
     mape = sum(abs((x - y) / y) * 100.0 for x, y in zip(xs, ys) if y != 0) / n_pts
     mae = sum(abs(x - y) for x, y in zip(xs, ys)) / n_pts
-    direction = 100.0 * sum(1 for x, y in zip(xs, ys) if (x >= ys[0]) == (y >= ys[0])) / n_pts
+    direction = (
+        100.0 * sum(1 for x, y in zip(xs, ys) if (x >= ys[0]) == (y >= ys[0])) / n_pts
+    )
 
     result.status = "OK"
     result.overlapping_months = max(len(shared), 1)

@@ -232,4 +232,3 @@ class SectorHeatmapResponse(BaseModel):
         False,
         description="False when no fare observations exist for any corridor",
     )
-

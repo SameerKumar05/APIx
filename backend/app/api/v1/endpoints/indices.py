@@ -369,9 +369,7 @@ async def get_route_history(
         )
         if not route_indices and clean_window == "COMPOSITE":
             route_indices = (
-                base_query.order_by(RouteDailyIndex.index_date.desc())
-                .limit(days)
-                .all()
+                base_query.order_by(RouteDailyIndex.index_date.desc()).limit(days).all()
             )
         if route_indices:
             route_indices.reverse()
@@ -455,4 +453,3 @@ async def get_sector_heatmap_alias(
     )
 
     return await _get_sector_heatmap(route_code=route_code, db=db)
-

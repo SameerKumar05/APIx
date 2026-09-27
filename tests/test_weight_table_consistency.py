@@ -89,17 +89,16 @@ def test_seed_airline_shares_sum_to_one_hundred_percent() -> None:
 def test_pipeline_window_weights_match_index_engine() -> None:
     from backend.app.services.index_pipeline import (
         CANONICAL_WINDOWS,
+    )
+    from backend.app.services.index_pipeline import (
         DEFAULT_WINDOW_WEIGHTS as PIPELINE_WINDOW_WEIGHTS,
     )
 
     canonical_weights = {
-        code: weight
-        for code, weight in PIPELINE_WINDOW_WEIGHTS.items()
-        if "+" in code
+        code: weight for code, weight in PIPELINE_WINDOW_WEIGHTS.items() if "+" in code
     }
     assert sum(canonical_weights.values()) == pytest.approx(1.0, abs=1e-9)
     assert set(canonical_weights.keys()) == set(CANONICAL_WINDOWS)
     for code, weight in DEFAULT_BOOKING_WINDOW_WEIGHTS.items():
         assert PIPELINE_WINDOW_WEIGHTS[code] == pytest.approx(weight)
         assert PIPELINE_WINDOW_WEIGHTS[f"T+{code[1:]}"] == pytest.approx(weight)
-
