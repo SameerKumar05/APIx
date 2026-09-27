@@ -134,9 +134,19 @@ def pct_change(series: dict[str, float]) -> dict[str, float]:
 
 def load_apix(conn: sqlite3.Connection) -> dict[str, float]:
     """Monthly mean of the Fisher national index, keyed by YYYY-MM."""
+    cols = _columns(conn, "national_daily_indices")
+    clause = "WHERE lower(coalesce(index_type,'')) = 'fisher'"
+    if "routes_covered" in cols:
+        max_routes = (
+            conn.execute(
+                "SELECT MAX(routes_covered) FROM national_daily_indices WHERE lower(coalesce(index_type,'')) = 'fisher'"
+            ).fetchone()[0]
+            or 0
+        )
+        if max_routes > 0:
+            clause += f" AND routes_covered >= {max(5, int(max_routes * 0.6))}"
     rows = conn.execute(
-        "SELECT index_date, index_value FROM national_daily_indices "
-        "WHERE lower(coalesce(index_type,'')) = 'fisher'"
+        f"SELECT index_date, index_value FROM national_daily_indices {clause}"
     ).fetchall()
     by_month: dict[str, list[float]] = {}
     for index_date, value in rows:
@@ -148,13 +158,22 @@ def load_apix(conn: sqlite3.Connection) -> dict[str, float]:
 
 def load_apix_daily(conn: sqlite3.Connection) -> list[tuple[str, float]]:
     """Daily series of the Fisher national index, sorted chronologically."""
+    cols = _columns(conn, "national_daily_indices")
+    clause = "WHERE lower(coalesce(index_type,'')) = 'fisher' AND index_value IS NOT NULL"
+    if "routes_covered" in cols:
+        max_routes = (
+            conn.execute(
+                "SELECT MAX(routes_covered) FROM national_daily_indices WHERE lower(coalesce(index_type,'')) = 'fisher'"
+            ).fetchone()[0]
+            or 0
+        )
+        if max_routes > 0:
+            clause += f" AND routes_covered >= {max(5, int(max_routes * 0.6))}"
     rows = conn.execute(
-        "SELECT index_date, index_value FROM national_daily_indices "
-        "WHERE lower(coalesce(index_type,'')) = 'fisher' AND index_value IS NOT NULL "
+        f"SELECT index_date, index_value FROM national_daily_indices {clause} "
         "ORDER BY index_date ASC"
     ).fetchall()
     return [(str(r[0]), float(r[1])) for r in rows if r[0] and r[1] is not None]
-
 
 def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})")}
@@ -400,9 +419,20 @@ def ensure_demonstration_data(db_path: str) -> bool:
 def run(db_path: str, required_days: int = REQUIRED_WINDOW_DAYS) -> BacktestResult:
     conn = sqlite3.connect(db_path)
     try:
+        cols = _columns(conn, "national_daily_indices")
+        clause = "WHERE lower(coalesce(index_type,'')) = 'fisher'"
+        if "routes_covered" in cols:
+            max_routes = (
+                conn.execute(
+                    "SELECT MAX(routes_covered) FROM national_daily_indices WHERE lower(coalesce(index_type,'')) = 'fisher'"
+                ).fetchone()[0]
+                or 0
+            )
+            if max_routes > 0:
+                clause += f" AND routes_covered >= {max(5, int(max_routes * 0.6))}"
         apix_raw = conn.execute(
-            "SELECT MIN(index_date), MAX(index_date), COUNT(DISTINCT index_date) "
-            "FROM national_daily_indices WHERE lower(coalesce(index_type,'')) = 'fisher'"
+            f"SELECT MIN(index_date), MAX(index_date), COUNT(DISTINCT index_date) "
+            f"FROM national_daily_indices {clause}"
         ).fetchone()
         apix = load_apix(conn)
         daily_apix = load_apix_daily(conn)

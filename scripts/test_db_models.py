@@ -103,8 +103,8 @@ def run_tests() -> bool:
         # 4. Verify Route Counts and DGCA Weights
         print("\n[4/6] Verifying Route table invariants...")
         routes = session.execute(select(Route)).scalars().all()
-        assert len(routes) == 10, f"Expected 10 routes, found {len(routes)}"
-        print(f"  -> Route count verified: {len(routes)}/10 directional corridors.")
+        assert len(routes) == 14, f"Expected 14 routes, found {len(routes)}"
+        print(f"  -> Route count verified: {len(routes)}/14 directional corridors.")
 
         expected_pairs = {
             ("DEL", "BOM"),
@@ -117,6 +117,10 @@ def run_tests() -> bool:
             ("CCU", "DEL"),
             ("DEL", "HYD"),
             ("HYD", "DEL"),
+            ("DEL", "MAA"),
+            ("MAA", "DEL"),
+            ("BLR", "HYD"),
+            ("HYD", "BLR"),
         }
         actual_pairs = {(r.origin, r.destination) for r in routes}
         assert (
@@ -242,7 +246,7 @@ def run_tests() -> bool:
             weighted_median_fare=5120.0,
             weighted_mean_fare=5250.0,
             total_samples=420,
-            routes_covered=10,
+            routes_covered=14,
             inflation_dod_pct=0.45,
             inflation_mom_pct=2.30,
             base_period="2026-01-01",
@@ -273,8 +277,8 @@ def run_tests() -> bool:
             batch_id="run-20260924-001",
             source_platform="makemytrip",
             status="COMPLETED",
-            routes_attempted=10,
-            routes_succeeded=10,
+            routes_attempted=14,
+            routes_succeeded=14,
             fares_collected=450,
             fares_deduplicated=420,
             started_at=now_utc,
@@ -295,7 +299,7 @@ def run_tests() -> bool:
 
     print("\n" + "=" * 70)
     print(
-        "ALL VERIFICATION CHECKS PASSED SUCCESSFULLY (10 routes, 5 airlines, sum=1.000)"
+        "ALL VERIFICATION CHECKS PASSED SUCCESSFULLY (14 routes, 5 airlines, sum=1.000)"
     )
     print("=" * 70)
     return True

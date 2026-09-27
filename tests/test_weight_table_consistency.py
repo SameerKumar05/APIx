@@ -102,3 +102,95 @@ def test_pipeline_window_weights_match_index_engine() -> None:
     for code, weight in DEFAULT_BOOKING_WINDOW_WEIGHTS.items():
         assert PIPELINE_WINDOW_WEIGHTS[code] == pytest.approx(weight)
         assert PIPELINE_WINDOW_WEIGHTS[f"T+{code[1:]}"] == pytest.approx(weight)
+
+
+REQUIRED_14_CORRIDORS = frozenset({
+    "DEL-BOM",
+    "BOM-DEL",
+    "BLR-DEL",
+    "DEL-BLR",
+    "BOM-BLR",
+    "BLR-BOM",
+    "DEL-CCU",
+    "CCU-DEL",
+    "DEL-HYD",
+    "HYD-DEL",
+    "DEL-MAA",
+    "MAA-DEL",
+    "BLR-HYD",
+    "HYD-BLR",
+})
+
+
+def test_route_traffic_shares_contain_all_14_psd_corridors() -> None:
+    """Route basket must contain all 14 directional corridors required by SIH PS 26056."""
+    assert set(DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES.keys()) == REQUIRED_14_CORRIDORS
+    assert len(DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES) == 14
+    assert sum(DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES.values()) == pytest.approx(1.0, abs=1e-9)
+
+
+def test_all_route_weight_tables_agree_and_cover_14_corridors() -> None:
+    """Ingestion, Pipeline, Seed, and Index Engine must all define identical route weights."""
+    from backend.app.db.seed import INITIAL_ROUTES
+    from backend.app.services.index_pipeline import DEFAULT_ROUTE_WEIGHTS
+    from ingestion.config import DEFAULT_ROUTES
+
+    pipeline_routes = DEFAULT_ROUTE_WEIGHTS
+    seed_routes = {
+        f"{r['origin']}-{r['destination']}": r["weight"] for r in INITIAL_ROUTES
+    }
+    ingestion_routes = {r.pair_key: r.dgca_weight for r in DEFAULT_ROUTES}
+    engine_routes = DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES
+
+    assert set(pipeline_routes.keys()) == REQUIRED_14_CORRIDORS
+    assert set(seed_routes.keys()) == REQUIRED_14_CORRIDORS
+    assert set(ingestion_routes.keys()) == REQUIRED_14_CORRIDORS
+    assert set(engine_routes.keys()) == REQUIRED_14_CORRIDORS
+
+    for code in REQUIRED_14_CORRIDORS:
+        w = engine_routes[code]
+        assert pipeline_routes[code] == pytest.approx(w, abs=1e-9)
+        assert seed_routes[code] == pytest.approx(w, abs=1e-9)
+        assert ingestion_routes[code] == pytest.approx(w, abs=1e-9)
+
+
+def test_base_period_fares_defined_for_all_corridors() -> None:
+    from backend.app.services.index_pipeline import (
+        DEFAULT_BASE_FARES,
+        DEFAULT_ROUTE_WEIGHTS,
+    )
+
+    for route_code in DEFAULT_ROUTE_WEIGHTS:
+        assert route_code in DEFAULT_BASE_FARES
+        assert DEFAULT_BASE_FARES[route_code] > 0
+
+    for corridor in ["DEL-MAA", "MAA-DEL", "BLR-HYD", "HYD-BLR"]:
+        assert corridor in DEFAULT_BASE_FARES
+        assert DEFAULT_BASE_FARES[corridor] > 0
+
+
+def test_dgca_traffic_weights_table_provenance() -> None:
+    from pathlib import Path
+    from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
+
+    data_dir = Path(__file__).resolve().parents[1] / "data"
+    csv_path = data_dir / "dgca_passenger_traffic_weights.csv"
+    json_path = data_dir / "dgca_passenger_traffic_weights.json"
+
+    assert csv_path.exists(), "CSV weights table missing"
+    assert json_path.exists(), "JSON weights table missing"
+
+    for path in [csv_path, json_path]:
+        loader = DgcaTrafficLoader(data_path=path)
+        prov = loader.provenance
+        assert prov["is_synthetic"] is True, f"{path.name} not marked synthetic"
+        assert prov["record_count"] >= 270
+        assert len(loader._records) >= 270
+
+        first_rec = loader._records[0]
+        assert first_rec.is_synthetic is True
+        assert first_rec.provenance in ("calibrated_baseline", "modelled_dgca_proxy")
+        assert first_rec.source_url.startswith("https://www.dgca.gov.in")
+        assert first_rec.release_date
+        assert first_rec.pax_volume > 0
+        assert first_rec.share_weight > 0

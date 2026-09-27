@@ -765,9 +765,9 @@ Current: **460 passed** across all unit and integration test suites, with **25/2
 | `scripts/audit_provenance.py` | Database provenance integrity and audit gate | **PASSED (current)** | **Exit 0, zero mislabelled live claims** |
 | `scripts/test_econometric_specs.py` | Bortkiewicz bounds, Fisher axioms, elasticity, 38-day lead | **PASSED** | **6 / 6 steps passed** |
 | `scripts/test_econometric_engine.py` | Vectorized Fisher/Paasche/Laspeyres, RMSD, MAPE | **PASSED** | **10 / 10 checks passed** |
-| `scripts/test_db_models.py` | 14 production tables, 10 corridors, weight sum = 1.000 | **PASSED** | **6 / 6 checks passed** |
+| `scripts/test_db_models.py` | 14 production tables, 14 corridors, weight sum = 1.000 | **PASSED** | **6 / 6 checks passed** |
 | `scripts/test_streaming_dedup.py` | 33.11 us SHA-256 dedup, 28k quotes/sec, arbitrage spread | **PASSED** | **8 / 8 checks passed** |
-| `scripts/test_scheduler_and_proxies.py` | 50-slot matrix, EWMA proxy score, rate limiter, jitter | **PASSED** | **5 / 5 checks passed** |
+| `scripts/test_scheduler_and_proxies.py` | 70-slot matrix, EWMA proxy score, rate limiter, jitter | **PASSED** | **5 / 5 checks passed** |
 | `scripts/test_api_endpoints.py` | Core FastAPI routers, index endpoints, route catalogue | **PASSED** | **13 / 13 passed** |
 | `scripts/test_api_cycle3.py` | Streaming telemetry, proxy health, batch ingestion | **PASSED** | **16 / 16 passed** |
 | `scripts/test_api_cycle4.py` | Econometric indices, CPI gap, elasticity, DGCA violations | **PASSED** | **22 / 22 passed** |

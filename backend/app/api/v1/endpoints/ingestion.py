@@ -57,6 +57,16 @@ async def ingest_fare_batch(
             insert_stats = repo.bulk_insert(
                 valid_records, batch_id=batch_id, commit=True
             )
+            inserted_count = insert_stats.get("inserted", 0)
+            duplicate_count = insert_stats.get("duplicates", 0)
+            repo.record_run(
+                batch_id=batch_id,
+                source_platform=payload.source,
+                status="COMPLETED",
+                fares_collected=inserted_count,
+                commit=True,
+            )
+            background_tasks.add_task(run_daily_index_pipeline)
         except SQLAlchemyError as exc:
             db.rollback()
             logger.exception("Failed to persist ingested fares")
@@ -64,10 +74,6 @@ async def ingest_fare_batch(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Failed to persist ingested fares",
             ) from exc
-        inserted_count = insert_stats.get("inserted", 0)
-        duplicate_count = insert_stats.get("duplicates", 0)
-
-        background_tasks.add_task(run_daily_index_pipeline)
     processing_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
     valid_count = len(valid_records)
     status_str = (

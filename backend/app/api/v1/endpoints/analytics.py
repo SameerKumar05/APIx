@@ -50,6 +50,8 @@ def _window_days(tag: str) -> int | None:
         tail = cleaned[2:]
         if tail.isdigit():
             return int(tail)
+    if cleaned.startswith("T") and cleaned[1:].isdigit():
+        return int(cleaned[1:])
     if cleaned.isdigit():
         return int(cleaned)
     return None

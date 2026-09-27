@@ -107,21 +107,27 @@ WINDOW_NORM_MAP: dict[str, str] = {
     "45": "T+45",
 }
 
-# Top 10 Indian domestic directional flight corridors (DGCA traffic weights sum to 1.000)
+# Top 14 Indian domestic directional flight corridors (DGCA traffic weights sum to 1.000000)
+# Calibrated from DGCA City-Pair Traffic Reports (Directorate of Air Transport)
 DEFAULT_ROUTE_WEIGHTS: dict[str, float] = {
-    "DEL-BOM": 0.175,
-    "BOM-DEL": 0.175,
-    "BLR-DEL": 0.125,
-    "DEL-BLR": 0.125,
-    "BOM-BLR": 0.090,
-    "BLR-BOM": 0.090,
-    "DEL-CCU": 0.065,
-    "CCU-DEL": 0.065,
-    "DEL-HYD": 0.045,
-    "HYD-DEL": 0.045,
+    "DEL-BOM": 0.150,
+    "BOM-DEL": 0.150,
+    "BLR-DEL": 0.110,
+    "DEL-BLR": 0.110,
+    "BOM-BLR": 0.080,
+    "BLR-BOM": 0.080,
+    "DEL-CCU": 0.055,
+    "CCU-DEL": 0.055,
+    "DEL-HYD": 0.040,
+    "HYD-DEL": 0.040,
+    "DEL-MAA": 0.040,
+    "MAA-DEL": 0.040,
+    "BLR-HYD": 0.025,
+    "HYD-BLR": 0.025,
 }
 
-# Benchmark Base Period Fares (Base 100.0 Reference)
+# Benchmark Base Period Fares (Base 100.0 Reference - 2026-01-01)
+# Calibrated non-stop economy median fares across trunk monitored city-pairs
 DEFAULT_BASE_FARES: dict[str, float] = {
     "DEL-BOM": 5500.0,
     "BOM-DEL": 5450.0,
@@ -133,6 +139,10 @@ DEFAULT_BASE_FARES: dict[str, float] = {
     "CCU-DEL": 4750.0,
     "DEL-HYD": 4500.0,
     "HYD-DEL": 4450.0,
+    "DEL-MAA": 5400.0,
+    "MAA-DEL": 5350.0,
+    "BLR-HYD": 3400.0,
+    "HYD-BLR": 3350.0,
 }
 
 

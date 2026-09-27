@@ -16,7 +16,8 @@ dist/
 !.env.deploy.template
 logs/
 *.log
-artifacts/
+!artifacts/**
+!artifacts/**/*.log
 *.db
 *.sqlite
 *.sqlite3

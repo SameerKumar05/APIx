@@ -39,7 +39,12 @@ try:
 except ImportError:
     HAS_PLAYWRIGHT_SYNC = False
 
-HAS_HTTPX = find_spec("httpx") is not None
+try:
+    import httpx
+    HAS_HTTPX = True
+except ImportError:
+    httpx = None  # type: ignore[assignment]
+    HAS_HTTPX = False
 
 logger = logging.getLogger("ingestion.crawlers.spicejet")
 
@@ -520,6 +525,163 @@ class SpiceJetScraper(BaseScraper):
                 browser.close()
 
         return collected_records
+    def _extract_live_fares(
+        self,
+        origin: str,
+        destination: str,
+        target_date: date,
+        window_code: str,
+        fallback_to_fixture: bool = False,
+    ) -> list[RawFareRecord]:
+        """Attempts to extract genuine live SpiceJet flight quotes for route and date.
+
+        Queries the live SpiceJet availability search or public pricing query.
+        Returns parsed live records if available, or empty list if no genuine live
+        quotes were returned. Never fabricates live quotes.
+        """
+        norm_orig = self.normalize_iata(origin)
+        norm_dest = self.normalize_iata(destination)
+        date_str = target_date.strftime("%Y-%m-%d")
+        now_dt = datetime.now(UTC)
+
+        if HAS_HTTPX and httpx is not None:
+            try:
+                headers = self.get_randomized_headers()
+                with httpx.Client(timeout=min(self.config.timeout_seconds, 6.0)) as client:
+                    api_url = (
+                        f"{self.BASE_URL}/api/v3/search/availability"
+                        f"?origin={norm_orig}&destination={norm_dest}"
+                        f"&departureDate={date_str}&adult=1"
+                    )
+                    resp = client.get(api_url, headers=headers)
+                    if resp.status_code == 200:
+                        content_type = resp.headers.get("content-type", "")
+                        if "application/json" in content_type:
+                            data = resp.json()
+                            parsed = self.parse_flight_json(
+                                payload=data,
+                                origin=norm_orig,
+                                destination=norm_dest,
+                                window_code=window_code,
+                                capture_dt=now_dt,
+                            )
+                            if parsed:
+                                return parsed
+            except Exception as exc:
+                logger.debug("SpiceJet public API search query failed: %s", exc)
+
+        if fallback_to_fixture:
+            return self.get_staged_fixtures(
+                norm_orig, norm_dest, target_date, window_code
+            )
+
+        return []
+
+    def get_staged_fixtures(
+        self,
+        origin: str,
+        destination: str,
+        target_date: date,
+        window_code: str,
+    ) -> list[RawFareRecord]:
+        """Generates staged fixture records for route and date.
+
+        These records are explicitly staged fixtures for testing persistence
+        plumbing. They are always marked with is_synthetic=True and
+        source_platform='staged_fixture'.
+        """
+        records: list[RawFareRecord] = []
+        norm_orig = self.normalize_iata(origin)
+        norm_dest = self.normalize_iata(destination)
+        date_str = target_date.strftime("%Y-%m-%d")
+        now_dt = datetime.now(UTC)
+        booking_dt_str = now_dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+        corridor_profiles: dict[tuple[str, str], list[dict[str, Any]]] = {
+            ("DEL", "BOM"): [
+                {"flight": "SG-8101", "dep": "06:15", "arr": "08:35", "dur": 140, "base": 4250.0, "tax": 860.0},
+                {"flight": "SG-815", "dep": "09:50", "arr": "12:25", "dur": 155, "base": 4800.0, "tax": 920.0},
+                {"flight": "SG-8709", "dep": "18:40", "arr": "21:05", "dur": 145, "base": 5100.0, "tax": 950.0},
+                {"flight": "SG-8169", "dep": "20:30", "arr": "23:00", "dur": 150, "base": 4500.0, "tax": 890.0},
+            ],
+            ("BOM", "DEL"): [
+                {"flight": "SG-8102", "dep": "09:15", "arr": "11:35", "dur": 140, "base": 4350.0, "tax": 880.0},
+                {"flight": "SG-816", "dep": "13:10", "arr": "15:35", "dur": 145, "base": 4750.0, "tax": 910.0},
+                {"flight": "SG-8710", "dep": "21:45", "arr": "00:10", "dur": 145, "base": 4950.0, "tax": 930.0},
+            ],
+            ("DEL", "BLR"): [
+                {"flight": "SG-8131", "dep": "07:20", "arr": "10:10", "dur": 170, "base": 5200.0, "tax": 980.0},
+                {"flight": "SG-8135", "dep": "17:15", "arr": "20:05", "dur": 170, "base": 5600.0, "tax": 1020.0},
+            ],
+            ("BLR", "DEL"): [
+                {"flight": "SG-8132", "dep": "10:55", "arr": "13:45", "dur": 170, "base": 5150.0, "tax": 970.0},
+                {"flight": "SG-8136", "dep": "20:45", "arr": "23:35", "dur": 170, "base": 5500.0, "tax": 1010.0},
+            ],
+            ("BOM", "BLR"): [
+                {"flight": "SG-8411", "dep": "08:10", "arr": "09:55", "dur": 105, "base": 3400.0, "tax": 780.0},
+                {"flight": "SG-8417", "dep": "19:00", "arr": "20:45", "dur": 105, "base": 3750.0, "tax": 820.0},
+            ],
+            ("BLR", "BOM"): [
+                {"flight": "SG-8412", "dep": "10:35", "arr": "12:20", "dur": 105, "base": 3450.0, "tax": 790.0},
+                {"flight": "SG-8418", "dep": "21:25", "arr": "23:10", "dur": 105, "base": 3800.0, "tax": 830.0},
+            ],
+        }
+
+        default_profile = [
+            {"flight": "SG-8101", "dep": "07:00", "arr": "09:15", "dur": 135, "base": 4200.0, "tax": 850.0},
+            {"flight": "SG-8709", "dep": "16:30", "arr": "18:45", "dur": 135, "base": 4600.0, "tax": 890.0},
+        ]
+
+        flight_list = corridor_profiles.get((norm_orig, norm_dest), default_profile)
+
+        window_factors = {
+            "T+1": 1.45,
+            "T+7": 1.15,
+            "T+15": 1.00,
+            "T+30": 0.88,
+            "T+45": 0.82,
+        }
+        factor = window_factors.get(window_code, 1.0)
+
+        for item in flight_list:
+            base_fare_val = round(item["base"] * factor, 2)
+            tax_val = item["tax"]
+            total_fare_val = round(base_fare_val + tax_val, 2)
+
+            dep_dt_str = f"{date_str}T{item['dep']}:00"
+            dep_h, dep_m = map(int, item["dep"].split(":"))
+            arr_h, arr_m = map(int, item["arr"].split(":"))
+            arr_date = target_date + timedelta(days=1 if arr_h < dep_h else 0)
+            arr_dt_str = f"{arr_date.strftime('%Y-%m-%d')}T{item['arr']}:00"
+
+            record = RawFareRecord(
+                airline_code=self.AIRLINE_CODE,
+                flight_number=item["flight"],
+                origin=norm_orig,
+                destination=norm_dest,
+                departure_datetime=dep_dt_str,
+                arrival_datetime=arr_dt_str,
+                booking_datetime=booking_dt_str,
+                fare_inr=total_fare_val,
+                cabin_class="economy",
+                stops=0,
+                source="spicejet",
+                booking_window=window_code,
+                flight_date=date_str,
+                duration_minutes=item["dur"],
+                base_fare=base_fare_val,
+                taxes_and_fees=tax_val,
+                total_fare=total_fare_val,
+                flight_status="scheduled",
+                is_synthetic=True,
+                source_platform="staged_fixture",
+            )
+            is_valid, errs = self.validate_record(record)
+            if is_valid:
+                records.append(record)
+
+        return records
+
 
     def scrape_route(
         self,
@@ -594,23 +756,28 @@ class SpiceJetScraper(BaseScraper):
             records = self._scrape_with_playwright(
                 norm_orig, norm_dest, target_date, window_code
             )
-            if records:
+            if not records:
+                records = self._extract_live_fares(
+                    norm_orig, norm_dest, target_date, window_code
+                )
+            live_records = [r for r in records if not r.is_synthetic]
+            if live_records:
                 elapsed_ms = round((time.time() - start_time) * 1000, 2)
                 logger.info(
                     "Tier 1 Success: %d records from SpiceJet in %.2fms",
-                    len(records),
+                    len(live_records),
                     elapsed_ms,
                 )
                 return ScrapeResult(
                     source="spicejet",
                     success=True,
-                    records=records,
+                    records=live_records,
                     errors=[],
                     duration_ms=elapsed_ms,
                     metadata={
                         "tier": 1,
                         "source": "spicejet_live",
-                        "records_count": len(records),
+                        "records_count": len(live_records),
                         "origin": norm_orig,
                         "destination": norm_dest,
                         "date": target_date.isoformat(),
@@ -718,7 +885,7 @@ class SpiceJetScraper(BaseScraper):
                     round(r.taxes_and_fees * 0.95, 2) if r.taxes_and_fees else None
                 ),
                 is_synthetic=True,
-                source_platform="spicejet",
+                source_platform="staged_fixture",
             )
             sg_records.append(rec)
 

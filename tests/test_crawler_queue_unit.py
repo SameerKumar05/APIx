@@ -444,7 +444,7 @@ def test_claim_failure_is_logged_and_backs_off(
     worker._last_reaper_time = worker._last_heartbeat_time
     slept: list[float] = []
 
-    with caplog.at_level(logging.ERROR, logger="ingestion.worker"):
+    with caplog.at_level(logging.ERROR):
         with patch(
             "ingestion.worker.time.sleep",
             side_effect=lambda seconds: slept.append(seconds),

@@ -76,6 +76,12 @@ class RawFareRecord(BaseModel):
     booking_window: int | str | None = Field(
         None, description="Lead time in days or window code (e.g. 7 or 'T+7')"
     )
+    is_synthetic: bool = Field(
+        False, description="True if generated synthetically, False if from live source"
+    )
+    source_platform: str | None = Field(
+        None, description="Platform identifier (e.g. spicejet, easemytrip, amadeus)"
+    )
 
     @field_validator("origin", "destination")
     @classmethod

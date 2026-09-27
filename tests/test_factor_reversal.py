@@ -30,7 +30,10 @@ from backend.app.services.econometric_engine import (
     calculate_fisher_index,
     calculate_paasche_index,
 )
-from backend.app.services.index_engine import calculate_laspeyres_index
+from backend.app.services.index_engine import (
+    calculate_laspeyres_index,
+    calculate_true_laspeyres_index,
+)
 
 BASE_PRICES = {"DEL-BOM": 4200.0, "DEL-BLR": 5100.0, "BOM-BLR": 3400.0}
 BASE_QUANTITIES = {"DEL-BOM": 437_500.0, "DEL-BLR": 312_500.0, "BOM-BLR": 225_000.0}
@@ -133,3 +136,56 @@ def test_engine_fisher_pair_does_not_satisfy_factor_reversal() -> None:
     )
     product = (price_fisher / 100.0) * (quantity_fisher / 100.0)
     assert product != pytest.approx(_value_ratio(), rel=1e-6)
+
+
+def test_engine_true_laspeyres_matches_textbook_laspeyres() -> None:
+    """True Laspeyres function matches textbook formula sum(p_t * q_0) / sum(p_0 * q_0) * 100."""
+    engine = calculate_true_laspeyres_index(
+        CURRENT_PRICES, BASE_PRICES, BASE_QUANTITIES
+    )
+    textbook = _laspeyres(BASE_PRICES, CURRENT_PRICES, BASE_QUANTITIES) * 100.0
+    assert engine == pytest.approx(textbook, rel=1e-12)
+
+
+def test_engine_true_laspeyres_satisfies_fisher_factor_reversal() -> None:
+    """When True Laspeyres is paired with Paasche, the Fisher pair satisfies factor reversal identically."""
+    price_fisher = calculate_fisher_index(
+        calculate_true_laspeyres_index(
+            CURRENT_PRICES, BASE_PRICES, BASE_QUANTITIES
+        ),
+        calculate_paasche_index(
+            CURRENT_PRICES, BASE_PRICES, CURRENT_QUANTITIES
+        ),
+    )
+    quantity_fisher = calculate_fisher_index(
+        calculate_true_laspeyres_index(
+            CURRENT_QUANTITIES, BASE_QUANTITIES, BASE_PRICES
+        ),
+        calculate_paasche_index(
+            CURRENT_QUANTITIES, BASE_QUANTITIES, CURRENT_PRICES
+        ),
+    )
+    product = (price_fisher / 100.0) * (quantity_fisher / 100.0)
+    assert product == pytest.approx(_value_ratio(), rel=1e-12)
+
+
+def test_engine_laspeyres_with_quantities_satisfies_fisher_factor_reversal() -> None:
+    """Passing base_quantities to calculate_laspeyres_index activates True Laspeyres and passes factor reversal."""
+    price_fisher = calculate_fisher_index(
+        calculate_laspeyres_index(
+            CURRENT_PRICES, BASE_PRICES, base_quantities=BASE_QUANTITIES
+        ),
+        calculate_paasche_index(
+            CURRENT_PRICES, BASE_PRICES, CURRENT_QUANTITIES
+        ),
+    )
+    quantity_fisher = calculate_fisher_index(
+        calculate_laspeyres_index(
+            CURRENT_QUANTITIES, BASE_QUANTITIES, base_quantities=BASE_PRICES
+        ),
+        calculate_paasche_index(
+            CURRENT_QUANTITIES, BASE_QUANTITIES, CURRENT_PRICES
+        ),
+    )
+    product = (price_fisher / 100.0) * (quantity_fisher / 100.0)
+    assert product == pytest.approx(_value_ratio(), rel=1e-12)

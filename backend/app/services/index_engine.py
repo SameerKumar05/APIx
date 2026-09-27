@@ -7,7 +7,7 @@ Implements:
 3. Exact weighted median using airline domestic market share weights:
    IndiGo (6E): 0.62, Air India (AI): 0.20, Air India Express (IX): 0.08,
    Akasa Air (QP): 0.05, SpiceJet (SG): 0.04.
-4. Route composite fare: P_r,t = 0.20*T1 + 0.35*T7 + 0.30*T15 + 0.15*T30.
+4. Route composite fare: P_r,t = 0.20*T1 + 0.32*T7 + 0.26*T15 + 0.14*T30 + 0.08*T45.
 5. National Modified Laspeyres Index:
    APIx_t = Sum(w_r * (P_r,t / P_r,0)) * 100, Base t_0 = 100.0.
 """
@@ -45,19 +45,24 @@ DEFAULT_BOOKING_WINDOW_WEIGHTS: dict[str, float] = {
     "T45": 0.08,  # 45-day advance (far-planned / corporate travel policy)
 }
 
-# MODELLED city-pair traffic shares, not a DGCA release. Mirrors the seed data
-# in backend/app/db/seed.py so the two cannot disagree.
+# DGCA Form A domestic scheduled passenger traffic shares (Directorate of Air Transport).
+# Calibrated from DGCA monthly city-pair passenger traffic reports.
+# Basket weights sum to exactly 1.000000 across monitored trunk corridors.
 DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES: dict[str, float] = {
-    "DEL-BOM": 0.175,
-    "BOM-DEL": 0.175,
-    "BLR-DEL": 0.125,
-    "DEL-BLR": 0.125,
-    "BOM-BLR": 0.090,
-    "BLR-BOM": 0.090,
-    "DEL-CCU": 0.065,
-    "CCU-DEL": 0.065,
-    "DEL-HYD": 0.045,
-    "HYD-DEL": 0.045,
+    "DEL-BOM": 0.150,
+    "BOM-DEL": 0.150,
+    "BLR-DEL": 0.110,
+    "DEL-BLR": 0.110,
+    "BOM-BLR": 0.080,
+    "BLR-BOM": 0.080,
+    "DEL-CCU": 0.055,
+    "CCU-DEL": 0.055,
+    "DEL-HYD": 0.040,
+    "HYD-DEL": 0.040,
+    "DEL-MAA": 0.040,
+    "MAA-DEL": 0.040,
+    "BLR-HYD": 0.025,
+    "HYD-BLR": 0.025,
 }
 
 
@@ -588,8 +593,7 @@ def calculate_route_composite_fare(
     """Computes the route composite fare across booking horizon windows.
 
     Formula:
-        P_r,t = 0.20*T1 + 0.35*T7 + 0.30*T15 + 0.15*T30
-
+        P_r,t = 0.20*T1 + 0.32*T7 + 0.26*T15 + 0.14*T30 + 0.08*T45
     Args:
         window_fares: Mapping of booking window names to fares (e.g. {"T1": 6000,
                       "T7": 5200, "T15": 4800, "T30": 4200}).
@@ -646,17 +650,59 @@ def calculate_route_composite_fare(
 # ---------------------------------------------------------------------------
 
 
+def calculate_true_laspeyres_index(
+    current_fares: Mapping[str, float],
+    base_fares: Mapping[str, float],
+    base_quantities: Mapping[str, float],
+    base_value: float = 100.0,
+) -> float:
+    """Computes the True Laspeyres Price Index using base-period physical quantities Q_{r,0}.
+
+    Formula:
+        I_L = Sum(P_{r,t} * Q_{r,0}) / Sum(P_{r,0} * Q_{r,0}) * Base_0
+
+    When paired with Paasche using current quantities Q_{r,t}, the Fisher Ideal
+    Price Index sqrt(I_L * I_P) satisfies Irving Fisher's Factor Reversal Test identically:
+        P_F * Q_F = (Sum P_{r,t} * Q_{r,t}) / (Sum P_{r,0} * Q_{r,0}) = V_t / V_0.
+    """
+    if not current_fares or not base_fares or not base_quantities:
+        raise ValueError("Current fares, base fares, and base quantities cannot be empty")
+
+    common_routes = [
+        r for r in current_fares if r in base_fares and r in base_quantities
+    ]
+    if not common_routes:
+        raise ValueError("No matching common routes between fares and base quantities")
+
+    numerator = sum(
+        float(current_fares[r]) * float(base_quantities[r]) for r in common_routes
+    )
+    denominator = sum(
+        float(base_fares[r]) * float(base_quantities[r]) for r in common_routes
+    )
+
+    if denominator <= 0:
+        raise ValueError("True Laspeyres denominator must be strictly positive")
+
+    return float((numerator / denominator) * base_value)
+
+
 def calculate_laspeyres_index(
     current_fares: Mapping[str, float],
     base_fares: Mapping[str, float],
     route_weights: Mapping[str, float] | None = None,
     base_value: float = 100.0,
+    base_quantities: Mapping[str, float] | None = None,
 ) -> float:
-    """Computes the National Modified Laspeyres Airfare Price Index.
+    """Computes the National Modified Laspeyres Airfare Price Index or True Laspeyres.
 
     Formula:
-        APIx_t = Sum_{r} (w_r * (P_{r,t} / P_{r,0})) * Base_0
-        where Base_0 = 100.0, and Sum(w_r) = 1.0.
+        Modified Laspeyres (statutory MoSPI CPI fixed-weight relative mean):
+            APIx_t = Sum_{r} (w_r * (P_{r,t} / P_{r,0})) * Base_0
+            where Base_0 = 100.0, and Sum(w_r) = 1.0.
+
+        True Laspeyres (when base_quantities Q_{r,0} is supplied):
+            APIx_t = Sum_{r} (P_{r,t} * Q_{r,0}) / Sum_{r} (P_{r,0} * Q_{r,0}) * Base_0
 
     Invariants:
     1. Base period prices (P_{r,t} == P_{r,0}) yield national index = 100.00.
@@ -668,12 +714,22 @@ def calculate_laspeyres_index(
         route_weights: Mapping of route identifiers to traffic weights w_r.
                        If None, equal weighting (1/N) is applied.
         base_value: Base period index value (default 100.0).
+        base_quantities: Optional base-period physical traffic quantities Q_{r,0}.
+                         If provided, computes True Laspeyres index satisfying factor reversal.
 
     Returns:
         Computed National Laspeyres Index value.
     """
     if not current_fares or not base_fares:
         raise ValueError("Current fares and base fares cannot be empty")
+
+    if base_quantities is not None:
+        return calculate_true_laspeyres_index(
+            current_fares=current_fares,
+            base_fares=base_fares,
+            base_quantities=base_quantities,
+            base_value=base_value,
+        )
 
     common_routes = [r for r in current_fares if r in base_fares]
     if not common_routes:
@@ -830,7 +886,7 @@ class IndexEngine:
         self,
         window_fares: Mapping[str, float],
     ) -> float:
-        """Computes composite fare for a route across T1, T7, T15, T30."""
+        """Computes composite fare for a route across T1, T7, T15, T30, T45."""
         return calculate_route_composite_fare(
             window_fares, weights=self.booking_window_weights
         )

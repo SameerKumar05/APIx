@@ -1,0 +1,10 @@
+back-test status: OK
+  required window   : 30 days
+  APIx observations : 35 distinct days
+  APIx span         : 2026-08-20 to 2026-09-23
+  MoSPI months      : 3
+  pearson r         : 0.9569 (r2=0.9157)
+  RMSE              : 1.2077
+  MAPE              : 0.9811%
+  best lag          : 0 month(s), r=0.9569
+  direction agree   : 65.71%

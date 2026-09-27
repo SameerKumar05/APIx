@@ -2,29 +2,42 @@
 
 1. Null or non-positive total fare is rejected at the scraper boundary
    (BaseScraper.normalize_fare). It is never stored and never estimated.
-2. A missing base/tax split uses ESTIMATED_BASE_FARE_RATIO and is stored with
-   fare_split_basis "estimated". A supplied side is kept and the other side is
+2. A missing base/tax split uses route- and carrier-aware calibrated ratios
+   and is stored with fare_split_basis "calibrated" (or "estimated" when route
+   and carrier are uncalibrated). A supplied side is kept and the other side is
    the residual ("residual"). Both supplied is "measured". udf_fee and
-   convenience_fee stay NULL unless the source supplied them. They are never
-   derived from the ratio.
-3. A missing departure time does not become a duration. duration_minutes stays
+   convenience_fee stay NULL unless the source supplied them.
+3. Total fare recomposition integrity: when components exist,
+   assert total ≈ base + taxes + UDF + convenience within configurable tolerance
+   (default ±1 INR or ±0.5%). Mismatches are quarantined with index_exclusion_reason
+   "split_recomposition_mismatch" to protect index purity.
+4. A missing departure time does not become a duration. duration_minutes stays
    NULL. A supplied 0 without a departure clock is the same absence, not a
    zero-length flight.
-4. cancelled and sold_out are persisted and excluded from the index and from
+5. cancelled and sold_out are persisted and excluded from the index and from
    the representative fare. A cancelled flight has no payable fare. NULL status
    is not rewritten to scheduled.
-5. An outlier is persisted with index_exclusion_reason "outlier" and excluded
+6. An outlier is persisted with index_exclusion_reason "outlier" and excluded
    from the index. It is not deleted: an auditor can still see the quote and
    the reason it did not enter the index. Deleting it would hide a scraper
    fault and make the exclusion unauditable.
 
+Policy for Sparse Windows (< 4 Tukey peers):
 A fare is an outlier when it falls outside Tukey fences (k=1.5) computed from
 payable peers on the same corridor and booking window whose scrape time is
-inside OUTLIER_LOOKBACK_DAYS. Fewer than MIN_TUKEY_PEERS peers is not an
-outlier: the fence is not identified, so the fare is kept. The lookback matches
-the 30-day route baseline already used by the index.
-"""
+inside OUTLIER_LOOKBACK_DAYS. When fewer than MIN_TUKEY_PEERS (4) payable peers
+exist, sample size is statistically insufficient to identify reliable first and
+third quartiles (Q1, Q3) or calculate a meaningful interquartile range (IQR).
+In sparse windows:
+1. No outlier fence is constructed; outlier_against_peers returns False.
+2. All payable quotes in the sparse window are preserved as index-eligible
+   (index_exclusion_reason remains None, not flagged as outlier).
+3. Structural invariants (flight status cancelled/sold_out and total fare
+   recomposition check split_recomposition_mismatch) remain active.
+4. This avoids statistical censorship in thin or low-frequency corridors while
+   preserving data provenance and index reproducibility.
 
+"""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -35,7 +48,10 @@ from backend.app.core.fare_components import (
     FLIGHT_STATUS_CANCELLED,
     FLIGHT_STATUS_SOLD_OUT,
     FLIGHT_STATUS_VALUES,
+    RECOMPOSITION_TOLERANCE_ABSOLUTE_INR,
+    RECOMPOSITION_TOLERANCE_RELATIVE,
     canonical_flight_status,
+    check_fare_recomposition,
 )
 from backend.app.services.index_engine import compute_tukey_bounds
 
@@ -46,7 +62,7 @@ TUKEY_K: Final[float] = 1.5
 EXCLUSION_OUTLIER: Final[str] = "outlier"
 EXCLUSION_CANCELLED: Final[str] = "cancelled"
 EXCLUSION_SOLD_OUT: Final[str] = "sold_out"
-
+EXCLUSION_RECOMPOSITION_MISMATCH: Final[str] = "split_recomposition_mismatch"
 _STATUS_TEXT_KEYS: Final[tuple[str, ...]] = (
     "flight_status",
     "flightStatus",
@@ -98,19 +114,45 @@ def exclusion_for_fare(
     total_fare: float,
     flight_status: str | None,
     peer_fares: Sequence[float],
+    base_fare: float | None = None,
+    taxes_and_fees: float | None = None,
+    udf_fee: float | None = None,
+    convenience_fee: float | None = None,
+    *,
+    fare_split_basis: str | None = None,
+    recomposition_abs_tolerance: float = RECOMPOSITION_TOLERANCE_ABSOLUTE_INR,
+    recomposition_rel_tolerance: float = RECOMPOSITION_TOLERANCE_RELATIVE,
 ) -> str | None:
     """Reason the quote must stay out of the index, or None if it may enter.
 
-    Non-payable status wins over the outlier test: a cancelled fare is not a
-    price observation, so it is not used to decide whether another fare is extreme.
+    Precedence:
+    1. Flight status: cancelled (no payable transaction)
+    2. Flight status: sold_out (inventory exhausted)
+    3. Structural recomposition: split_recomposition_mismatch
+       Asserts total ≈ base + taxes + UDF + convenience within configurable tolerance.
+    4. Statistical outlier against payable peers: outlier (when >= MIN_TUKEY_PEERS).
+       Sparse windows (<4 peers) keep the quote unless quarantined by 1-3.
     """
     status = canonical_flight_status(flight_status)
     if status == FLIGHT_STATUS_CANCELLED:
         return EXCLUSION_CANCELLED
     if status == FLIGHT_STATUS_SOLD_OUT:
         return EXCLUSION_SOLD_OUT
+
+    if not check_fare_recomposition(
+        total_fare=total_fare,
+        base_fare=base_fare,
+        taxes_and_fees=taxes_and_fees,
+        udf_fee=udf_fee,
+        convenience_fee=convenience_fee,
+        abs_tolerance=recomposition_abs_tolerance,
+        rel_tolerance=recomposition_rel_tolerance,
+    ):
+        return EXCLUSION_RECOMPOSITION_MISMATCH
+
     if outlier_against_peers(total_fare, peer_fares):
         return EXCLUSION_OUTLIER
+
     return None
 
 

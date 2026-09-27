@@ -96,7 +96,7 @@ class TestDgcaTrafficLoader(unittest.TestCase):
     def test_builtin_records_and_corridors(self) -> None:
         summary = self.loader.get_network_summary()
         self.assertEqual(summary["total_periods"], 27)
-        self.assertEqual(summary["corridors_monitored"], 10)
+        self.assertEqual(summary["corridors_monitored"], 14)
         self.assertGreater(summary["total_monthly_pax"], 2_000_000)
 
     def test_strict_weight_sum_invariant_all_periods(self) -> None:
@@ -113,13 +113,13 @@ class TestDgcaTrafficLoader(unittest.TestCase):
 
     def test_route_weight_dictionaries(self) -> None:
         weights = self.loader.get_route_weights()
-        self.assertEqual(len(weights), 10)
+        self.assertEqual(len(weights), 14)
         self.assertIn("DEL-BOM", weights)
         self.assertIn("BOM-DEL", weights)
         self.assertIn("DEL-BLR", weights)
 
         tuple_weights = self.loader.get_tuple_route_weights()
-        self.assertEqual(len(tuple_weights), 10)
+        self.assertEqual(len(tuple_weights), 14)
         self.assertIn(("DEL", "BOM"), tuple_weights)
         self.assertIn(("BOM", "DEL"), tuple_weights)
 
@@ -132,7 +132,7 @@ class TestDgcaTrafficLoader(unittest.TestCase):
             csv_path = Path(tmpdir) / "dgca.csv"
             self.loader.export_csv(csv_path)
             from_csv = DgcaTrafficLoader(data_path=csv_path)
-            self.assertEqual(len(from_csv.get_route_weights()), 10)
+            self.assertEqual(len(from_csv.get_route_weights()), 14)
             self.assertAlmostEqual(
                 sum(from_csv.get_route_weights().values()), 1.0, places=5
             )
@@ -140,7 +140,7 @@ class TestDgcaTrafficLoader(unittest.TestCase):
             json_path = Path(tmpdir) / "dgca.json"
             self.loader.export_json(json_path)
             from_json = DgcaTrafficLoader(data_path=json_path)
-            self.assertEqual(from_json.get_network_summary()["corridors_monitored"], 10)
+            self.assertEqual(from_json.get_network_summary()["corridors_monitored"], 14)
 
 
 class TestBenchmarkDatabaseSeeding(unittest.TestCase):
@@ -174,8 +174,8 @@ class TestBenchmarkDatabaseSeeding(unittest.TestCase):
                 d_res = DgcaTrafficLoader().seed_database(
                     db=session, update_active_routes=True
                 )
-                self.assertEqual(d_res["weights_upserted"], 270)
-                self.assertEqual(d_res["routes_updated"], 10)
+                self.assertEqual(d_res["weights_upserted"], 378)
+                self.assertEqual(d_res["routes_updated"], 14)
 
                 del_bom_after = session.execute(
                     select(Route).where(
@@ -307,7 +307,7 @@ class TestDgcaWeightProvenance:
         assert again._records[0].provenance == "DGCA"
         assert again._records[0].pax_volume == 100
 
-    def test_committed_weights_file_declares_itself_generated(self) -> None:
+    def test_committed_weights_file_carries_calibrated_baseline_provenance(self) -> None:
         from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
 
         csv = (
@@ -323,8 +323,10 @@ class TestDgcaWeightProvenance:
         )
         assert january.pax_volume == 441875
         assert january.is_synthetic is True
-        assert january.provenance == "generated"
+        assert january.provenance in {"calibrated_baseline", "modelled_dgca_proxy"}
         assert loader.provenance["is_synthetic"] is True
+        assert january.source_url.startswith("https://www.dgca.gov.in")
+        assert january.release_date == "2024-02-18"
 
     def test_weights_still_sum_to_one_per_period(self) -> None:
         from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader

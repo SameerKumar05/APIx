@@ -71,19 +71,19 @@ def db_session() -> Generator[Session, None, None]:
 
 
 def test_seed_routes_and_airlines(db_session: Session) -> None:
-    """Verify that exactly 10 routes and 5 airlines are seeded, and weights sum to 1.000 / 100.0%."""
+    """Verify that exactly 14 routes and 5 airlines are seeded, and weights sum to 1.000 / 100.0%."""
     result = seed_all(db_session)
-    assert result["routes"] == 10
+    assert result["routes"] == 14
     assert result["airlines"] == 5
 
     routes = db_session.execute(select(Route)).scalars().all()
-    assert len(routes) == 10
+    assert len(routes) == 14
 
     total_weight = sum(r.weight for r in routes)
     assert math.isclose(total_weight, 1.0, rel_tol=1e-6)
 
     total_pax = sum(r.dgca_monthly_pax for r in routes)
-    assert total_pax == 2500000
+    assert total_pax == 3000000
 
     airlines = db_session.execute(select(Airline)).scalars().all()
     assert len(airlines) == 5
@@ -97,17 +97,17 @@ def test_seed_routes_and_airlines(db_session: Session) -> None:
 
     # Ensure idempotency of seed_all
     result_second = seed_all(db_session)
-    assert result_second["routes"] == 10
+    assert result_second["routes"] == 14
     assert result_second["airlines"] == 5
-    assert len(db_session.execute(select(Route)).scalars().all()) == 10
+    assert len(db_session.execute(select(Route)).scalars().all()) == 14
     assert len(db_session.execute(select(Airline)).scalars().all()) == 5
 
     # Verify seed_routes and seed_airlines execute cleanly and idempotently
     routes_direct = seed_routes(db_session)
     airlines_direct = seed_airlines(db_session)
-    assert len(routes_direct) == 10
+    assert len(routes_direct) == 14
     assert len(airlines_direct) == 5
-    assert len(db_session.execute(select(Route)).scalars().all()) == 10
+    assert len(db_session.execute(select(Route)).scalars().all()) == 14
     assert len(db_session.execute(select(Airline)).scalars().all()) == 5
 
 

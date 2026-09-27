@@ -219,7 +219,7 @@ def test_proxy_pool_management() -> None:
 async def test_scheduler_orchestration() -> None:
     """Tests IngestionScheduler job registration, normalization, jitter, and execution."""
     logger.info("=" * 70)
-    logger.info("STAGE 2: INGESTION SCHEDULER & 40-SLOT DISPATCH VERIFICATION")
+    logger.info("STAGE 2: INGESTION SCHEDULER & 70-SLOT DISPATCH VERIFICATION")
     logger.info("=" * 70)
 
     # 1. Normalization and alias tests
@@ -261,18 +261,24 @@ async def test_scheduler_orchestration() -> None:
         orchestrator=orchestrator,
     )
 
-    # 3. Verify exactly 40 registered slots
+    # 3. Verify exactly 70 registered slots (14 routes * 5 windows)
     status = scheduler.get_job_status()
     total_registered = status["total_registered_jobs"]
-    expected_slots = len(DEFAULT_ROUTES) * len(BOOKING_WINDOWS)  # 10 * 4 = 40
+    expected_slots = len(DEFAULT_ROUTES) * len(BOOKING_WINDOWS)  # 14 * 5 = 70
     assert (
         total_registered == expected_slots
     ), f"Expected {expected_slots} registered slot jobs, got {total_registered}"
+    assert total_registered == 70, f"Expected exactly 70 registered slot jobs, got {total_registered}"
     logger.info(
         "✓ APScheduler successfully registered all %d discrete slot jobs",
         total_registered,
     )
 
+    # Verify new PSD corridors are among registered slots
+    maa_del_job = next((j for j in status["jobs"] if j["id"] == "slot_MAA_DEL_T+1"), None)
+    assert maa_del_job is not None, "MAA-DEL slot job missing from scheduler registration"
+    blr_hyd_job = next((j for j in status["jobs"] if j["id"] == "slot_BLR_HYD_T+1"), None)
+    assert blr_hyd_job is not None, "BLR-HYD slot job missing from scheduler registration"
     # Verify job naming and IDs
     sample_job = next(j for j in status["jobs"] if j["id"] == "slot_DEL_BOM_T+1")
     assert sample_job["route"] == "DEL-BOM"

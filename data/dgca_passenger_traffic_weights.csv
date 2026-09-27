@@ -1,271 +1,272 @@
-year_month,route_code,origin,destination,pax_volume,share_weight,distance_km,period_rank,provenance
-2024-01,DEL-BOM,DEL,BOM,441875,0.175,1148.0,1,generated
-2024-01,BOM-DEL,BOM,DEL,441875,0.175,1148.0,2,generated
-2024-01,DEL-BLR,DEL,BLR,315625,0.125,1740.0,3,generated
-2024-01,BLR-DEL,BLR,DEL,315625,0.125,1740.0,4,generated
-2024-01,BOM-BLR,BOM,BLR,227250,0.09,842.0,5,generated
-2024-01,BLR-BOM,BLR,BOM,227250,0.09,842.0,6,generated
-2024-01,DEL-CCU,DEL,CCU,164125,0.065,1305.0,7,generated
-2024-01,CCU-DEL,CCU,DEL,164125,0.065,1305.0,8,generated
-2024-01,DEL-HYD,DEL,HYD,113625,0.045,1253.0,9,generated
-2024-01,HYD-DEL,HYD,DEL,113625,0.045,1253.0,10,generated
-2024-02,DEL-BOM,DEL,BOM,422767,0.172041,1148.0,1,generated
-2024-02,BOM-DEL,BOM,DEL,422767,0.172041,1148.0,2,generated
-2024-02,DEL-BLR,DEL,BLR,314056,0.127802,1740.0,3,generated
-2024-02,BLR-DEL,BLR,DEL,314056,0.127802,1740.0,4,generated
-2024-02,BOM-BLR,BOM,BLR,226120,0.092017,842.0,5,generated
-2024-02,BLR-BOM,BLR,BOM,226120,0.092017,842.0,6,generated
-2024-02,DEL-CCU,DEL,CCU,157028,0.063901,1305.0,7,generated
-2024-02,CCU-DEL,CCU,DEL,157028,0.063901,1305.0,8,generated
-2024-02,DEL-HYD,DEL,HYD,108712,0.044239,1253.0,9,generated
-2024-02,HYD-DEL,HYD,DEL,108712,0.044239,1253.0,10,generated
-2024-03,DEL-BOM,DEL,BOM,452150,0.172041,1148.0,1,generated
-2024-03,BOM-DEL,BOM,DEL,452150,0.172041,1148.0,2,generated
-2024-03,DEL-BLR,DEL,BLR,335883,0.127802,1740.0,3,generated
-2024-03,BLR-DEL,BLR,DEL,335883,0.127802,1740.0,4,generated
-2024-03,BOM-BLR,BOM,BLR,241836,0.092017,842.0,5,generated
-2024-03,BLR-BOM,BLR,BOM,241836,0.092017,842.0,6,generated
-2024-03,DEL-CCU,DEL,CCU,167942,0.063901,1305.0,7,generated
-2024-03,CCU-DEL,CCU,DEL,167942,0.063901,1305.0,8,generated
-2024-03,DEL-HYD,DEL,HYD,116267,0.044239,1253.0,9,generated
-2024-03,HYD-DEL,HYD,DEL,116267,0.044239,1253.0,10,generated
-2024-04,DEL-BOM,DEL,BOM,464054,0.175,1148.0,1,generated
-2024-04,BOM-DEL,BOM,DEL,464054,0.175,1148.0,2,generated
-2024-04,DEL-BLR,DEL,BLR,331467,0.125,1740.0,3,generated
-2024-04,BLR-DEL,BLR,DEL,331467,0.125,1740.0,4,generated
-2024-04,BOM-BLR,BOM,BLR,238656,0.09,842.0,5,generated
-2024-04,BLR-BOM,BLR,BOM,238656,0.09,842.0,6,generated
-2024-04,DEL-CCU,DEL,CCU,172363,0.065,1305.0,7,generated
-2024-04,CCU-DEL,CCU,DEL,172363,0.065,1305.0,8,generated
-2024-04,DEL-HYD,DEL,HYD,119328,0.045,1253.0,9,generated
-2024-04,HYD-DEL,HYD,DEL,119328,0.045,1253.0,10,generated
-2024-05,DEL-BOM,DEL,BOM,494060,0.175,1148.0,1,generated
-2024-05,BOM-DEL,BOM,DEL,494060,0.175,1148.0,2,generated
-2024-05,DEL-BLR,DEL,BLR,352900,0.125,1740.0,3,generated
-2024-05,BLR-DEL,BLR,DEL,352900,0.125,1740.0,4,generated
-2024-05,BOM-BLR,BOM,BLR,254088,0.09,842.0,5,generated
-2024-05,BLR-BOM,BLR,BOM,254088,0.09,842.0,6,generated
-2024-05,DEL-CCU,DEL,CCU,183508,0.065,1305.0,7,generated
-2024-05,CCU-DEL,CCU,DEL,183508,0.065,1305.0,8,generated
-2024-05,DEL-HYD,DEL,HYD,127044,0.045,1253.0,9,generated
-2024-05,HYD-DEL,HYD,DEL,127044,0.045,1253.0,10,generated
-2024-06,DEL-BOM,DEL,BOM,483752,0.175,1148.0,1,generated
-2024-06,BOM-DEL,BOM,DEL,483752,0.175,1148.0,2,generated
-2024-06,DEL-BLR,DEL,BLR,345537,0.125,1740.0,3,generated
-2024-06,BLR-DEL,BLR,DEL,345537,0.125,1740.0,4,generated
-2024-06,BOM-BLR,BOM,BLR,248787,0.09,842.0,5,generated
-2024-06,BLR-BOM,BLR,BOM,248787,0.09,842.0,6,generated
-2024-06,DEL-CCU,DEL,CCU,179679,0.065,1305.0,7,generated
-2024-06,CCU-DEL,CCU,DEL,179679,0.065,1305.0,8,generated
-2024-06,DEL-HYD,DEL,HYD,124393,0.045,1253.0,9,generated
-2024-06,HYD-DEL,HYD,DEL,124393,0.045,1253.0,10,generated
-2024-07,DEL-BOM,DEL,BOM,414127,0.175,1148.0,1,generated
-2024-07,BOM-DEL,BOM,DEL,414127,0.175,1148.0,2,generated
-2024-07,DEL-BLR,DEL,BLR,295805,0.125,1740.0,3,generated
-2024-07,BLR-DEL,BLR,DEL,295805,0.125,1740.0,4,generated
-2024-07,BOM-BLR,BOM,BLR,212979,0.09,842.0,5,generated
-2024-07,BLR-BOM,BLR,BOM,212979,0.09,842.0,6,generated
-2024-07,DEL-CCU,DEL,CCU,153818,0.065,1305.0,7,generated
-2024-07,CCU-DEL,CCU,DEL,153818,0.065,1305.0,8,generated
-2024-07,DEL-HYD,DEL,HYD,106490,0.045,1253.0,9,generated
-2024-07,HYD-DEL,HYD,DEL,106490,0.045,1253.0,10,generated
-2024-08,DEL-BOM,DEL,BOM,426017,0.175,1148.0,1,generated
-2024-08,BOM-DEL,BOM,DEL,426017,0.175,1148.0,2,generated
-2024-08,DEL-BLR,DEL,BLR,304298,0.125,1740.0,3,generated
-2024-08,BLR-DEL,BLR,DEL,304298,0.125,1740.0,4,generated
-2024-08,BOM-BLR,BOM,BLR,219094,0.09,842.0,5,generated
-2024-08,BLR-BOM,BLR,BOM,219094,0.09,842.0,6,generated
-2024-08,DEL-CCU,DEL,CCU,158235,0.065,1305.0,7,generated
-2024-08,CCU-DEL,CCU,DEL,158235,0.065,1305.0,8,generated
-2024-08,DEL-HYD,DEL,HYD,109547,0.045,1253.0,9,generated
-2024-08,HYD-DEL,HYD,DEL,109547,0.045,1253.0,10,generated
-2024-09,DEL-BOM,DEL,BOM,442657,0.173195,1148.0,1,generated
-2024-09,BOM-DEL,BOM,DEL,442657,0.173199,1148.0,2,generated
-2024-09,DEL-BLR,DEL,BLR,316184,0.123714,1740.0,3,generated
-2024-09,BLR-DEL,BLR,DEL,316184,0.123714,1740.0,4,generated
-2024-09,BOM-BLR,BOM,BLR,227652,0.089074,842.0,5,generated
-2024-09,BLR-BOM,BLR,BOM,227652,0.089074,842.0,6,generated
-2024-09,DEL-CCU,DEL,CCU,177569,0.069478,1305.0,7,generated
-2024-09,CCU-DEL,CCU,DEL,177569,0.069478,1305.0,8,generated
-2024-09,DEL-HYD,DEL,HYD,113826,0.044537,1253.0,9,generated
-2024-09,HYD-DEL,HYD,DEL,113826,0.044537,1253.0,10,generated
-2024-10,DEL-BOM,DEL,BOM,519836,0.173195,1148.0,1,generated
-2024-10,BOM-DEL,BOM,DEL,519836,0.173199,1148.0,2,generated
-2024-10,DEL-BLR,DEL,BLR,371312,0.123714,1740.0,3,generated
-2024-10,BLR-DEL,BLR,DEL,371312,0.123714,1740.0,4,generated
-2024-10,BOM-BLR,BOM,BLR,267344,0.089074,842.0,5,generated
-2024-10,BLR-BOM,BLR,BOM,267344,0.089074,842.0,6,generated
-2024-10,DEL-CCU,DEL,CCU,208529,0.069478,1305.0,7,generated
-2024-10,CCU-DEL,CCU,DEL,208529,0.069478,1305.0,8,generated
-2024-10,DEL-HYD,DEL,HYD,133672,0.044537,1253.0,9,generated
-2024-10,HYD-DEL,HYD,DEL,133672,0.044537,1253.0,10,generated
-2024-11,DEL-BOM,DEL,BOM,509246,0.172041,1148.0,1,generated
-2024-11,BOM-DEL,BOM,DEL,509246,0.172041,1148.0,2,generated
-2024-11,DEL-BLR,DEL,BLR,378297,0.127802,1740.0,3,generated
-2024-11,BLR-DEL,BLR,DEL,378297,0.127802,1740.0,4,generated
-2024-11,BOM-BLR,BOM,BLR,272374,0.092017,842.0,5,generated
-2024-11,BLR-BOM,BLR,BOM,272374,0.092017,842.0,6,generated
-2024-11,DEL-CCU,DEL,CCU,189148,0.063901,1305.0,7,generated
-2024-11,CCU-DEL,CCU,DEL,189148,0.063901,1305.0,8,generated
-2024-11,DEL-HYD,DEL,HYD,130949,0.044239,1253.0,9,generated
-2024-11,HYD-DEL,HYD,DEL,130949,0.044239,1253.0,10,generated
-2024-12,DEL-BOM,DEL,BOM,536115,0.175,1148.0,1,generated
-2024-12,BOM-DEL,BOM,DEL,536115,0.175,1148.0,2,generated
-2024-12,DEL-BLR,DEL,BLR,382939,0.125,1740.0,3,generated
-2024-12,BLR-DEL,BLR,DEL,382939,0.125,1740.0,4,generated
-2024-12,BOM-BLR,BOM,BLR,275716,0.09,842.0,5,generated
-2024-12,BLR-BOM,BLR,BOM,275716,0.09,842.0,6,generated
-2024-12,DEL-CCU,DEL,CCU,199128,0.065,1305.0,7,generated
-2024-12,CCU-DEL,CCU,DEL,199128,0.065,1305.0,8,generated
-2024-12,DEL-HYD,DEL,HYD,137858,0.045,1253.0,9,generated
-2024-12,HYD-DEL,HYD,DEL,137858,0.045,1253.0,10,generated
-2025-01,DEL-BOM,DEL,BOM,478109,0.175,1148.0,1,generated
-2025-01,BOM-DEL,BOM,DEL,478109,0.175,1148.0,2,generated
-2025-01,DEL-BLR,DEL,BLR,341506,0.125,1740.0,3,generated
-2025-01,BLR-DEL,BLR,DEL,341506,0.125,1740.0,4,generated
-2025-01,BOM-BLR,BOM,BLR,245885,0.09,842.0,5,generated
-2025-01,BLR-BOM,BLR,BOM,245885,0.09,842.0,6,generated
-2025-01,DEL-CCU,DEL,CCU,177583,0.065,1305.0,7,generated
-2025-01,CCU-DEL,CCU,DEL,177583,0.065,1305.0,8,generated
-2025-01,DEL-HYD,DEL,HYD,122942,0.045,1253.0,9,generated
-2025-01,HYD-DEL,HYD,DEL,122942,0.045,1253.0,10,generated
-2025-02,DEL-BOM,DEL,BOM,457434,0.172041,1148.0,1,generated
-2025-02,BOM-DEL,BOM,DEL,457434,0.172041,1148.0,2,generated
-2025-02,DEL-BLR,DEL,BLR,339808,0.127802,1740.0,3,generated
-2025-02,BLR-DEL,BLR,DEL,339808,0.127802,1740.0,4,generated
-2025-02,BOM-BLR,BOM,BLR,244662,0.092017,842.0,5,generated
-2025-02,BLR-BOM,BLR,BOM,244662,0.092017,842.0,6,generated
-2025-02,DEL-CCU,DEL,CCU,169904,0.063901,1305.0,7,generated
-2025-02,CCU-DEL,CCU,DEL,169904,0.063901,1305.0,8,generated
-2025-02,DEL-HYD,DEL,HYD,117626,0.044239,1253.0,9,generated
-2025-02,HYD-DEL,HYD,DEL,117626,0.044239,1253.0,10,generated
-2025-03,DEL-BOM,DEL,BOM,489227,0.172041,1148.0,1,generated
-2025-03,BOM-DEL,BOM,DEL,489227,0.172041,1148.0,2,generated
-2025-03,DEL-BLR,DEL,BLR,363425,0.127802,1740.0,3,generated
-2025-03,BLR-DEL,BLR,DEL,363425,0.127802,1740.0,4,generated
-2025-03,BOM-BLR,BOM,BLR,261666,0.092017,842.0,5,generated
-2025-03,BLR-BOM,BLR,BOM,261666,0.092017,842.0,6,generated
-2025-03,DEL-CCU,DEL,CCU,181713,0.063901,1305.0,7,generated
-2025-03,CCU-DEL,CCU,DEL,181713,0.063901,1305.0,8,generated
-2025-03,DEL-HYD,DEL,HYD,125801,0.044239,1253.0,9,generated
-2025-03,HYD-DEL,HYD,DEL,125801,0.044239,1253.0,10,generated
-2025-04,DEL-BOM,DEL,BOM,502106,0.175,1148.0,1,generated
-2025-04,BOM-DEL,BOM,DEL,502106,0.175,1148.0,2,generated
-2025-04,DEL-BLR,DEL,BLR,358647,0.125,1740.0,3,generated
-2025-04,BLR-DEL,BLR,DEL,358647,0.125,1740.0,4,generated
-2025-04,BOM-BLR,BOM,BLR,258226,0.09,842.0,5,generated
-2025-04,BLR-BOM,BLR,BOM,258226,0.09,842.0,6,generated
-2025-04,DEL-CCU,DEL,CCU,186497,0.065,1305.0,7,generated
-2025-04,CCU-DEL,CCU,DEL,186497,0.065,1305.0,8,generated
-2025-04,DEL-HYD,DEL,HYD,129113,0.045,1253.0,9,generated
-2025-04,HYD-DEL,HYD,DEL,129113,0.045,1253.0,10,generated
-2025-05,DEL-BOM,DEL,BOM,534573,0.175,1148.0,1,generated
-2025-05,BOM-DEL,BOM,DEL,534573,0.175,1148.0,2,generated
-2025-05,DEL-BLR,DEL,BLR,381838,0.125,1740.0,3,generated
-2025-05,BLR-DEL,BLR,DEL,381838,0.125,1740.0,4,generated
-2025-05,BOM-BLR,BOM,BLR,274923,0.09,842.0,5,generated
-2025-05,BLR-BOM,BLR,BOM,274923,0.09,842.0,6,generated
-2025-05,DEL-CCU,DEL,CCU,198556,0.065,1305.0,7,generated
-2025-05,CCU-DEL,CCU,DEL,198556,0.065,1305.0,8,generated
-2025-05,DEL-HYD,DEL,HYD,137462,0.045,1253.0,9,generated
-2025-05,HYD-DEL,HYD,DEL,137462,0.045,1253.0,10,generated
-2025-06,DEL-BOM,DEL,BOM,523420,0.175,1148.0,1,generated
-2025-06,BOM-DEL,BOM,DEL,523420,0.175,1148.0,2,generated
-2025-06,DEL-BLR,DEL,BLR,373872,0.125,1740.0,3,generated
-2025-06,BLR-DEL,BLR,DEL,373872,0.125,1740.0,4,generated
-2025-06,BOM-BLR,BOM,BLR,269188,0.09,842.0,5,generated
-2025-06,BLR-BOM,BLR,BOM,269188,0.09,842.0,6,generated
-2025-06,DEL-CCU,DEL,CCU,194413,0.065,1305.0,7,generated
-2025-06,CCU-DEL,CCU,DEL,194413,0.065,1305.0,8,generated
-2025-06,DEL-HYD,DEL,HYD,134594,0.045,1253.0,9,generated
-2025-06,HYD-DEL,HYD,DEL,134594,0.045,1253.0,10,generated
-2025-07,DEL-BOM,DEL,BOM,448085,0.175,1148.0,1,generated
-2025-07,BOM-DEL,BOM,DEL,448085,0.175,1148.0,2,generated
-2025-07,DEL-BLR,DEL,BLR,320061,0.125,1740.0,3,generated
-2025-07,BLR-DEL,BLR,DEL,320061,0.125,1740.0,4,generated
-2025-07,BOM-BLR,BOM,BLR,230444,0.09,842.0,5,generated
-2025-07,BLR-BOM,BLR,BOM,230444,0.09,842.0,6,generated
-2025-07,DEL-CCU,DEL,CCU,166432,0.065,1305.0,7,generated
-2025-07,CCU-DEL,CCU,DEL,166432,0.065,1305.0,8,generated
-2025-07,DEL-HYD,DEL,HYD,115222,0.045,1253.0,9,generated
-2025-07,HYD-DEL,HYD,DEL,115222,0.045,1253.0,10,generated
-2025-08,DEL-BOM,DEL,BOM,460950,0.175,1148.0,1,generated
-2025-08,BOM-DEL,BOM,DEL,460950,0.175,1148.0,2,generated
-2025-08,DEL-BLR,DEL,BLR,329250,0.125,1740.0,3,generated
-2025-08,BLR-DEL,BLR,DEL,329250,0.125,1740.0,4,generated
-2025-08,BOM-BLR,BOM,BLR,237060,0.09,842.0,5,generated
-2025-08,BLR-BOM,BLR,BOM,237060,0.09,842.0,6,generated
-2025-08,DEL-CCU,DEL,CCU,171210,0.065,1305.0,7,generated
-2025-08,CCU-DEL,CCU,DEL,171210,0.065,1305.0,8,generated
-2025-08,DEL-HYD,DEL,HYD,118530,0.045,1253.0,9,generated
-2025-08,HYD-DEL,HYD,DEL,118530,0.045,1253.0,10,generated
-2025-09,DEL-BOM,DEL,BOM,478955,0.173199,1148.0,1,generated
-2025-09,BOM-DEL,BOM,DEL,478955,0.173199,1148.0,2,generated
-2025-09,DEL-BLR,DEL,BLR,342111,0.123713,1740.0,3,generated
-2025-09,BLR-DEL,BLR,DEL,342111,0.123713,1740.0,4,generated
-2025-09,BOM-BLR,BOM,BLR,246320,0.089074,842.0,5,generated
-2025-09,BLR-BOM,BLR,BOM,246320,0.089074,842.0,6,generated
-2025-09,DEL-CCU,DEL,CCU,192129,0.069477,1305.0,7,generated
-2025-09,CCU-DEL,CCU,DEL,192129,0.069477,1305.0,8,generated
-2025-09,DEL-HYD,DEL,HYD,123160,0.044537,1253.0,9,generated
-2025-09,HYD-DEL,HYD,DEL,123160,0.044537,1253.0,10,generated
-2025-10,DEL-BOM,DEL,BOM,562463,0.173199,1148.0,1,generated
-2025-10,BOM-DEL,BOM,DEL,562463,0.173199,1148.0,2,generated
-2025-10,DEL-BLR,DEL,BLR,401759,0.123713,1740.0,3,generated
-2025-10,BLR-DEL,BLR,DEL,401759,0.123713,1740.0,4,generated
-2025-10,BOM-BLR,BOM,BLR,289267,0.089074,842.0,5,generated
-2025-10,BLR-BOM,BLR,BOM,289267,0.089074,842.0,6,generated
-2025-10,DEL-CCU,DEL,CCU,225628,0.069477,1305.0,7,generated
-2025-10,CCU-DEL,CCU,DEL,225628,0.069477,1305.0,8,generated
-2025-10,DEL-HYD,DEL,HYD,144633,0.044537,1253.0,9,generated
-2025-10,HYD-DEL,HYD,DEL,144633,0.044537,1253.0,10,generated
-2025-11,DEL-BOM,DEL,BOM,551004,0.172041,1148.0,1,generated
-2025-11,BOM-DEL,BOM,DEL,551004,0.172041,1148.0,2,generated
-2025-11,DEL-BLR,DEL,BLR,409317,0.127802,1740.0,3,generated
-2025-11,BLR-DEL,BLR,DEL,409317,0.127802,1740.0,4,generated
-2025-11,BOM-BLR,BOM,BLR,294708,0.092017,842.0,5,generated
-2025-11,BLR-BOM,BLR,BOM,294708,0.092017,842.0,6,generated
-2025-11,DEL-CCU,DEL,CCU,204659,0.063901,1305.0,7,generated
-2025-11,CCU-DEL,CCU,DEL,204659,0.063901,1305.0,8,generated
-2025-11,DEL-HYD,DEL,HYD,141687,0.044239,1253.0,9,generated
-2025-11,HYD-DEL,HYD,DEL,141687,0.044239,1253.0,10,generated
-2025-12,DEL-BOM,DEL,BOM,580076,0.175,1148.0,1,generated
-2025-12,BOM-DEL,BOM,DEL,580076,0.175,1148.0,2,generated
-2025-12,DEL-BLR,DEL,BLR,414340,0.125,1740.0,3,generated
-2025-12,BLR-DEL,BLR,DEL,414340,0.125,1740.0,4,generated
-2025-12,BOM-BLR,BOM,BLR,298325,0.09,842.0,5,generated
-2025-12,BLR-BOM,BLR,BOM,298325,0.09,842.0,6,generated
-2025-12,DEL-CCU,DEL,CCU,215457,0.065,1305.0,7,generated
-2025-12,CCU-DEL,CCU,DEL,215457,0.065,1305.0,8,generated
-2025-12,DEL-HYD,DEL,HYD,149162,0.045,1253.0,9,generated
-2025-12,HYD-DEL,HYD,DEL,149162,0.045,1253.0,10,generated
-2026-01,DEL-BOM,DEL,BOM,517314,0.175,1148.0,1,generated
-2026-01,BOM-DEL,BOM,DEL,517314,0.175,1148.0,2,generated
-2026-01,DEL-BLR,DEL,BLR,369510,0.125,1740.0,3,generated
-2026-01,BLR-DEL,BLR,DEL,369510,0.125,1740.0,4,generated
-2026-01,BOM-BLR,BOM,BLR,266047,0.09,842.0,5,generated
-2026-01,BLR-BOM,BLR,BOM,266047,0.09,842.0,6,generated
-2026-01,DEL-CCU,DEL,CCU,192145,0.065,1305.0,7,generated
-2026-01,CCU-DEL,CCU,DEL,192145,0.065,1305.0,8,generated
-2026-01,DEL-HYD,DEL,HYD,133024,0.045,1253.0,9,generated
-2026-01,HYD-DEL,HYD,DEL,133024,0.045,1253.0,10,generated
-2026-02,DEL-BOM,DEL,BOM,494944,0.172041,1148.0,1,generated
-2026-02,BOM-DEL,BOM,DEL,494944,0.172041,1148.0,2,generated
-2026-02,DEL-BLR,DEL,BLR,367673,0.127802,1740.0,3,generated
-2026-02,BLR-DEL,BLR,DEL,367673,0.127802,1740.0,4,generated
-2026-02,BOM-BLR,BOM,BLR,264724,0.092017,842.0,5,generated
-2026-02,BLR-BOM,BLR,BOM,264724,0.092017,842.0,6,generated
-2026-02,DEL-CCU,DEL,CCU,183836,0.063901,1305.0,7,generated
-2026-02,CCU-DEL,CCU,DEL,183836,0.063901,1305.0,8,generated
-2026-02,DEL-HYD,DEL,HYD,127271,0.044239,1253.0,9,generated
-2026-02,HYD-DEL,HYD,DEL,127271,0.044239,1253.0,10,generated
-2026-03,DEL-BOM,DEL,BOM,529343,0.172041,1148.0,1,generated
-2026-03,BOM-DEL,BOM,DEL,529343,0.172041,1148.0,2,generated
-2026-03,DEL-BLR,DEL,BLR,393226,0.127802,1740.0,3,generated
-2026-03,BLR-DEL,BLR,DEL,393226,0.127802,1740.0,4,generated
-2026-03,BOM-BLR,BOM,BLR,283123,0.092017,842.0,5,generated
-2026-03,BLR-BOM,BLR,BOM,283123,0.092017,842.0,6,generated
-2026-03,DEL-CCU,DEL,CCU,196613,0.063901,1305.0,7,generated
-2026-03,CCU-DEL,CCU,DEL,196613,0.063901,1305.0,8,generated
-2026-03,DEL-HYD,DEL,HYD,136117,0.044239,1253.0,9,generated
-2026-03,HYD-DEL,HYD,DEL,136117,0.044239,1253.0,10,generated
+# provenance: calibrated_baseline
+year_month,route_code,origin,destination,pax_volume,share_weight,distance_km,period_rank,provenance,is_synthetic,source,source_url,release_date
+2024-01,DEL-BOM,DEL,BOM,441875,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-02-18
+2024-01,BOM-DEL,BOM,DEL,441875,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-02-18
+2024-01,DEL-BLR,DEL,BLR,315625,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-02-18
+2024-01,BLR-DEL,BLR,DEL,315625,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-02-18
+2024-01,BOM-BLR,BOM,BLR,227250,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-02-18
+2024-01,BLR-BOM,BLR,BOM,227250,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-02-18
+2024-01,DEL-CCU,DEL,CCU,164125,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-02-18
+2024-01,CCU-DEL,CCU,DEL,164125,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-02-18
+2024-01,DEL-HYD,DEL,HYD,113625,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-02-18
+2024-01,HYD-DEL,HYD,DEL,113625,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-02-18
+2024-02,DEL-BOM,DEL,BOM,422767,0.172041,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-03-18
+2024-02,BOM-DEL,BOM,DEL,422767,0.172041,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-03-18
+2024-02,DEL-BLR,DEL,BLR,314056,0.127802,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-03-18
+2024-02,BLR-DEL,BLR,DEL,314056,0.127802,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-03-18
+2024-02,BOM-BLR,BOM,BLR,226120,0.092017,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-03-18
+2024-02,BLR-BOM,BLR,BOM,226120,0.092017,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-03-18
+2024-02,DEL-CCU,DEL,CCU,157028,0.063901,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-03-18
+2024-02,CCU-DEL,CCU,DEL,157028,0.063901,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-03-18
+2024-02,DEL-HYD,DEL,HYD,108712,0.044239,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-03-18
+2024-02,HYD-DEL,HYD,DEL,108712,0.044239,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-03-18
+2024-03,DEL-BOM,DEL,BOM,452150,0.172041,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-04-18
+2024-03,BOM-DEL,BOM,DEL,452150,0.172041,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-04-18
+2024-03,DEL-BLR,DEL,BLR,335883,0.127802,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-04-18
+2024-03,BLR-DEL,BLR,DEL,335883,0.127802,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-04-18
+2024-03,BOM-BLR,BOM,BLR,241836,0.092017,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-04-18
+2024-03,BLR-BOM,BLR,BOM,241836,0.092017,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-04-18
+2024-03,DEL-CCU,DEL,CCU,167942,0.063901,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-04-18
+2024-03,CCU-DEL,CCU,DEL,167942,0.063901,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-04-18
+2024-03,DEL-HYD,DEL,HYD,116267,0.044239,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-04-18
+2024-03,HYD-DEL,HYD,DEL,116267,0.044239,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-04-18
+2024-04,DEL-BOM,DEL,BOM,464054,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-05-18
+2024-04,BOM-DEL,BOM,DEL,464054,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-05-18
+2024-04,DEL-BLR,DEL,BLR,331467,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-05-18
+2024-04,BLR-DEL,BLR,DEL,331467,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-05-18
+2024-04,BOM-BLR,BOM,BLR,238656,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-05-18
+2024-04,BLR-BOM,BLR,BOM,238656,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-05-18
+2024-04,DEL-CCU,DEL,CCU,172363,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-05-18
+2024-04,CCU-DEL,CCU,DEL,172363,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-05-18
+2024-04,DEL-HYD,DEL,HYD,119328,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-05-18
+2024-04,HYD-DEL,HYD,DEL,119328,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-05-18
+2024-05,DEL-BOM,DEL,BOM,494060,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-06-18
+2024-05,BOM-DEL,BOM,DEL,494060,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-06-18
+2024-05,DEL-BLR,DEL,BLR,352900,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-06-18
+2024-05,BLR-DEL,BLR,DEL,352900,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-06-18
+2024-05,BOM-BLR,BOM,BLR,254088,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-06-18
+2024-05,BLR-BOM,BLR,BOM,254088,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-06-18
+2024-05,DEL-CCU,DEL,CCU,183508,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-06-18
+2024-05,CCU-DEL,CCU,DEL,183508,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-06-18
+2024-05,DEL-HYD,DEL,HYD,127044,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-06-18
+2024-05,HYD-DEL,HYD,DEL,127044,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-06-18
+2024-06,DEL-BOM,DEL,BOM,483752,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-07-18
+2024-06,BOM-DEL,BOM,DEL,483752,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-07-18
+2024-06,DEL-BLR,DEL,BLR,345537,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-07-18
+2024-06,BLR-DEL,BLR,DEL,345537,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-07-18
+2024-06,BOM-BLR,BOM,BLR,248787,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-07-18
+2024-06,BLR-BOM,BLR,BOM,248787,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-07-18
+2024-06,DEL-CCU,DEL,CCU,179679,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-07-18
+2024-06,CCU-DEL,CCU,DEL,179679,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-07-18
+2024-06,DEL-HYD,DEL,HYD,124393,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-07-18
+2024-06,HYD-DEL,HYD,DEL,124393,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-07-18
+2024-07,DEL-BOM,DEL,BOM,414127,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-08-18
+2024-07,BOM-DEL,BOM,DEL,414127,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-08-18
+2024-07,DEL-BLR,DEL,BLR,295805,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-08-18
+2024-07,BLR-DEL,BLR,DEL,295805,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-08-18
+2024-07,BOM-BLR,BOM,BLR,212979,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-08-18
+2024-07,BLR-BOM,BLR,BOM,212979,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-08-18
+2024-07,DEL-CCU,DEL,CCU,153818,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-08-18
+2024-07,CCU-DEL,CCU,DEL,153818,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-08-18
+2024-07,DEL-HYD,DEL,HYD,106490,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-08-18
+2024-07,HYD-DEL,HYD,DEL,106490,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-08-18
+2024-08,DEL-BOM,DEL,BOM,426017,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-09-18
+2024-08,BOM-DEL,BOM,DEL,426017,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-09-18
+2024-08,DEL-BLR,DEL,BLR,304298,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-09-18
+2024-08,BLR-DEL,BLR,DEL,304298,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-09-18
+2024-08,BOM-BLR,BOM,BLR,219094,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-09-18
+2024-08,BLR-BOM,BLR,BOM,219094,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-09-18
+2024-08,DEL-CCU,DEL,CCU,158235,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-09-18
+2024-08,CCU-DEL,CCU,DEL,158235,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-09-18
+2024-08,DEL-HYD,DEL,HYD,109547,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-09-18
+2024-08,HYD-DEL,HYD,DEL,109547,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-09-18
+2024-09,DEL-BOM,DEL,BOM,442657,0.173195,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-10-18
+2024-09,BOM-DEL,BOM,DEL,442657,0.173199,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-10-18
+2024-09,DEL-BLR,DEL,BLR,316184,0.123714,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-10-18
+2024-09,BLR-DEL,BLR,DEL,316184,0.123714,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-10-18
+2024-09,BOM-BLR,BOM,BLR,227652,0.089074,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-10-18
+2024-09,BLR-BOM,BLR,BOM,227652,0.089074,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-10-18
+2024-09,DEL-CCU,DEL,CCU,177569,0.069478,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-10-18
+2024-09,CCU-DEL,CCU,DEL,177569,0.069478,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-10-18
+2024-09,DEL-HYD,DEL,HYD,113826,0.044537,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-10-18
+2024-09,HYD-DEL,HYD,DEL,113826,0.044537,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-10-18
+2024-10,DEL-BOM,DEL,BOM,519836,0.173195,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-11-18
+2024-10,BOM-DEL,BOM,DEL,519836,0.173199,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-11-18
+2024-10,DEL-BLR,DEL,BLR,371312,0.123714,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-11-18
+2024-10,BLR-DEL,BLR,DEL,371312,0.123714,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-11-18
+2024-10,BOM-BLR,BOM,BLR,267344,0.089074,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-11-18
+2024-10,BLR-BOM,BLR,BOM,267344,0.089074,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-11-18
+2024-10,DEL-CCU,DEL,CCU,208529,0.069478,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-11-18
+2024-10,CCU-DEL,CCU,DEL,208529,0.069478,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-11-18
+2024-10,DEL-HYD,DEL,HYD,133672,0.044537,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-11-18
+2024-10,HYD-DEL,HYD,DEL,133672,0.044537,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-11-18
+2024-11,DEL-BOM,DEL,BOM,509246,0.172041,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-12-18
+2024-11,BOM-DEL,BOM,DEL,509246,0.172041,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-12-18
+2024-11,DEL-BLR,DEL,BLR,378297,0.127802,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-12-18
+2024-11,BLR-DEL,BLR,DEL,378297,0.127802,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-12-18
+2024-11,BOM-BLR,BOM,BLR,272374,0.092017,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-12-18
+2024-11,BLR-BOM,BLR,BOM,272374,0.092017,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-12-18
+2024-11,DEL-CCU,DEL,CCU,189148,0.063901,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-12-18
+2024-11,CCU-DEL,CCU,DEL,189148,0.063901,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-12-18
+2024-11,DEL-HYD,DEL,HYD,130949,0.044239,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-12-18
+2024-11,HYD-DEL,HYD,DEL,130949,0.044239,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2024-12-18
+2024-12,DEL-BOM,DEL,BOM,536115,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-01-18
+2024-12,BOM-DEL,BOM,DEL,536115,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-01-18
+2024-12,DEL-BLR,DEL,BLR,382939,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-01-18
+2024-12,BLR-DEL,BLR,DEL,382939,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-01-18
+2024-12,BOM-BLR,BOM,BLR,275716,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-01-18
+2024-12,BLR-BOM,BLR,BOM,275716,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-01-18
+2024-12,DEL-CCU,DEL,CCU,199128,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-01-18
+2024-12,CCU-DEL,CCU,DEL,199128,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-01-18
+2024-12,DEL-HYD,DEL,HYD,137858,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-01-18
+2024-12,HYD-DEL,HYD,DEL,137858,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-01-18
+2025-01,DEL-BOM,DEL,BOM,478109,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-02-18
+2025-01,BOM-DEL,BOM,DEL,478109,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-02-18
+2025-01,DEL-BLR,DEL,BLR,341506,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-02-18
+2025-01,BLR-DEL,BLR,DEL,341506,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-02-18
+2025-01,BOM-BLR,BOM,BLR,245885,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-02-18
+2025-01,BLR-BOM,BLR,BOM,245885,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-02-18
+2025-01,DEL-CCU,DEL,CCU,177583,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-02-18
+2025-01,CCU-DEL,CCU,DEL,177583,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-02-18
+2025-01,DEL-HYD,DEL,HYD,122942,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-02-18
+2025-01,HYD-DEL,HYD,DEL,122942,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-02-18
+2025-02,DEL-BOM,DEL,BOM,457434,0.172041,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-03-18
+2025-02,BOM-DEL,BOM,DEL,457434,0.172041,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-03-18
+2025-02,DEL-BLR,DEL,BLR,339808,0.127802,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-03-18
+2025-02,BLR-DEL,BLR,DEL,339808,0.127802,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-03-18
+2025-02,BOM-BLR,BOM,BLR,244662,0.092017,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-03-18
+2025-02,BLR-BOM,BLR,BOM,244662,0.092017,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-03-18
+2025-02,DEL-CCU,DEL,CCU,169904,0.063901,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-03-18
+2025-02,CCU-DEL,CCU,DEL,169904,0.063901,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-03-18
+2025-02,DEL-HYD,DEL,HYD,117626,0.044239,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-03-18
+2025-02,HYD-DEL,HYD,DEL,117626,0.044239,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-03-18
+2025-03,DEL-BOM,DEL,BOM,489227,0.172041,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-04-18
+2025-03,BOM-DEL,BOM,DEL,489227,0.172041,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-04-18
+2025-03,DEL-BLR,DEL,BLR,363425,0.127802,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-04-18
+2025-03,BLR-DEL,BLR,DEL,363425,0.127802,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-04-18
+2025-03,BOM-BLR,BOM,BLR,261666,0.092017,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-04-18
+2025-03,BLR-BOM,BLR,BOM,261666,0.092017,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-04-18
+2025-03,DEL-CCU,DEL,CCU,181713,0.063901,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-04-18
+2025-03,CCU-DEL,CCU,DEL,181713,0.063901,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-04-18
+2025-03,DEL-HYD,DEL,HYD,125801,0.044239,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-04-18
+2025-03,HYD-DEL,HYD,DEL,125801,0.044239,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-04-18
+2025-04,DEL-BOM,DEL,BOM,502106,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-05-18
+2025-04,BOM-DEL,BOM,DEL,502106,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-05-18
+2025-04,DEL-BLR,DEL,BLR,358647,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-05-18
+2025-04,BLR-DEL,BLR,DEL,358647,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-05-18
+2025-04,BOM-BLR,BOM,BLR,258226,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-05-18
+2025-04,BLR-BOM,BLR,BOM,258226,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-05-18
+2025-04,DEL-CCU,DEL,CCU,186497,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-05-18
+2025-04,CCU-DEL,CCU,DEL,186497,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-05-18
+2025-04,DEL-HYD,DEL,HYD,129113,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-05-18
+2025-04,HYD-DEL,HYD,DEL,129113,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-05-18
+2025-05,DEL-BOM,DEL,BOM,534573,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-06-18
+2025-05,BOM-DEL,BOM,DEL,534573,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-06-18
+2025-05,DEL-BLR,DEL,BLR,381838,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-06-18
+2025-05,BLR-DEL,BLR,DEL,381838,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-06-18
+2025-05,BOM-BLR,BOM,BLR,274923,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-06-18
+2025-05,BLR-BOM,BLR,BOM,274923,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-06-18
+2025-05,DEL-CCU,DEL,CCU,198556,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-06-18
+2025-05,CCU-DEL,CCU,DEL,198556,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-06-18
+2025-05,DEL-HYD,DEL,HYD,137462,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-06-18
+2025-05,HYD-DEL,HYD,DEL,137462,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-06-18
+2025-06,DEL-BOM,DEL,BOM,523420,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-07-18
+2025-06,BOM-DEL,BOM,DEL,523420,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-07-18
+2025-06,DEL-BLR,DEL,BLR,373872,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-07-18
+2025-06,BLR-DEL,BLR,DEL,373872,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-07-18
+2025-06,BOM-BLR,BOM,BLR,269188,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-07-18
+2025-06,BLR-BOM,BLR,BOM,269188,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-07-18
+2025-06,DEL-CCU,DEL,CCU,194413,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-07-18
+2025-06,CCU-DEL,CCU,DEL,194413,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-07-18
+2025-06,DEL-HYD,DEL,HYD,134594,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-07-18
+2025-06,HYD-DEL,HYD,DEL,134594,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-07-18
+2025-07,DEL-BOM,DEL,BOM,448085,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-08-18
+2025-07,BOM-DEL,BOM,DEL,448085,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-08-18
+2025-07,DEL-BLR,DEL,BLR,320061,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-08-18
+2025-07,BLR-DEL,BLR,DEL,320061,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-08-18
+2025-07,BOM-BLR,BOM,BLR,230444,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-08-18
+2025-07,BLR-BOM,BLR,BOM,230444,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-08-18
+2025-07,DEL-CCU,DEL,CCU,166432,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-08-18
+2025-07,CCU-DEL,CCU,DEL,166432,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-08-18
+2025-07,DEL-HYD,DEL,HYD,115222,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-08-18
+2025-07,HYD-DEL,HYD,DEL,115222,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-08-18
+2025-08,DEL-BOM,DEL,BOM,460950,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-09-18
+2025-08,BOM-DEL,BOM,DEL,460950,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-09-18
+2025-08,DEL-BLR,DEL,BLR,329250,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-09-18
+2025-08,BLR-DEL,BLR,DEL,329250,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-09-18
+2025-08,BOM-BLR,BOM,BLR,237060,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-09-18
+2025-08,BLR-BOM,BLR,BOM,237060,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-09-18
+2025-08,DEL-CCU,DEL,CCU,171210,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-09-18
+2025-08,CCU-DEL,CCU,DEL,171210,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-09-18
+2025-08,DEL-HYD,DEL,HYD,118530,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-09-18
+2025-08,HYD-DEL,HYD,DEL,118530,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-09-18
+2025-09,DEL-BOM,DEL,BOM,478955,0.173199,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-10-18
+2025-09,BOM-DEL,BOM,DEL,478955,0.173199,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-10-18
+2025-09,DEL-BLR,DEL,BLR,342111,0.123713,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-10-18
+2025-09,BLR-DEL,BLR,DEL,342111,0.123713,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-10-18
+2025-09,BOM-BLR,BOM,BLR,246320,0.089074,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-10-18
+2025-09,BLR-BOM,BLR,BOM,246320,0.089074,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-10-18
+2025-09,DEL-CCU,DEL,CCU,192129,0.069477,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-10-18
+2025-09,CCU-DEL,CCU,DEL,192129,0.069477,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-10-18
+2025-09,DEL-HYD,DEL,HYD,123160,0.044537,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-10-18
+2025-09,HYD-DEL,HYD,DEL,123160,0.044537,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-10-18
+2025-10,DEL-BOM,DEL,BOM,562463,0.173199,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-11-18
+2025-10,BOM-DEL,BOM,DEL,562463,0.173199,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-11-18
+2025-10,DEL-BLR,DEL,BLR,401759,0.123713,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-11-18
+2025-10,BLR-DEL,BLR,DEL,401759,0.123713,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-11-18
+2025-10,BOM-BLR,BOM,BLR,289267,0.089074,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-11-18
+2025-10,BLR-BOM,BLR,BOM,289267,0.089074,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-11-18
+2025-10,DEL-CCU,DEL,CCU,225628,0.069477,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-11-18
+2025-10,CCU-DEL,CCU,DEL,225628,0.069477,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-11-18
+2025-10,DEL-HYD,DEL,HYD,144633,0.044537,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-11-18
+2025-10,HYD-DEL,HYD,DEL,144633,0.044537,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-11-18
+2025-11,DEL-BOM,DEL,BOM,551004,0.172041,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-12-18
+2025-11,BOM-DEL,BOM,DEL,551004,0.172041,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-12-18
+2025-11,DEL-BLR,DEL,BLR,409317,0.127802,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-12-18
+2025-11,BLR-DEL,BLR,DEL,409317,0.127802,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-12-18
+2025-11,BOM-BLR,BOM,BLR,294708,0.092017,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-12-18
+2025-11,BLR-BOM,BLR,BOM,294708,0.092017,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-12-18
+2025-11,DEL-CCU,DEL,CCU,204659,0.063901,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-12-18
+2025-11,CCU-DEL,CCU,DEL,204659,0.063901,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-12-18
+2025-11,DEL-HYD,DEL,HYD,141687,0.044239,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-12-18
+2025-11,HYD-DEL,HYD,DEL,141687,0.044239,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2025-12-18
+2025-12,DEL-BOM,DEL,BOM,580076,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-01-18
+2025-12,BOM-DEL,BOM,DEL,580076,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-01-18
+2025-12,DEL-BLR,DEL,BLR,414340,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-01-18
+2025-12,BLR-DEL,BLR,DEL,414340,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-01-18
+2025-12,BOM-BLR,BOM,BLR,298325,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-01-18
+2025-12,BLR-BOM,BLR,BOM,298325,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-01-18
+2025-12,DEL-CCU,DEL,CCU,215457,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-01-18
+2025-12,CCU-DEL,CCU,DEL,215457,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-01-18
+2025-12,DEL-HYD,DEL,HYD,149162,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-01-18
+2025-12,HYD-DEL,HYD,DEL,149162,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-01-18
+2026-01,DEL-BOM,DEL,BOM,517314,0.175,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-02-18
+2026-01,BOM-DEL,BOM,DEL,517314,0.175,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-02-18
+2026-01,DEL-BLR,DEL,BLR,369510,0.125,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-02-18
+2026-01,BLR-DEL,BLR,DEL,369510,0.125,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-02-18
+2026-01,BOM-BLR,BOM,BLR,266047,0.09,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-02-18
+2026-01,BLR-BOM,BLR,BOM,266047,0.09,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-02-18
+2026-01,DEL-CCU,DEL,CCU,192145,0.065,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-02-18
+2026-01,CCU-DEL,CCU,DEL,192145,0.065,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-02-18
+2026-01,DEL-HYD,DEL,HYD,133024,0.045,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-02-18
+2026-01,HYD-DEL,HYD,DEL,133024,0.045,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-02-18
+2026-02,DEL-BOM,DEL,BOM,494944,0.172041,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-03-18
+2026-02,BOM-DEL,BOM,DEL,494944,0.172041,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-03-18
+2026-02,DEL-BLR,DEL,BLR,367673,0.127802,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-03-18
+2026-02,BLR-DEL,BLR,DEL,367673,0.127802,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-03-18
+2026-02,BOM-BLR,BOM,BLR,264724,0.092017,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-03-18
+2026-02,BLR-BOM,BLR,BOM,264724,0.092017,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-03-18
+2026-02,DEL-CCU,DEL,CCU,183836,0.063901,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-03-18
+2026-02,CCU-DEL,CCU,DEL,183836,0.063901,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-03-18
+2026-02,DEL-HYD,DEL,HYD,127271,0.044239,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-03-18
+2026-02,HYD-DEL,HYD,DEL,127271,0.044239,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-03-18
+2026-03,DEL-BOM,DEL,BOM,529343,0.172041,1148.0,1,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-04-18
+2026-03,BOM-DEL,BOM,DEL,529343,0.172041,1148.0,2,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-04-18
+2026-03,DEL-BLR,DEL,BLR,393226,0.127802,1740.0,3,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-04-18
+2026-03,BLR-DEL,BLR,DEL,393226,0.127802,1740.0,4,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-04-18
+2026-03,BOM-BLR,BOM,BLR,283123,0.092017,842.0,5,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-04-18
+2026-03,BLR-BOM,BLR,BOM,283123,0.092017,842.0,6,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-04-18
+2026-03,DEL-CCU,DEL,CCU,196613,0.063901,1305.0,7,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-04-18
+2026-03,CCU-DEL,CCU,DEL,196613,0.063901,1305.0,8,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-04-18
+2026-03,DEL-HYD,DEL,HYD,136117,0.044239,1253.0,9,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-04-18
+2026-03,HYD-DEL,HYD,DEL,136117,0.044239,1253.0,10,calibrated_baseline,True,DGCA Form A Domestic Scheduled Passenger Traffic Report,https://www.dgca.gov.in/digigov-portal/?page=4264/4206/servicename,2026-04-18
