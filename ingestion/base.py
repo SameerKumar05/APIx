@@ -166,6 +166,20 @@ class BaseScraper(abc.ABC):
         if isinstance(proxy, str):
             if not proxy:
                 return None
+            if "@" in proxy:
+                from urllib.parse import urlparse
+
+                parsed = urlparse(proxy)
+                if parsed.username or parsed.password:
+                    server = f"{parsed.scheme}://{parsed.hostname}" + (
+                        f":{parsed.port}" if parsed.port else ""
+                    )
+                    res: dict[str, str] = {"server": server}
+                    if parsed.username:
+                        res["username"] = parsed.username
+                    if parsed.password:
+                        res["password"] = parsed.password
+                    return res
             return {"server": proxy}
         if isinstance(proxy, dict):
             return dict(proxy) or None

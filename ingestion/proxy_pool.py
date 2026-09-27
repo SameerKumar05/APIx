@@ -29,7 +29,7 @@ class Proxy:
     port: int
     protocol: str = "http"  # "http", "https", "socks5"
     username: str | None = None
-    password: str | None = None
+    password: str | None = field(default=None, repr=False)
     status: str = "active"  # "active", "degraded", "blacklisted", "testing"
     latency_ms: float = 0.0
     score: float = 100.0  # EWMA latency score (lower is better)
@@ -40,6 +40,10 @@ class Proxy:
     last_used_at: datetime | None = None
     blacklisted_until: datetime | None = None
     error_message: str | None = None
+
+    def __str__(self) -> str:
+        """String representation returns the safe endpoint identifier without credentials."""
+        return self.identifier
 
     @property
     def identifier(self) -> str:
@@ -71,10 +75,9 @@ class Proxy:
         d = self.to_dict()
         if d.get("password"):
             d["password"] = "***"
-        if self.username and self.password:
-            d["url"] = (
-                f"{self.protocol.lower()}://{self.username}:***@{self.ip}:{self.port}"
-            )
+        if self.username or self.password:
+            user_part = f"{self.username}:***@" if self.username else ":***@"
+            d["url"] = f"{self.protocol.lower()}://{user_part}{self.ip}:{self.port}"
         return d
 
     def to_playwright_proxy(self) -> dict[str, str]:
@@ -384,11 +387,12 @@ class ProxyPoolManager:
             proxy.consecutive_failures += 1
             proxy.last_used_at = now
             proxy.last_checked_at = now
-            proxy.error_message = (
-                error or f"HTTP status {status_code}"
-                if status_code
-                else "Unknown error"
+            msg = error or (
+                f"HTTP status {status_code}" if status_code else "Unknown error"
             )
+            if proxy.password and proxy.password in msg:
+                msg = msg.replace(proxy.password, "***")
+            proxy.error_message = msg
 
             # Apply latency penalty to EWMA score
             proxy.score += self.config.latency_penalty_on_failure_ms
@@ -430,6 +434,8 @@ class ProxyPoolManager:
             now = datetime.now(UTC)
             proxy.status = "blacklisted"
             proxy.blacklisted_until = now + timedelta(seconds=cooldown)
+            if proxy.password and proxy.password in reason:
+                reason = reason.replace(proxy.password, "***")
             proxy.error_message = reason
             logger.warning(
                 "Proxy %s blacklisted for %.0fs: %s",

@@ -182,6 +182,24 @@ def test_rate_limit_ignores_crawl_delay_when_robots_respected_is_off() -> None:
     assert _Scraper(config=cfg).effective_rate_limit_delay() == pytest.approx(2.0)
 
 
+def test_rfc9309_prefix_matching_does_not_block_substrings_in_other_segments() -> None:
+    """RFC 9309 requires prefix matching from the beginning of the URI path."""
+    policy = parse_robots_txt(
+        "https://x.test/robots.txt", "User-agent: *\nDisallow: /api/\n"
+    )
+    assert policy.can_fetch("https://x.test/api/search") is False
+    assert policy.can_fetch("https://x.test/about/api/test") is True
+
+
+def test_rfc9309_unslashed_pattern_assumes_leading_slash() -> None:
+    """RFC 9309 §2.2.2: If the path does not start with '/', '/' is assumed."""
+    policy = parse_robots_txt(
+        "https://x.test/robots.txt", "User-agent: *\nDisallow: private\n"
+    )
+    assert policy.can_fetch("https://x.test/private/data") is False
+    assert policy.can_fetch("https://x.test/public/private") is True
+
+
 def test_robots_strict_fail_closed_enabled_by_default() -> None:
     """When robots_strict_fail_closed is True (default), 404 or connection failure must fail closed."""
     from ingestion.config import IngestionConfig
@@ -230,3 +248,4 @@ def test_robots_strict_fail_closed_disabled_allows_on_404_or_error() -> None:
     policy_err = load_policy("https://permissive.test", cfg, fetcher=failing_fetcher)
     assert policy_err.is_deny_all is False
     assert policy_err.can_fetch("https://permissive.test/flights") is True
+

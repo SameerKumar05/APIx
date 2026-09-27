@@ -1,5 +1,7 @@
 """Authentication dependencies for API boundaries."""
 
+import secrets
+
 from fastapi import Header, HTTPException, status
 
 from backend.app.core.config import settings
@@ -15,7 +17,7 @@ async def verify_ingestion_key(
             detail="Missing required authentication header: X-Ingestion-Key",
             headers={"WWW-Authenticate": "ApiKey"},
         )
-    if x_ingestion_key != settings.INGESTION_API_KEY:
+    if not secrets.compare_digest(x_ingestion_key, settings.INGESTION_API_KEY):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid X-Ingestion-Key API key provided",
