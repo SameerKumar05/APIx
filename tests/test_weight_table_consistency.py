@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import pytest
 
+from backend.app.db.seed import INITIAL_AIRLINES
 from backend.app.services.econometric_engine import DEFAULT_LEAD_TIME_PAX_SHARES
 from backend.app.services.index_engine import (
     DEFAULT_AIRLINE_MARKET_SHARES,
@@ -27,6 +28,9 @@ TABLES = {
     "booking window weights": DEFAULT_BOOKING_WINDOW_WEIGHTS,
     "route traffic shares": DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES,
     "canonical lead-time shares": DEFAULT_LEAD_TIME_PAX_SHARES,
+    "seed airline market shares": {
+        a["code"]: a["market_share_pct"] / 100.0 for a in INITIAL_AIRLINES
+    },
 }
 
 
@@ -39,6 +43,13 @@ def test_every_weight_table_sums_to_one(name: str, table: dict) -> None:
 def test_index_airline_shares_match_the_airline_master_data() -> None:
     master = {airline.code: airline.market_share for airline in AIRLINES}
     assert DEFAULT_AIRLINE_MARKET_SHARES == pytest.approx(master)
+
+
+def test_seed_airline_shares_match_index_engine_and_ingestion() -> None:
+    seed_shares = {a["code"]: a["market_share_pct"] / 100.0 for a in INITIAL_AIRLINES}
+    assert seed_shares == pytest.approx(DEFAULT_AIRLINE_MARKET_SHARES)
+    master = {airline.code: airline.market_share for airline in AIRLINES}
+    assert seed_shares == pytest.approx(master)
 
 
 def test_booking_window_weights_cover_every_configured_window() -> None:
