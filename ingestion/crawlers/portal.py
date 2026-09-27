@@ -191,6 +191,8 @@ class PortalScraper(BaseScraper):
             booking_window=record.booking_window,
             flight_date=record.flight_date,
             duration_minutes=record.duration_minutes,
+            base_fare=record.base_fare,
+            taxes_and_fees=record.taxes_and_fees,
             flight_status=record.flight_status,
             is_synthetic=True,
             source_platform=self.SOURCE_NAME,

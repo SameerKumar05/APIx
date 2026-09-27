@@ -351,6 +351,31 @@ class SpiceJetScraper(BaseScraper):
                 if stops < 0:
                     stops = 0
 
+                base_fare_val = None
+                taxes_val = None
+                if "fareDetails" in item and isinstance(item["fareDetails"], dict):
+                    fd = item["fareDetails"]
+                    if "baseFare" in fd:
+                        try:
+                            base_fare_val = self.normalize_fare(fd["baseFare"])
+                        except ValueError:
+                            pass
+                    if "tax" in fd or "taxes" in fd:
+                        try:
+                            taxes_val = self.normalize_fare(fd.get("tax") or fd.get("taxes"))
+                        except ValueError:
+                            pass
+                elif "baseFare" in item:
+                    try:
+                        base_fare_val = self.normalize_fare(item["baseFare"])
+                    except ValueError:
+                        pass
+                if taxes_val is None and ("tax" in item or "taxes" in item):
+                    try:
+                        taxes_val = self.normalize_fare(item.get("tax") or item.get("taxes"))
+                    except ValueError:
+                        pass
+
                 record = RawFareRecord(
                     airline_code=airline_code,
                     flight_number=full_flight_no,
@@ -366,6 +391,8 @@ class SpiceJetScraper(BaseScraper):
                     booking_window=window_code,
                     flight_date=dep_dt_str.split("T")[0],
                     duration_minutes=duration,
+                    base_fare=base_fare_val,
+                    taxes_and_fees=taxes_val,
                     flight_status=flight_status,
                     is_synthetic=False,
                     source_platform="spicejet",
@@ -682,6 +709,8 @@ class SpiceJetScraper(BaseScraper):
                 booking_window=window_code,
                 flight_date=r.flight_date,
                 duration_minutes=r.duration_minutes,
+                base_fare=round(r.base_fare * 0.95, 2) if r.base_fare else None,
+                taxes_and_fees=round(r.taxes_and_fees * 0.95, 2) if r.taxes_and_fees else None,
                 is_synthetic=True,
                 source_platform="spicejet",
             )

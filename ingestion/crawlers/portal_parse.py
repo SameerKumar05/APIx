@@ -58,6 +58,22 @@ ARRIVAL_KEYS: tuple[str, ...] = (
     "ArrTime",
     "at",
 )
+BASE_FARE_KEYS: tuple[str, ...] = (
+    "baseFare",
+    "BaseFare",
+    "base_fare",
+    "bf",
+    "basePrice",
+)
+TAX_KEYS: tuple[str, ...] = (
+    "tax",
+    "taxes",
+    "taxes_and_fees",
+    "Taxes",
+    "taxAndOtherCharges",
+    "taxAndCharges",
+    "fees",
+)
 
 
 def _first_present(item: dict[str, Any], keys: tuple[str, ...]) -> Any:
@@ -84,6 +100,26 @@ def _read_fare(item: dict[str, Any]) -> float | None:
     details = item.get("fareDetails")
     if isinstance(details, dict):
         return _read_fare(details)
+    return None
+
+
+def _read_component_amount(item: dict[str, Any], keys: tuple[str, ...]) -> float | None:
+    """Return a fee/fare component read from this object, or None."""
+    for key in keys:
+        if key not in item or item[key] in (None, ""):
+            continue
+        try:
+            return BaseScraper.normalize_fare(item[key])
+        except ValueError:
+            continue
+    nested = item.get("fares")
+    if isinstance(nested, list) and nested and isinstance(nested[0], dict):
+        found = _read_component_amount(nested[0], keys)
+        if found is not None:
+            return found
+    details = item.get("fareDetails") or item.get("priceBreakup")
+    if isinstance(details, dict):
+        return _read_component_amount(details, keys)
     return None
 
 
@@ -220,6 +256,12 @@ def parse_portal_flights(
             stops = 0
         if stops < 0:
             stops = 0
+        base_fare_val = _read_component_amount(item, BASE_FARE_KEYS)
+        if base_fare_val is None and isinstance(first, dict):
+            base_fare_val = _read_component_amount(first, BASE_FARE_KEYS)
+        taxes_val = _read_component_amount(item, TAX_KEYS)
+        if taxes_val is None and isinstance(first, dict):
+            taxes_val = _read_component_amount(first, TAX_KEYS)
         record = RawFareRecord(
             airline_code=airline_code,
             flight_number=full_flight_no,
@@ -235,6 +277,8 @@ def parse_portal_flights(
             booking_window=window_code,
             flight_date=dep_dt_str.split("T")[0],
             duration_minutes=duration,
+            base_fare=base_fare_val,
+            taxes_and_fees=taxes_val,
             flight_status=reported_flight_status(item),
             is_synthetic=False,
             source_platform=source_name,

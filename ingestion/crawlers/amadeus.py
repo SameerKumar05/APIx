@@ -286,6 +286,18 @@ class AmadeusFlightClient(BaseScraper):
                     if supplied_base not in (None, "")
                     else None
                 )
+                taxes_raw = price_data.get("taxes") or price_data.get("fees")
+                taxes_and_fees_inr = None
+                if isinstance(taxes_raw, list):
+                    tax_sum = 0.0
+                    for t in taxes_raw:
+                        if isinstance(t, dict) and "amount" in t:
+                            try:
+                                tax_sum += float(t["amount"])
+                            except (ValueError, TypeError):
+                                pass
+                    if tax_sum > 0:
+                        taxes_and_fees_inr = round(tax_sum, 2)
 
                 # Cabin class extraction
                 cabin_class = "economy"
@@ -319,6 +331,7 @@ class AmadeusFlightClient(BaseScraper):
                     duration_minutes=duration_minutes,
                     flight_status=flight_status,
                     base_fare=base_fare_inr,
+                    taxes_and_fees=taxes_and_fees_inr,
                     total_fare=fare_inr,
                     is_synthetic=payload_is_generated,
                     source_platform="amadeus",

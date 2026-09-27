@@ -35,12 +35,12 @@ class AkasaScraper(PortalScraper):
         flight_date: date,
         adults: int = 1,
     ) -> str:
-        """Booking search URL with route, flight date, and passenger count."""
+        """Homepage booking widget with the route and date in the query."""
         norm_orig = self.normalize_iata(origin)
         norm_dest = self.normalize_iata(destination)
         date_str = flight_date.strftime("%Y-%m-%d")
         return (
-            f"{self.BASE_URL}/fly/flight-search"
-            f"?from={norm_orig}&to={norm_dest}"
-            f"&departDate={date_str}&adults={adults}&tripType=one-way"
+            f"{self.BASE_URL}/"
+            f"?origin={norm_orig}&destination={norm_dest}"
+            f"&departureDate={date_str}&adults={adults}&tripType=oneWay"
         )
