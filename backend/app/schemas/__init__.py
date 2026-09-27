@@ -1,25 +1,47 @@
-from backend.app.schemas.ingestion import (
-    RawFareRecord,
-    IngestionBatchRequest,
-    IngestionBatchResponse,
-)
-from backend.app.schemas.index import (
-    NationalIndexPoint,
-    NationalIndexLatestResponse,
-    NationalIndexHistoryResponse,
-    RouteOverviewItem,
-    RouteListResponse,
-    RouteHistoryResponse,
-)
 from backend.app.schemas.analytics import (
-    LeadTimeCurvePoint,
-    LeadTimeCurveResponse,
-    HeatmapCell,
-    HeatmapMatrixResponse,
     AnomalyAlertItem,
     AnomalyAlertsResponse,
     DGCAValidationItem,
     DGCAValidationResponse,
+    HeatmapCell,
+    HeatmapMatrixResponse,
+    LeadTimeCurvePoint,
+    LeadTimeCurveResponse,
+)
+from backend.app.schemas.arbitrage import (
+    ArbitrageItem,
+    ArbitrageResponse,
+)
+from backend.app.schemas.econometrics import (
+    CarrierViolationDistribution,
+    CpiDivergencePoint,
+    CpiDivergenceResponse,
+    CpiDivergenceSummary,
+    DgcaViolationItem,
+    DgcaViolationsResponse,
+    DgcaViolationsSummary,
+    DgcaViolationStatusUpdateRequest,
+    EconometricIndexPoint,
+    EconometricIndicesResponse,
+    EconometricIndicesSummary,
+    EconometricRecalculateRequest,
+    EconometricRecalculateResponse,
+    ElasticityGradientPoint,
+    ElasticityResponse,
+    ElasticitySegments,
+)
+from backend.app.schemas.index import (
+    NationalIndexHistoryResponse,
+    NationalIndexLatestResponse,
+    NationalIndexPoint,
+    RouteHistoryResponse,
+    RouteListResponse,
+    RouteOverviewItem,
+)
+from backend.app.schemas.ingestion import (
+    IngestionBatchRequest,
+    IngestionBatchResponse,
+    RawFareRecord,
 )
 from backend.app.schemas.telemetry import (
     CrawlerHealthItem,
@@ -28,10 +50,6 @@ from backend.app.schemas.telemetry import (
     IngestionTelemetryResponse,
     ProxyHealthItem,
     ProxyPoolSummary,
-)
-from backend.app.schemas.arbitrage import (
-    ArbitrageItem,
-    ArbitrageResponse,
 )
 
 __all__ = [
@@ -60,4 +78,20 @@ __all__ = [
     "CrawlerTriggerResponse",
     "ArbitrageItem",
     "ArbitrageResponse",
+    "EconometricIndexPoint",
+    "EconometricIndicesSummary",
+    "EconometricIndicesResponse",
+    "CpiDivergencePoint",
+    "CpiDivergenceSummary",
+    "CpiDivergenceResponse",
+    "ElasticityGradientPoint",
+    "ElasticitySegments",
+    "ElasticityResponse",
+    "DgcaViolationItem",
+    "CarrierViolationDistribution",
+    "DgcaViolationsSummary",
+    "DgcaViolationsResponse",
+    "DgcaViolationStatusUpdateRequest",
+    "EconometricRecalculateRequest",
+    "EconometricRecalculateResponse",
 ]

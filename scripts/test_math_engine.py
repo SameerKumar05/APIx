@@ -21,7 +21,6 @@ from __future__ import annotations
 import math
 import os
 import sys
-from typing import List
 
 # Ensure repository root is on sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -405,7 +404,9 @@ def test_cross_platform_flight_deduplication() -> None:
 
     deduped = deduplicate_quotes(quotes)
     if len(deduped) != 2:
-        raise MathVerificationError(f"Expected 2 deduplicated flights, got {len(deduped)}")
+        raise MathVerificationError(
+            f"Expected 2 deduplicated flights, got {len(deduped)}"
+        )
 
     # Check that 6E-204 chose 4950.0 from EaseMyTrip
     f1 = next(q for q in deduped if q.airline_code == "6E")
@@ -424,7 +425,7 @@ def test_tukey_iqr_outlier_filtering() -> None:
     """Verifies Tukey IQR bounds [Q1 - 1.5*IQR, Q3 + 1.5*IQR]."""
     # Distribution of 8 normal fares and 2 severe outliers
     normal_fares = [4000.0, 4200.0, 4400.0, 4600.0, 4800.0, 5000.0, 5200.0, 5400.0]
-    outlier_low = 500.0     # extreme scraping error / voucher artifact
+    outlier_low = 500.0  # extreme scraping error / voucher artifact
     outlier_high = 25000.0  # mistaken business class or currency conversion error
 
     all_fares = sorted(normal_fares + [outlier_low, outlier_high])
@@ -475,9 +476,10 @@ def test_route_composite_fare_formula() -> None:
         "T30": 4000.0,
     }
 
-    # Expected: 0.20*8000 + 0.35*6000 + 0.30*5000 + 0.15*4000
-    # = 1600 + 2100 + 1500 + 600 = 5800.0
-    expected = 5800.0
+    # Five-window default weights: T1 .20, T7 .32, T15 .26, T30 .14, T45 .08.
+    # No T+45 fare here, so the four present carry .92 and renormalise to 1.0:
+    # (0.20*8000 + 0.32*6000 + 0.26*5000 + 0.14*4000) / 0.92 = 5380 / 0.92
+    expected = 5380.0 / 0.92
     composite = calculate_route_composite_fare(window_fares)
 
     if not math.isclose(composite, expected, abs_tol=1e-9):
@@ -550,16 +552,46 @@ def run_all_verifications() -> None:
     print("=" * 80)
 
     tests = [
-        ("Invariant 1: Equal price distribution weighted median equals scalar price", test_invariant_1_equal_price_distribution_weighted_median),
-        ("Invariant 2: Base period prices yield national index = 100.00", test_invariant_2_base_period_prices_yield_national_index_100),
-        ("Invariant 3: +20% uniform price increase yields national index = 120.00", test_invariant_3_uniform_20_percent_price_increase_yields_120),
-        ("Invariant 4: 3-sigma surge triggers CRITICAL anomaly alert", test_invariant_4_three_sigma_surge_triggers_critical_alert),
-        ("Cross-Platform Flight Deduplication (Minimum consumer fare selection)", test_cross_platform_flight_deduplication),
-        ("Tukey IQR Outlier Filtering [Q1 - 1.5*IQR, Q3 + 1.5*IQR]", test_tukey_iqr_outlier_filtering),
-        ("Asymmetric Market Share Weighted Median Calculation", test_asymmetric_weighted_median),
-        ("Route Composite Fare (0.20*T1 + 0.35*T7 + 0.30*T15 + 0.15*T30)", test_route_composite_fare_formula),
-        ("Non-uniform Laspeyres Price Index Computation", test_non_uniform_laspeyres_index),
-        ("Stateful Rolling 30-Day Anomaly Detection Engine", test_stateful_anomaly_detector_simulation),
+        (
+            "Invariant 1: Equal price distribution weighted median equals scalar price",
+            test_invariant_1_equal_price_distribution_weighted_median,
+        ),
+        (
+            "Invariant 2: Base period prices yield national index = 100.00",
+            test_invariant_2_base_period_prices_yield_national_index_100,
+        ),
+        (
+            "Invariant 3: +20% uniform price increase yields national index = 120.00",
+            test_invariant_3_uniform_20_percent_price_increase_yields_120,
+        ),
+        (
+            "Invariant 4: 3-sigma surge triggers CRITICAL anomaly alert",
+            test_invariant_4_three_sigma_surge_triggers_critical_alert,
+        ),
+        (
+            "Cross-Platform Flight Deduplication (Minimum consumer fare selection)",
+            test_cross_platform_flight_deduplication,
+        ),
+        (
+            "Tukey IQR Outlier Filtering [Q1 - 1.5*IQR, Q3 + 1.5*IQR]",
+            test_tukey_iqr_outlier_filtering,
+        ),
+        (
+            "Asymmetric Market Share Weighted Median Calculation",
+            test_asymmetric_weighted_median,
+        ),
+        (
+            "Route Composite Fare (0.20*T1 + 0.35*T7 + 0.30*T15 + 0.15*T30)",
+            test_route_composite_fare_formula,
+        ),
+        (
+            "Non-uniform Laspeyres Price Index Computation",
+            test_non_uniform_laspeyres_index,
+        ),
+        (
+            "Stateful Rolling 30-Day Anomaly Detection Engine",
+            test_stateful_anomaly_detector_simulation,
+        ),
     ]
 
     passed = 0

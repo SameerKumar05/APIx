@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import random
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
 
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
 from ingestion.config import (
@@ -18,32 +17,32 @@ from ingestion.config import (
     AIRLINES,
     BOOKING_WINDOW_MAP,
     BOOKING_WINDOWS,
-    BookingWindow,
     DEFAULT_ROUTES,
-    IngestionConfig,
-    Route,
     VALID_AIRLINE_CODES,
     VALID_IATA_CODES,
+    BookingWindow,
+    IngestionConfig,
+    Route,
 )
 
 logger = logging.getLogger("ingestion.crawlers.synthetic")
 
 # Typical daily flight departures for domestic trunk routes (hour, minute, is_peak)
 SCHEDULE_SLOTS = [
-    (6, 0, True),    # Early morning business departure (Peak)
-    (7, 15, True),   # Morning rush (Peak)
-    (8, 45, True),   # Morning business (Peak)
-    (11, 20, False), # Mid-day off-peak
-    (14, 10, False), # Afternoon off-peak
+    (6, 0, True),  # Early morning business departure (Peak)
+    (7, 15, True),  # Morning rush (Peak)
+    (8, 45, True),  # Morning business (Peak)
+    (11, 20, False),  # Mid-day off-peak
+    (14, 10, False),  # Afternoon off-peak
     (17, 30, True),  # Evening rush (Peak)
     (19, 15, True),  # Evening rush (Peak)
-    (21, 40, False), # Late evening off-peak
+    (21, 40, False),  # Late evening off-peak
 ]
 
 # Flight number prefixes and ranges by airline
-AIRLINE_FLIGHT_PREFIXES: Dict[str, Tuple[int, int]] = {
-    "6E": (100, 999),    # e.g. 6E-205, 6E-532
-    "AI": (101, 899),    # e.g. AI-804, AI-665
+AIRLINE_FLIGHT_PREFIXES: dict[str, tuple[int, int]] = {
+    "6E": (100, 999),  # e.g. 6E-205, 6E-532
+    "AI": (101, 899),  # e.g. AI-804, AI-665
     "IX": (1100, 2900),  # e.g. IX-1132
     "QP": (1301, 1999),  # e.g. QP-1304
     "SG": (8100, 8900),  # e.g. SG-8114
@@ -59,7 +58,7 @@ class SyntheticFlightGenerator(BaseScraper):
 
     def __init__(
         self,
-        config: Optional[IngestionConfig] = None,
+        config: IngestionConfig | None = None,
         seed: int = 42,
     ) -> None:
         super().__init__(config)
@@ -137,7 +136,7 @@ class SyntheticFlightGenerator(BaseScraper):
         self,
         route: Route,
         window: BookingWindow,
-        capture_time: Optional[datetime] = None,
+        capture_time: datetime | None = None,
     ) -> ScrapeResult:
         """Generates flight fare records for a single (Route, BookingWindow) slot.
 
@@ -156,15 +155,22 @@ class SyntheticFlightGenerator(BaseScraper):
         sampled_slots = slot_rng.sample(SCHEDULE_SLOTS, flight_count)
         sampled_slots.sort(key=lambda s: (s[0], s[1]))
 
-        records: List[RawFareRecord] = []
-        errors: List[str] = []
+        records: list[RawFareRecord] = []
+        errors: list[str] = []
 
         for hour, minute, is_peak in sampled_slots:
             airline_code = self._pick_airline(slot_rng)
             flight_number = self._generate_flight_number(airline_code, slot_rng)
 
             # Departure datetime on flight_dt_date
-            dep_dt = datetime(flight_dt_date.year, flight_dt_date.month, flight_dt_date.day, hour, minute, 0)
+            dep_dt = datetime(
+                flight_dt_date.year,
+                flight_dt_date.month,
+                flight_dt_date.day,
+                hour,
+                minute,
+                0,
+            )
 
             # Duration: typical route duration ± up to 10 minutes jitter
             duration_minutes = route.typical_duration_min + slot_rng.randint(-5, 10)
@@ -226,10 +232,10 @@ class SyntheticFlightGenerator(BaseScraper):
 
     def generate_all_slots(
         self,
-        routes: Optional[List[Route]] = None,
-        windows: Optional[List[BookingWindow]] = None,
-        capture_time: Optional[datetime] = None,
-    ) -> List[ScrapeResult]:
+        routes: list[Route] | None = None,
+        windows: list[BookingWindow] | None = None,
+        capture_time: datetime | None = None,
+    ) -> list[ScrapeResult]:
         """Generates all 40 route-window slots (10 routes x 4 booking windows).
 
         Returns exactly 40 ScrapeResult objects.
@@ -237,10 +243,12 @@ class SyntheticFlightGenerator(BaseScraper):
         target_routes = routes or DEFAULT_ROUTES
         target_windows = windows or BOOKING_WINDOWS
 
-        slots: List[ScrapeResult] = []
+        slots: list[ScrapeResult] = []
         for route in target_routes:
             for window in target_windows:
-                slot_result = self.generate_slot(route, window, capture_time=capture_time)
+                slot_result = self.generate_slot(
+                    route, window, capture_time=capture_time
+                )
                 slots.append(slot_result)
 
         logger.info(
@@ -253,13 +261,13 @@ class SyntheticFlightGenerator(BaseScraper):
 
     def generate_all_records(
         self,
-        routes: Optional[List[Route]] = None,
-        windows: Optional[List[BookingWindow]] = None,
-        capture_time: Optional[datetime] = None,
-    ) -> List[RawFareRecord]:
+        routes: list[Route] | None = None,
+        windows: list[BookingWindow] | None = None,
+        capture_time: datetime | None = None,
+    ) -> list[RawFareRecord]:
         """Generates and flattens all records across the 40 slots."""
         slots = self.generate_all_slots(routes, windows, capture_time=capture_time)
-        all_records: List[RawFareRecord] = []
+        all_records: list[RawFareRecord] = []
         for slot in slots:
             all_records.extend(slot.records)
         return all_records
@@ -277,7 +285,11 @@ class SyntheticFlightGenerator(BaseScraper):
 
         # Locate route definition
         matched_route = next(
-            (r for r in DEFAULT_ROUTES if r.origin == norm_orig and r.destination == norm_dest),
+            (
+                r
+                for r in DEFAULT_ROUTES
+                if r.origin == norm_orig and r.destination == norm_dest
+            ),
             None,
         )
         if not matched_route:
@@ -290,30 +302,37 @@ class SyntheticFlightGenerator(BaseScraper):
             )
 
         matched_window = BOOKING_WINDOW_MAP.get(window_code, BOOKING_WINDOWS[0])
-        capture_dt = datetime.combine(target_date - timedelta(days=matched_window.days_advance), datetime.min.time())
-        return self.generate_slot(matched_route, matched_window, capture_time=capture_dt)
+        capture_dt = datetime.combine(
+            target_date - timedelta(days=matched_window.days_advance),
+            datetime.min.time(),
+        )
+        return self.generate_slot(
+            matched_route, matched_window, capture_time=capture_dt
+        )
 
     def scrape_all(
         self,
-        routes: Optional[List[Route]] = None,
-        windows: Optional[List[BookingWindow]] = None,
-    ) -> List[ScrapeResult]:
+        routes: list[Route] | None = None,
+        windows: list[BookingWindow] | None = None,
+    ) -> list[ScrapeResult]:
         """Implements BaseScraper.scrape_all for synthetic crawler."""
         return self.generate_all_slots(routes=routes, windows=windows)
 
     def generate_40_route_window_records(
         self,
-        routes: Optional[List[Route]] = None,
-        windows: Optional[List[BookingWindow]] = None,
-        capture_time: Optional[datetime] = None,
-    ) -> List[RawFareRecord]:
+        routes: list[Route] | None = None,
+        windows: list[BookingWindow] | None = None,
+        capture_time: datetime | None = None,
+    ) -> list[RawFareRecord]:
         """Generates exactly 40 synthetic route-window fare records (1 per route-window slot)."""
         target_routes = routes or DEFAULT_ROUTES
         target_windows = windows or BOOKING_WINDOWS
-        records: List[RawFareRecord] = []
+        records: list[RawFareRecord] = []
         for route in target_routes:
             for window in target_windows:
-                slot_result = self.generate_slot(route, window, capture_time=capture_time)
+                slot_result = self.generate_slot(
+                    route, window, capture_time=capture_time
+                )
                 if slot_result.records:
                     records.append(slot_result.records[0])
         return records

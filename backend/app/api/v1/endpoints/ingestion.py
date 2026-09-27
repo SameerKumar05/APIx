@@ -1,10 +1,12 @@
+import logging
 import time
 import uuid
-from typing import Optional
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from backend.app.core.config import settings
+from backend.app.core.auth import verify_ingestion_key
 from backend.app.db.ingestion_repo import IngestionRepo
 from backend.app.db.session import get_db
 from backend.app.schemas.ingestion import (
@@ -14,24 +16,7 @@ from backend.app.schemas.ingestion import (
 from backend.app.services.index_pipeline import run_daily_index_pipeline
 
 router = APIRouter()
-
-
-async def verify_ingestion_key(
-    x_ingestion_key: Optional[str] = Header(None, alias="X-Ingestion-Key"),
-) -> str:
-    if not x_ingestion_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing required authentication header: X-Ingestion-Key",
-            headers={"WWW-Authenticate": "ApiKey"},
-        )
-    if x_ingestion_key != settings.INGESTION_API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid X-Ingestion-Key API key provided",
-            headers={"WWW-Authenticate": "ApiKey"},
-        )
-    return x_ingestion_key
+logger = logging.getLogger("apix.api.ingestion")
 
 
 @router.post(
@@ -54,7 +39,9 @@ async def ingest_fare_batch(
 
     for idx, record in enumerate(payload.records):
         if record.origin == record.destination:
-            errors.append(f"Record #{idx}: Origin and destination cannot be identical ({record.origin})")
+            errors.append(
+                f"Record #{idx}: Origin and destination cannot be identical ({record.origin})"
+            )
             continue
         if record.fare_inr <= 0:
             errors.append(f"Record #{idx}: Fare INR must be greater than zero")
@@ -67,19 +54,25 @@ async def ingest_fare_batch(
     if valid_records:
         try:
             repo = IngestionRepo(db)
-            insert_stats = repo.bulk_insert(valid_records, batch_id=batch_id, commit=True)
-            inserted_count = insert_stats.get("inserted", 0)
-            duplicate_count = insert_stats.get("duplicates", 0)
+            insert_stats = repo.bulk_insert(
+                valid_records, batch_id=batch_id, commit=True
+            )
+        except SQLAlchemyError as exc:
+            db.rollback()
+            logger.exception("Failed to persist ingested fares")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Failed to persist ingested fares",
+            ) from exc
+        inserted_count = insert_stats.get("inserted", 0)
+        duplicate_count = insert_stats.get("duplicates", 0)
 
-            # Trigger downstream index calculation pipeline in background
-            background_tasks.add_task(run_daily_index_pipeline)
-        except Exception:
-            # Fallback for uninitialized test databases
-            inserted_count = len(valid_records)
-            duplicate_count = 0
+        background_tasks.add_task(run_daily_index_pipeline)
     processing_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
     valid_count = len(valid_records)
-    status_str = "success" if len(errors) == 0 else ("partial" if valid_count > 0 else "failed")
+    status_str = (
+        "success" if len(errors) == 0 else ("partial" if valid_count > 0 else "failed")
+    )
     message = (
         f"Processed {len(payload.records)} records in {processing_time_ms:.1f}ms: "
         f"{inserted_count} inserted, {duplicate_count} duplicates, {len(errors)} rejected."

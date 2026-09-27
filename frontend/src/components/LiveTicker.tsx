@@ -2,12 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { LiveFareUpdate } from '../types/api';
 import apiClient from '../services/apiClient';
 import {
-  Radio,
   Play,
   Pause,
   Clock,
-  Sparkles,
-  Plane,
   ChevronDown,
   ChevronUp,
   SlidersHorizontal,
@@ -18,54 +15,19 @@ interface LiveTickerProps {
   className?: string;
 }
 
-// Carrier branding style mapping
-const CARRIER_CONFIG: Record<
-  string,
-  { name: string; bg: string; text: string; border: string; dot: string }
-> = {
-  '6E': {
-    name: 'IndiGo',
-    bg: 'bg-sky-950/80',
-    text: 'text-sky-300',
-    border: 'border-sky-700/80',
-    dot: 'bg-sky-400',
-  },
-  'AI': {
-    name: 'Air India',
-    bg: 'bg-rose-950/80',
-    text: 'text-rose-300',
-    border: 'border-rose-700/80',
-    dot: 'bg-rose-400',
-  },
-  'SG': {
-    name: 'SpiceJet',
-    bg: 'bg-amber-950/80',
-    text: 'text-amber-300',
-    border: 'border-amber-700/80',
-    dot: 'bg-amber-400',
-  },
-  'QP': {
-    name: 'Akasa Air',
-    bg: 'bg-orange-950/80',
-    text: 'text-orange-300',
-    border: 'border-orange-700/80',
-    dot: 'bg-orange-400',
-  },
-  'UK': {
-    name: 'Vistara',
-    bg: 'bg-purple-950/80',
-    text: 'text-purple-300',
-    border: 'border-purple-700/80',
-    dot: 'bg-purple-400',
-  },
+const CARRIER_NAMES: Record<string, string> = {
+  '6E': 'IndiGo',
+  'AI': 'Air India',
+  'SG': 'SpiceJet',
+  'QP': 'Akasa Air',
+  'UK': 'Vistara',
 };
 
-// Source tag styling
-const SOURCE_CONFIG: Record<string, { label: string; text: string; bg: string }> = {
-  easemytrip: { label: 'EaseMyTrip', text: 'text-emerald-300', bg: 'bg-emerald-950/60' },
-  makemytrip: { label: 'MakeMyTrip', text: 'text-red-300', bg: 'bg-red-950/60' },
-  spicejet: { label: 'SpiceJet Direct', text: 'text-amber-300', bg: 'bg-amber-950/60' },
-  amadeus: { label: 'Amadeus GDS', text: 'text-blue-300', bg: 'bg-blue-950/60' },
+const SOURCE_LABELS: Record<string, string> = {
+  easemytrip: 'EaseMyTrip',
+  makemytrip: 'MakeMyTrip',
+  spicejet: 'SpiceJet Direct',
+  amadeus: 'Amadeus GDS',
 };
 
 export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className = '' }) => {
@@ -76,7 +38,6 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
     'connected' | 'connecting' | 'disconnected' | 'reconnecting'
   >('connecting');
   const [selectedCarrierFilter, setSelectedCarrierFilter] = useState<string>('ALL');
-  const [newlyAddedId, setNewlyAddedId] = useState<string | null>(null);
 
   // Stats
   const totalStreamedCountRef = useRef<number>(0);
@@ -92,12 +53,12 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
         if (isPausedRef.current) return;
 
         totalStreamedCountRef.current += 1;
-        if (fare.fare_inr < minFareRef.current) minFareRef.current = fare.fare_inr;
-        if (fare.fare_inr > maxFareRef.current) maxFareRef.current = fare.fare_inr;
-
-        const uniqueKey = `${fare.flight_number}-${fare.source}-${Date.now()}`;
-        setNewlyAddedId(uniqueKey);
-        setTimeout(() => setNewlyAddedId(null), 1200);
+        const rawFare = 'fare' in fare && typeof fare.fare === 'number' ? fare.fare : undefined;
+        const fareValue = fare.fare_inr ?? rawFare ?? 0;
+        if (fareValue > 0) {
+          if (fareValue < minFareRef.current) minFareRef.current = fareValue;
+          if (fareValue > maxFareRef.current) maxFareRef.current = fareValue;
+        }
 
         setFares((prev) => {
           const updated = [fare, ...prev];
@@ -122,76 +83,102 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
     return true;
   });
 
+  const labelled = filteredFares.filter((fare) => typeof fare.is_synthetic === 'boolean');
+  const allSimulated = labelled.length > 0 && labelled.every((fare) => fare.is_synthetic === true);
+  const anySimulated = labelled.some((fare) => fare.is_synthetic === true);
+  const provenance: 'simulated' | 'mixed' | 'live' | 'unverified' =
+    labelled.length !== filteredFares.length
+      ? 'unverified'
+      : allSimulated
+      ? 'simulated'
+      : anySimulated
+      ? 'mixed'
+      : 'live';
+
+  const minFare = minFareRef.current !== Infinity ? minFareRef.current : 0;
+  const maxFare = maxFareRef.current > 0 ? maxFareRef.current : 0;
+
+  const statusLabel =
+    streamStatus === 'connected'
+      ? 'WEBSOCKET LIVE'
+      : streamStatus === 'connecting'
+      ? 'CONNECTING PIPELINE'
+      : streamStatus === 'reconnecting'
+      ? 'RECONNECTING'
+      : 'OFFLINE';
+
   return (
     <div
-      className={`bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden backdrop-blur-md ${className}`}
+      className={`bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden ${className}`}
     >
       {/* Ticker Control Bar */}
-      <div className="px-4 py-2.5 bg-slate-950/70 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-        {/* Left: Stream Status & Live Indicator */}
+      <div className="px-4 py-2 bg-neutral-950 border-b border-neutral-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+        {/* Left: Stream Status & Live Indicator - Calm Stillness */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
+            <span
+              className={`inline-block h-1.5 w-1.5 rounded-full ${
+                streamStatus === 'connected'
+                  ? 'bg-emerald-400'
+                  : streamStatus === 'connecting'
+                  ? 'bg-amber-400'
+                  : 'bg-neutral-500'
+              }`}
+            />
+            <span className="font-mono text-[11px] font-semibold tracking-wider text-neutral-300">
+              FARE FEED
+            </span>
+            {filteredFares.length > 0 && (
               <span
-                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                  streamStatus === 'connected'
-                    ? 'bg-emerald-400'
-                    : streamStatus === 'connecting'
-                    ? 'bg-sky-400'
-                    : 'bg-rose-400'
+                className={`px-1.5 py-0.5 rounded font-mono text-[10px] border ${
+                  provenance === 'simulated'
+                    ? 'bg-amber-950/60 border-amber-800 text-amber-300'
+                    : provenance === 'mixed'
+                    ? 'bg-neutral-900 border-amber-800 text-amber-400'
+                    : provenance === 'live'
+                    ? 'bg-neutral-900 border-emerald-800 text-emerald-400'
+                    : 'bg-neutral-900 border-neutral-700 text-neutral-400'
                 }`}
-              ></span>
-              <span
-                className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
-                  streamStatus === 'connected'
-                    ? 'bg-emerald-500'
-                    : streamStatus === 'connecting'
-                    ? 'bg-sky-500'
-                    : 'bg-rose-500'
-                }`}
-              ></span>
-            </span>
-
-            <span className="font-mono font-bold tracking-wider text-[11px] text-white flex items-center gap-1.5">
-              <Radio className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
-              <span>LIVE FARE FEED</span>
-            </span>
-          </div>
-
-          <span
-            className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-semibold border ${
-              streamStatus === 'connected'
-                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
-                : streamStatus === 'connecting'
-                ? 'bg-sky-950/80 text-sky-300 border-sky-800'
-                : streamStatus === 'reconnecting'
-                ? 'bg-amber-950/80 text-amber-300 border-amber-800'
-                : 'bg-rose-950/80 text-rose-300 border-rose-800'
-            }`}
-          >
-            {streamStatus === 'connected'
-              ? 'WEBSOCKET LIVE'
-              : streamStatus === 'connecting'
-              ? 'CONNECTING PIPELINE'
-              : streamStatus === 'reconnecting'
-              ? 'RECONNECTING'
-              : 'OFFLINE'}
-          </span>
-          <span className="text-slate-600 hidden md:inline">|</span>
-
-          {/* Quick Metrics */}
-          <div className="hidden sm:flex items-center gap-3 text-[11px] font-mono text-slate-400">
-            <span>
-              Ingested: <strong className="text-white">{totalStreamedCountRef.current}</strong>
-            </span>
-            {minFareRef.current !== Infinity && (
-              <span>
-                Low: <strong className="text-emerald-400">₹{minFareRef.current.toLocaleString()}</strong>
+              >
+                {provenance === 'simulated'
+                  ? 'SIMULATED'
+                  : provenance === 'mixed'
+                  ? 'MIXED'
+                  : provenance === 'live'
+                  ? 'LIVE SCRAPE'
+                  : 'PROVENANCE UNKNOWN'}
               </span>
             )}
-            {maxFareRef.current > 0 && (
+          </div>
+
+          <span className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-neutral-900 border border-neutral-800 text-neutral-400">
+            {statusLabel}
+          </span>
+
+          <span className="text-neutral-700 hidden md:inline">/</span>
+
+          {/* Quick Metrics */}
+          <div className="hidden sm:flex items-center gap-3 text-[11px] font-mono text-neutral-400">
+            <span>
+              Ingested:{' '}
+              <span className="text-neutral-200 tabular-nums font-medium">
+                {totalStreamedCountRef.current}
+              </span>
+            </span>
+            {minFare > 0 && (
               <span>
-                Peak: <strong className="text-rose-400">₹{maxFareRef.current.toLocaleString()}</strong>
+                Low:{' '}
+                <span className="text-neutral-200 tabular-nums font-medium">
+                  ₹{minFare.toLocaleString('en-IN')}
+                </span>
+              </span>
+            )}
+            {maxFare > 0 && (
+              <span>
+                Peak:{' '}
+                <span className="text-neutral-200 tabular-nums font-medium">
+                  ₹{maxFare.toLocaleString('en-IN')}
+                </span>
               </span>
             )}
           </div>
@@ -200,12 +187,12 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
         {/* Right: Controls & Filters */}
         <div className="flex items-center gap-2">
           {/* Carrier Filter */}
-          <div className="flex items-center gap-1">
-            <SlidersHorizontal className="w-3 h-3 text-slate-500" />
+          <div className="flex items-center gap-1.5">
+            <SlidersHorizontal className="w-3 h-3 text-neutral-500" />
             <select
               value={selectedCarrierFilter}
               onChange={(e) => setSelectedCarrierFilter(e.target.value)}
-              className="bg-slate-900 text-slate-300 border border-slate-700/80 rounded-lg px-2 py-1 text-[11px] font-mono focus:outline-none"
+              className="bg-neutral-900 text-neutral-300 border border-neutral-800 rounded px-2 py-1 text-[11px] font-mono focus:border-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950"
             >
               <option value="ALL">All Airlines</option>
               <option value="6E">6E (IndiGo)</option>
@@ -218,77 +205,64 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
           {/* Pause / Resume Button */}
           <button
             onClick={() => setIsPaused(!isPaused)}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors ${
-              isPaused
-                ? 'bg-amber-950/60 text-amber-300 border-amber-800 hover:bg-amber-900/60'
-                : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
-            }`}
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 text-[11px] font-mono transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950"
             title={isPaused ? 'Resume streaming feed' : 'Pause streaming feed'}
           >
-            {isPaused ? <Play className="w-3 h-3 text-amber-400" /> : <Pause className="w-3 h-3 text-slate-400" />}
+            {isPaused ? <Play className="w-3 h-3 text-neutral-300" /> : <Pause className="w-3 h-3 text-neutral-400" />}
             <span>{isPaused ? 'Resume' : 'Pause'}</span>
           </button>
 
           {/* Expand / Collapse Ledger Button */}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-800 text-[11px] font-medium transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 text-[11px] font-mono transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950"
           >
             <span>{isExpanded ? 'Hide Ledger' : 'View Ledger'}</span>
-            {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            {isExpanded ? <ChevronUp className="w-3 h-3 text-neutral-400" /> : <ChevronDown className="w-3 h-3 text-neutral-400" />}
           </button>
         </div>
       </div>
 
       {/* Horizontal Carousel / Ticker Stream */}
-      <div className="p-3 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950 flex gap-3 items-center">
+      <div
+        className="p-3 overflow-x-auto scrollbar-thin flex gap-2.5 items-center live-ticker-stream motion-reduce:scroll-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950"
+        data-ticker-stream="true"
+        aria-label="Live fare ticker"
+      >
         {filteredFares.length === 0 ? (
-          <div className="py-4 px-6 text-xs text-slate-500 font-mono flex items-center gap-2">
-            <Clock className="w-4 h-4 animate-spin text-slate-600" />
+          <div className="py-3 px-4 text-xs text-neutral-500 font-mono flex items-center gap-2">
+            <Clock className="w-3.5 h-3.5 text-neutral-500" />
             <span>Connecting to live fare pipeline and waiting for crawler packets...</span>
           </div>
         ) : (
           filteredFares.slice(0, 15).map((fare, idx) => {
-            const carrier = CARRIER_CONFIG[fare.airline_code] || {
-              name: fare.airline_name || fare.airline_code,
-              bg: 'bg-slate-900',
-              text: 'text-slate-300',
-              border: 'border-slate-700',
-              dot: 'bg-slate-400',
-            };
-            const source = SOURCE_CONFIG[fare.source.toLowerCase()] || {
-              label: fare.source,
-              text: 'text-slate-300',
-              bg: 'bg-slate-800',
-            };
-            const isFresh = idx === 0 && newlyAddedId !== null;
+            const rawFare = 'fare' in fare && typeof fare.fare === 'number' ? fare.fare : undefined;
+            const fareValue = fare.fare_inr ?? rawFare ?? 0;
+            const sourceLabel = SOURCE_LABELS[fare.source?.toLowerCase()] || fare.source;
 
             return (
               <div
                 key={`${fare.flight_number}-${fare.timestamp}-${idx}`}
                 onClick={() => onSelectRoute?.(`${fare.origin}-${fare.destination}`)}
-                className={`flex-shrink-0 cursor-pointer rounded-xl p-3 border transition-all duration-300 min-w-[240px] ${
-                  isFresh
-                    ? 'bg-sky-950/60 border-sky-500 shadow-md shadow-sky-500/20 scale-[1.02]'
-                    : 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700 hover:bg-slate-950'
-                }`}
+                className="flex-shrink-0 cursor-pointer rounded-md p-3 border border-neutral-800 bg-neutral-950 hover:border-neutral-700 hover:bg-neutral-900/40 transition-colors motion-reduce:transition-none min-w-[210px]"
               >
-                {/* Header: Carrier Tag + Route Badge */}
+                {/* Header: Carrier Tag + Route */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5">
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border ${carrier.bg} ${carrier.text} ${carrier.border}`}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-neutral-900 border border-neutral-800 text-neutral-300"
+                      title={CARRIER_NAMES[fare.airline_code] ?? fare.airline_name ?? fare.airline_code}
                     >
                       {fare.airline_code}
                     </span>
-                    <span className="text-[11px] font-mono text-slate-300 font-semibold">
+                    <span className="text-xs font-mono text-neutral-300 font-medium">
                       {fare.flight_number}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1 text-[11px] font-mono font-bold text-sky-400 bg-sky-950/60 border border-sky-800/60 px-2 py-0.5 rounded">
+                  <div className="flex items-center gap-1 text-xs font-mono font-medium text-neutral-400">
                     <span>{fare.origin}</span>
-                    <Plane className="w-2.5 h-2.5 text-sky-400 transform rotate-90" />
+                    <span className="text-neutral-600">→</span>
                     <span>{fare.destination}</span>
                   </div>
                 </div>
@@ -296,35 +270,37 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
                 {/* Fare & Source Row */}
                 <div className="mt-2.5 flex items-baseline justify-between">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold font-mono text-white tracking-tight">
-                      ₹{(fare.fare_inr ?? (fare as unknown as { fare?: number }).fare ?? 0).toLocaleString()}
+                    <span className="text-base font-semibold font-mono tabular-nums text-white tracking-tight">
+                      ₹{fareValue.toLocaleString('en-IN')}
                     </span>
-                    <span className="text-[10px] text-slate-500 font-sans uppercase">INR</span>
+                    <span className="text-[10px] text-neutral-500 font-mono uppercase">INR</span>
                   </div>
 
-                  <span
-                    className={`text-[10px] font-mono px-1.5 py-0.2 rounded border border-slate-700/60 ${source.bg} ${source.text}`}
-                  >
-                    {source.label}
+                  <span className="text-[10px] font-mono text-neutral-500">
+                    {sourceLabel}
                   </span>
                 </div>
 
-                {/* Footer: Relative Time & Departure Window */}
-                <div className="mt-2 pt-2 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                {/* Footer: Date & Timestamp */}
+                <div className="mt-2 pt-2 border-t border-neutral-900 flex items-center justify-between text-[10px] text-neutral-500 font-mono">
                   <span>
                     Dep:{' '}
-                    {new Date(fare.departure_datetime).toLocaleDateString([], {
-                      month: 'short',
-                      day: 'numeric',
-                    })}
+                    {fare.departure_datetime
+                      ? new Date(fare.departure_datetime).toLocaleDateString([], {
+                          month: 'short',
+                          day: 'numeric',
+                        })
+                      : '—'}
                   </span>
-                  <span className="flex items-center gap-1 text-slate-400">
+                  <span className="flex items-center gap-1 text-neutral-500">
                     <Clock className="w-2.5 h-2.5" />
-                    {new Date(fare.timestamp).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                    })}
+                    {fare.timestamp
+                      ? new Date(fare.timestamp).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                        })
+                      : '—'}
                   </span>
                 </div>
               </div>
@@ -335,63 +311,74 @@ export const LiveTicker: React.FC<LiveTickerProps> = ({ onSelectRoute, className
 
       {/* Expandable Full Stream Ledger Table */}
       {isExpanded && (
-        <div className="border-t border-slate-800 bg-slate-950/80 p-4 max-h-72 overflow-y-auto">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-white font-mono flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-              <span>Real-Time Stream Buffer ({filteredFares.length} Packets)</span>
+        <div className="border-t border-neutral-800 bg-neutral-950 p-4 max-h-72 overflow-y-auto">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-medium text-white font-mono">
+              Stream Ledger ({filteredFares.length} Packets)
             </span>
-            <span className="text-[11px] text-slate-400 font-mono">
-              Auto-pruned FIFO ring buffer
+            <span className="text-[11px] text-neutral-500 font-mono">
+              FIFO ring buffer
             </span>
           </div>
 
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900 text-slate-400 font-mono text-[10px] uppercase border-b border-slate-800">
+            <thead className="bg-neutral-900/60 text-neutral-400 font-mono text-[10px] uppercase tracking-wider border-b border-neutral-800">
               <tr>
-                <th className="py-2 px-3">Arrival</th>
-                <th className="py-2 px-3">Carrier</th>
-                <th className="py-2 px-3">Flight</th>
-                <th className="py-2 px-3">Corridor</th>
-                <th className="py-2 px-3">Fare (INR)</th>
-                <th className="py-2 px-3">Source Engine</th>
-                <th className="py-2 px-3">Departure Date</th>
+                <th className="py-2 px-3 font-medium">Arrival</th>
+                <th className="py-2 px-3 font-medium">Carrier</th>
+                <th className="py-2 px-3 font-medium">Flight</th>
+                <th className="py-2 px-3 font-medium">Corridor</th>
+                <th className="py-2 px-3 font-medium text-right">Fare (INR)</th>
+                <th className="py-2 px-3 font-medium">Source</th>
+                <th className="py-2 px-3 font-medium">Departure Date</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-mono text-slate-300">
-              {filteredFares.map((fare, idx) => (
-                <tr key={`tbl-${fare.flight_number}-${idx}`} className="hover:bg-slate-800/40">
-                  <td className="py-1.5 px-3 text-slate-500 text-[11px]">
-                    {new Date(fare.timestamp).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                    })}
-                  </td>
-                  <td className="py-1.5 px-3">
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-800 border border-slate-700 text-white">
-                      {fare.airline_code}
-                    </span>
-                  </td>
-                  <td className="py-1.5 px-3 font-semibold text-white">{fare.flight_number}</td>
-                  <td className="py-1.5 px-3 text-sky-400 font-bold">
-                    {fare.origin} → {fare.destination}
-                  </td>
-                  <td className="py-1.5 px-3 text-white font-bold">
-                    ₹{(fare.fare_inr ?? (fare as unknown as { fare?: number }).fare ?? 0).toLocaleString()}
-                  </td>
-                  <td className="py-1.5 px-3 text-slate-400 text-[11px] capitalize">
-                    {fare.source}
-                  </td>
-                  <td className="py-1.5 px-3 text-slate-400 text-[11px]">
-                    {new Date(fare.departure_datetime).toLocaleDateString([], {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </td>
-                </tr>
-              ))}
+            <tbody className="divide-y divide-neutral-800/60 font-mono text-neutral-300">
+              {filteredFares.map((fare, idx) => {
+                const rawFare = 'fare' in fare && typeof fare.fare === 'number' ? fare.fare : undefined;
+                const fareValue = fare.fare_inr ?? rawFare ?? 0;
+                const sourceLabel = SOURCE_LABELS[fare.source?.toLowerCase()] || fare.source;
+                return (
+                  <tr key={`tbl-${fare.flight_number}-${idx}`} className="hover:bg-neutral-900/40 transition-colors motion-reduce:transition-none">
+                    <td className="py-1.5 px-3 text-neutral-500 text-[11px] tabular-nums">
+                      {fare.timestamp
+                        ? new Date(fare.timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                          })
+                        : '—'}
+                    </td>
+                    <td className="py-1.5 px-3">
+                      <span
+                        className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-neutral-900 border border-neutral-800 text-neutral-300"
+                        title={CARRIER_NAMES[fare.airline_code] ?? fare.airline_name ?? fare.airline_code}
+                      >
+                        {fare.airline_code}
+                      </span>
+                    </td>
+                    <td className="py-1.5 px-3 font-medium text-white">{fare.flight_number}</td>
+                    <td className="py-1.5 px-3 text-neutral-300">
+                      {fare.origin} <span className="text-neutral-600">→</span> {fare.destination}
+                    </td>
+                    <td className="py-1.5 px-3 text-right font-medium text-white tabular-nums">
+                      ₹{fareValue.toLocaleString('en-IN')}
+                    </td>
+                    <td className="py-1.5 px-3 text-neutral-400 text-[11px] capitalize">
+                      {sourceLabel}
+                    </td>
+                    <td className="py-1.5 px-3 text-neutral-400 text-[11px]">
+                      {fare.departure_datetime
+                        ? new Date(fare.departure_datetime).toLocaleDateString([], {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })
+                        : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

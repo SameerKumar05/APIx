@@ -26,13 +26,14 @@ Covers:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime, timedelta, timezone
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import settings
 from backend.app.db.telemetry_repo import (
     TelemetryRepo,
     bulk_log_scraper_telemetry,
@@ -61,17 +62,17 @@ from backend.app.schemas.telemetry import (
     ProxyPoolSummary,
 )
 
-
 # ---------------------------------------------------------------------------
 # 1. Database Model Tests
 # ---------------------------------------------------------------------------
+
 
 class TestTelemetryDatabaseModels:
     """Verifies SQLAlchemy schema mapping, fields, constraints, and helpers."""
 
     def test_scraper_telemetry_model_creation(self, db_session: Session):
         """Verifies creating, persisting, and querying a ScraperTelemetry record."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         record = ScraperTelemetry(
             crawler_name="makemytrip",
             route="DEL-BOM",
@@ -108,7 +109,7 @@ class TestTelemetryDatabaseModels:
 
     def test_proxy_health_record_model_creation(self, db_session: Session):
         """Verifies creating, persisting, and properties of ProxyHealthRecord."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         proxy = ProxyHealthRecord(
             proxy_ip="185.220.101.5:3128",
             status="HEALTHY",
@@ -142,6 +143,7 @@ class TestTelemetryDatabaseModels:
 # ---------------------------------------------------------------------------
 # 2. Database Repository Layer Tests
 # ---------------------------------------------------------------------------
+
 
 class TestTelemetryRepository:
     """Verifies TelemetryRepo methods for metrics, uptime, error rates, and purging."""
@@ -189,7 +191,7 @@ class TestTelemetryRepository:
         records = [
             {
                 "crawler_name": "makemytrip",
-                "route": f"DEL-BOM",
+                "route": "DEL-BOM",
                 "booking_window": f"T+{w}",
                 "status": "SUCCESS",
                 "response_time_ms": 120.0 + (w * 10),
@@ -203,7 +205,7 @@ class TestTelemetryRepository:
 
     def test_calculate_crawler_uptime_and_error_rate(self, db_session: Session):
         """Verifies mathematical calculation of crawler uptime and error rate percentages."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Log 8 successful runs and 2 failed runs for 'makemytrip' -> 80% uptime, 20% error rate
         for i in range(8):
@@ -229,10 +231,14 @@ class TestTelemetryRepository:
                 created_at=now - timedelta(minutes=50 + i * 5),
             )
 
-        uptime = calculate_crawler_uptime(db_session, crawler_name="makemytrip", window_hours=2.0)
+        uptime = calculate_crawler_uptime(
+            db_session, crawler_name="makemytrip", window_hours=2.0
+        )
         assert uptime["uptime_pct"] == 80.0
 
-        error_rate = calculate_crawler_error_rate(db_session, crawler_name="makemytrip", window_hours=2.0)
+        error_rate = calculate_crawler_error_rate(
+            db_session, crawler_name="makemytrip", window_hours=2.0
+        )
         assert error_rate["error_rate_pct"] == 20.0
 
         # Overall summary
@@ -296,10 +302,10 @@ class TestTelemetryRepository:
 
     def test_cleanup_old_telemetry(self, db_session: Session):
         """Verifies deletion of telemetry records older than retention period."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # 3 recent records (today)
-        for i in range(3):
+        for _ in range(3):
             log_scraper_telemetry(
                 db=db_session,
                 crawler_name="synthetic",
@@ -310,7 +316,7 @@ class TestTelemetryRepository:
             )
 
         # 4 old records (45 days old)
-        for i in range(4):
+        for _ in range(4):
             log_scraper_telemetry(
                 db=db_session,
                 crawler_name="synthetic",
@@ -331,8 +337,24 @@ class TestTelemetryRepository:
 # 3. FastAPI Telemetry & Trigger Endpoint Tests
 # ---------------------------------------------------------------------------
 
+
 class TestTelemetryEndpoints:
     """Tests for FastAPI HTTP endpoints: /telemetry, /trigger, /proxies, and streaming."""
+
+    @pytest.fixture(autouse=True)
+    def ensure_active_worker(self):
+        from backend.app.db.crawler_job_repo import register_worker_heartbeat
+        from backend.app.db.session import SessionLocal, init_db
+
+        init_db()
+        with SessionLocal() as db:
+            register_worker_heartbeat(
+                db=db,
+                worker_id="worker-fixture-telemetry",
+                hostname="localhost",
+                pid=99999,
+            )
+        yield
 
     def test_get_ingestion_telemetry_schema(self):
         """Verifies GET /api/v1/ingestion/telemetry conforms to IngestionTelemetryResponse."""
@@ -379,7 +401,11 @@ class TestTelemetryEndpoints:
             "route_code": "DEL-BOM",
             "booking_window": "T+1",
         }
-        response = client.post("/api/v1/ingestion/trigger", json=payload)
+        response = client.post(
+            "/api/v1/ingestion/trigger",
+            headers={"X-Ingestion-Key": settings.INGESTION_API_KEY},
+            json=payload,
+        )
         assert response.status_code == 202
 
         data = response.json()
@@ -388,12 +414,15 @@ class TestTelemetryEndpoints:
         assert validated.status in ("TRIGGERED", "QUEUED", "SUCCESS")
         assert validated.crawler_name == "makemytrip"
         assert validated.route_code == "DEL-BOM"
-        assert "dispatched" in validated.message.lower() or "triggered" in validated.message.lower()
+        assert "queued" in validated.message.lower()
 
     def test_post_trigger_crawler_with_query_params(self):
         """Verifies POST /api/v1/ingestion/trigger using query parameters."""
         client = TestClient(app)
-        response = client.post("/api/v1/ingestion/trigger?crawler_name=spicejet&route_code=DEL-BLR")
+        response = client.post(
+            "/api/v1/ingestion/trigger?crawler_name=spicejet&route_code=DEL-BLR",
+            headers={"X-Ingestion-Key": settings.INGESTION_API_KEY},
+        )
         assert response.status_code == 202
 
         data = response.json()
@@ -443,7 +472,12 @@ class TestTelemetryEndpoints:
             initial = websocket.receive_json()
             assert isinstance(initial, dict)
             assert "type" in initial
-            assert initial["type"] in ("connected", "subscribed", "fare_update", "welcome")
+            assert initial["type"] in (
+                "connected",
+                "subscribed",
+                "fare_update",
+                "welcome",
+            )
 
             # 2. Client sends ping (handling any pending buffer frame)
             websocket.send_text("ping")
@@ -455,12 +489,15 @@ class TestTelemetryEndpoints:
                     parsed = json.loads(pong)
             except Exception:
                 parsed = {}
-            assert pong == "pong" or (isinstance(parsed, dict) and parsed.get("type") == "pong")
+            assert pong == "pong" or (
+                isinstance(parsed, dict) and parsed.get("type") == "pong"
+            )
 
 
 # ---------------------------------------------------------------------------
 # 4. Edge Cases & Resilience Tests
 # ---------------------------------------------------------------------------
+
 
 class TestTelemetryEdgeCases:
     """Verifies edge-case safety, zero durations, and non-existent crawler filters."""
@@ -477,7 +514,7 @@ class TestTelemetryEdgeCases:
 
     def test_telemetry_query_start_time(self, db_session: Session):
         """Verifies query with start_time cutoff does not crash."""
-        records = get_scraper_telemetry(db_session, start_time=datetime.now(timezone.utc))
+        records = get_scraper_telemetry(db_session, start_time=datetime.now(UTC))
         assert isinstance(records, list)
 
     def test_crawler_summary_empty(self, db_session: Session):

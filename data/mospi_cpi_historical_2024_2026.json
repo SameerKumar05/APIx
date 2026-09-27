@@ -1,0 +1,45 @@
+{
+  "official": false,
+  "status": "withdrawn",
+  "records": [],
+  "reason": "The previous file stored invented index values and labelled them source=MoSPI. Those values contradicted NSO/MoSPI press notes. The series was removed. Airfare item 6.2.03 and the unverified months were not replaced with estimates.",
+  "verified_contradictions": [
+    {
+      "period": "2024-01",
+      "measure": "CPI General Combined",
+      "withdrawn_value": 185.2,
+      "press_note_value": 185.5,
+      "base": "2012=100",
+      "press_note": "https://mospi.gov.in/sites/default/files/press_release/CPI_PR_12feb24.pdf",
+      "released": "2024-02-12"
+    },
+    {
+      "period": "2024-01",
+      "measure": "Transport and communication Combined",
+      "withdrawn_value": 174.5,
+      "press_note_value": 166.8,
+      "base": "2012=100",
+      "press_note": "https://mospi.gov.in/sites/default/files/press_release/CPI_PR_12feb24.pdf",
+      "released": "2024-02-12"
+    },
+    {
+      "period": "2025-12",
+      "measure": "CPI General Combined",
+      "withdrawn_value": 195.8,
+      "press_note_value": 198.0,
+      "base": "2012=100",
+      "press_note": "https://www.mospi.gov.in/uploads/latestreleasesfiles/1770893247472-Press%20Relase%20of%20CPI%20for%20Jan26.pdf",
+      "released": "2026-02-12"
+    },
+    {
+      "period": "2026-01",
+      "measure": "CPI General Combined",
+      "withdrawn_value": 196.4,
+      "press_note_value": 104.46,
+      "base": "2024=100",
+      "press_note": "https://www.mospi.gov.in/uploads/latestreleasesfiles/1770893247472-Press%20Relase%20of%20CPI%20for%20Jan26.pdf",
+      "released": "2026-02-12",
+      "note": "From January 2026 the official series is on base 2024=100. A 2012=100 continuation is a rebasing error."
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 """Database seeding script for APIx.
 
-Populates the 10 top Indian domestic directional flight corridors with DGCA-derived
-passenger traffic weights (normalized to 1.000) and the top 5 domestic carriers with
-their official DGCA market share percentages.
+Populates the 10 trunk corridors with modelled passenger weights (normalized to 1.000)
+and five carriers with modelled market-share literals. These figures are not DGCA
+statistics and are not an official market-share release.
 """
 
 from __future__ import annotations
@@ -13,14 +13,13 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.app.db.session import Base, SessionLocal, engine, init_db
+from backend.app.db.session import SessionLocal, init_db
 from backend.app.models.airline import Airline
 from backend.app.models.route import Route
 
 logger = logging.getLogger("apix.db.seed")
 
-# Top 10 Directional Domestic Corridors (DGCA Monthly Passenger Traffic Baseline)
-# Total Pax = 2,500,000 | Sum of Weights = 1.0000
+# Modelled corridor weights, not a DGCA release. Total Pax = 2,500,000 | Sum = 1.0000
 INITIAL_ROUTES: list[dict[str, Any]] = [
     {
         "origin": "DEL",
@@ -104,7 +103,7 @@ INITIAL_ROUTES: list[dict[str, Any]] = [
     },
 ]
 
-# Top 5 Indian Commercial Passenger Airlines (DGCA Market Share)
+# Modelled carrier shares, not official DGCA market share.
 INITIAL_AIRLINES: list[dict[str, Any]] = [
     {
         "code": "6E",
@@ -224,4 +223,6 @@ if __name__ == "__main__":
     init_db()
     with SessionLocal() as db_session:
         results = seed_all(db_session)
-        print(f"Seeding complete: {results['routes']} routes, {results['airlines']} airlines.")
+        print(
+            f"Seeding complete: {results['routes']} routes, {results['airlines']} airlines."
+        )

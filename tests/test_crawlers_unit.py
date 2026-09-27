@@ -25,28 +25,37 @@ import os
 import sys
 import unittest
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict
+from typing import Any
 
 worktree_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if worktree_root not in sys.path:
     sys.path.insert(0, worktree_root)
 
-from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
+from ingestion.base import (
+    SYSTEM_CHROMIUM_CANDIDATES,
+    BaseScraper,
+    RawFareRecord,
+    ScrapeResult,
+)
 from ingestion.config import (
     BOOKING_WINDOWS,
     DEFAULT_ROUTES,
+    VALID_AIRLINE_CODES,
+    VALID_IATA_CODES,
     BookingWindow,
     IngestionConfig,
     Route,
-    VALID_AIRLINE_CODES,
-    VALID_IATA_CODES,
 )
 from ingestion.crawlers.amadeus import AmadeusFlightClient
 from ingestion.crawlers.easemytrip import EaseMyTripScraper
 from ingestion.crawlers.makemytrip import MakeMyTripScraper
 from ingestion.crawlers.spicejet import SpiceJetScraper
 from ingestion.crawlers.synthetic import SyntheticFlightGenerator
-from ingestion.orchestrator import IngestionOrchestrator, OrchestratorRunSummary, SlotResultSummary
+from ingestion.orchestrator import (
+    IngestionOrchestrator,
+    OrchestratorRunSummary,
+    SlotResultSummary,
+)
 
 
 class TestMakeMyTripScraper(unittest.TestCase):
@@ -91,7 +100,9 @@ class TestMakeMyTripScraper(unittest.TestCase):
         for url in valid_urls:
             self.assertTrue(self.scraper.is_flight_api_url(url), f"Should match: {url}")
         for url in invalid_urls:
-            self.assertFalse(self.scraper.is_flight_api_url(url), f"Should not match: {url}")
+            self.assertFalse(
+                self.scraper.is_flight_api_url(url), f"Should not match: {url}"
+            )
 
     def test_stealth_playwright_context_options(self) -> None:
         """Verifies stealth browser context options for MakeMyTrip."""
@@ -164,8 +175,15 @@ class TestMakeMyTripScraper(unittest.TestCase):
     def test_parse_flight_json_empty_and_malformed(self) -> None:
         """Verifies graceful handling of empty or malformed payloads."""
         self.assertEqual(self.scraper.parse_flight_json({}, "DEL", "BOM", "T+1"), [])
-        self.assertEqual(self.scraper.parse_flight_json({"flights": "not-a-list"}, "DEL", "BOM", "T+1"), [])
-        self.assertEqual(self.scraper.parse_flight_json({"flights": [{}]}, "DEL", "BOM", "T+1"), [])
+        self.assertEqual(
+            self.scraper.parse_flight_json(
+                {"flights": "not-a-list"}, "DEL", "BOM", "T+1"
+            ),
+            [],
+        )
+        self.assertEqual(
+            self.scraper.parse_flight_json({"flights": [{}]}, "DEL", "BOM", "T+1"), []
+        )
 
     def test_scrape_route_fallback_synthetic_mode(self) -> None:
         """Tests that synthetic mode returns DGCA synthetic records for MakeMyTrip."""
@@ -232,7 +250,9 @@ class TestSpiceJetScraper(unittest.TestCase):
         for url in valid_urls:
             self.assertTrue(self.scraper.is_flight_api_url(url), f"Should match: {url}")
         for url in invalid_urls:
-            self.assertFalse(self.scraper.is_flight_api_url(url), f"Should not match: {url}")
+            self.assertFalse(
+                self.scraper.is_flight_api_url(url), f"Should not match: {url}"
+            )
 
     def test_get_randomized_headers(self) -> None:
         """Verifies randomized headers contain realistic browser headers."""
@@ -408,15 +428,58 @@ class TestIngestionOrchestratorMultiSource(unittest.TestCase):
             self.assertEqual(rec.source, "makemytrip")
 
     def test_orchestrator_dry_run_multi_source_all_slots(self) -> None:
-        """Tests full 40-slot dry run in multi-source mode."""
+        """Tests a full routes x windows dry run in multi-source mode."""
         summary = self.orchestrator.run_all_slots(dry_run=True)
-        self.assertEqual(summary.total_slots, 40)
-        self.assertEqual(summary.successful_slots, 40)
+        expected_slots = len(DEFAULT_ROUTES) * len(BOOKING_WINDOWS)
+        self.assertEqual(summary.total_slots, expected_slots)
+        self.assertEqual(summary.successful_slots, expected_slots)
         self.assertEqual(summary.failed_slots, 0)
         self.assertEqual(summary.backend_status, "skipped_dry_run")
-        self.assertEqual(len(summary.slots), 40)
+        self.assertEqual(len(summary.slots), len(DEFAULT_ROUTES) * len(BOOKING_WINDOWS))
         self.assertGreater(summary.total_records_collected, 400)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_resolve_launch_kwargs_prefers_executable_system_chromium():
+    """Akamai resets the bundled Playwright Chromium over HTTP/2 but accepts the distro build."""
+    import os
+
+    from ingestion.config import IngestionConfig
+    from ingestion.crawlers.makemytrip import resolve_launch_kwargs
+
+    cfg = IngestionConfig(ingestion_mode="live", playwright_headless=True)
+    kwargs = resolve_launch_kwargs(cfg)
+    assert "headless" in kwargs and "args" in kwargs
+
+    picked = kwargs.get("executable_path")
+    if picked is not None:
+        assert os.path.isfile(picked) and os.access(picked, os.X_OK), picked
+    else:
+        for candidate in SYSTEM_CHROMIUM_CANDIDATES:
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                raise AssertionError(
+                    f"executable {candidate} exists but was not selected"
+                )
+
+
+def test_resolve_launch_kwargs_honours_explicit_override():
+    import os
+    import tempfile
+
+    from ingestion.config import IngestionConfig
+    from ingestion.crawlers.makemytrip import resolve_launch_kwargs
+
+    with tempfile.NamedTemporaryFile(suffix=".chromium") as fake:
+        os.chmod(fake.name, 0o755)
+        cfg = IngestionConfig(
+            ingestion_mode="live", playwright_browser_executable=fake.name
+        )
+        assert resolve_launch_kwargs(cfg)["executable_path"] == fake.name
+
+    cfg = IngestionConfig(
+        ingestion_mode="live", playwright_browser_executable="/nonexistent/chromium"
+    )
+    assert "executable_path" not in resolve_launch_kwargs(cfg)

@@ -13,9 +13,16 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.deploy.template
 logs/
 *.log
 artifacts/
 *.db
 *.sqlite
 *.sqlite3
+.coverage
+.coverage.*
+htmlcov/
+
+# Vercel local project link state
+.vercel/

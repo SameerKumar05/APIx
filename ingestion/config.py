@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -39,12 +38,13 @@ class BookingWindow:
     days_advance: int
     description: str
     price_multiplier: float
-    multiplier_range: Tuple[float, float]
+    multiplier_range: tuple[float, float]
 
 
 @dataclass(frozen=True)
 class Airline:
     """Domestic airline operating in the Indian market."""
+
     code: str  # 2-character IATA
     name: str
     market_share: float  # Calibrated DGCA market share
@@ -53,24 +53,84 @@ class Airline:
 
 
 # Top 10 domestic routes calibrated to DGCA air passenger traffic statistics
-DEFAULT_ROUTES: List[Route] = [
-    Route(origin="DEL", destination="BOM", distance_km=1148, typical_duration_min=130, dgca_weight=0.15),
-    Route(origin="BOM", destination="DEL", distance_km=1148, typical_duration_min=130, dgca_weight=0.15),
-    Route(origin="DEL", destination="BLR", distance_km=1740, typical_duration_min=165, dgca_weight=0.12),
-    Route(origin="BLR", destination="DEL", distance_km=1740, typical_duration_min=165, dgca_weight=0.12),
-    Route(origin="BOM", destination="BLR", distance_km=842, typical_duration_min=105, dgca_weight=0.10),
-    Route(origin="BLR", destination="BOM", distance_km=842, typical_duration_min=105, dgca_weight=0.10),
-    Route(origin="DEL", destination="HYD", distance_km=1253, typical_duration_min=135, dgca_weight=0.07),
-    Route(origin="HYD", destination="DEL", distance_km=1253, typical_duration_min=135, dgca_weight=0.07),
-    Route(origin="DEL", destination="CCU", distance_km=1305, typical_duration_min=135, dgca_weight=0.06),
-    Route(origin="CCU", destination="DEL", distance_km=1305, typical_duration_min=135, dgca_weight=0.06),
+DEFAULT_ROUTES: list[Route] = [
+    Route(
+        origin="DEL",
+        destination="BOM",
+        distance_km=1148,
+        typical_duration_min=130,
+        dgca_weight=0.15,
+    ),
+    Route(
+        origin="BOM",
+        destination="DEL",
+        distance_km=1148,
+        typical_duration_min=130,
+        dgca_weight=0.15,
+    ),
+    Route(
+        origin="DEL",
+        destination="BLR",
+        distance_km=1740,
+        typical_duration_min=165,
+        dgca_weight=0.12,
+    ),
+    Route(
+        origin="BLR",
+        destination="DEL",
+        distance_km=1740,
+        typical_duration_min=165,
+        dgca_weight=0.12,
+    ),
+    Route(
+        origin="BOM",
+        destination="BLR",
+        distance_km=842,
+        typical_duration_min=105,
+        dgca_weight=0.10,
+    ),
+    Route(
+        origin="BLR",
+        destination="BOM",
+        distance_km=842,
+        typical_duration_min=105,
+        dgca_weight=0.10,
+    ),
+    Route(
+        origin="DEL",
+        destination="HYD",
+        distance_km=1253,
+        typical_duration_min=135,
+        dgca_weight=0.07,
+    ),
+    Route(
+        origin="HYD",
+        destination="DEL",
+        distance_km=1253,
+        typical_duration_min=135,
+        dgca_weight=0.07,
+    ),
+    Route(
+        origin="DEL",
+        destination="CCU",
+        distance_km=1305,
+        typical_duration_min=135,
+        dgca_weight=0.06,
+    ),
+    Route(
+        origin="CCU",
+        destination="DEL",
+        distance_km=1305,
+        typical_duration_min=135,
+        dgca_weight=0.06,
+    ),
 ]
 
 # Set of valid IATA airport codes used in our routes
 VALID_IATA_CODES = frozenset({"DEL", "BOM", "BLR", "HYD", "CCU"})
 
-# 4 Standard purchase windows as required by SIH PS 26056
-BOOKING_WINDOWS: List[BookingWindow] = [
+# 5 Standard purchase windows as required by SIH PS 26056
+BOOKING_WINDOWS: list[BookingWindow] = [
     BookingWindow(
         code="T+1",
         days_advance=1,
@@ -99,25 +159,62 @@ BOOKING_WINDOWS: List[BookingWindow] = [
         price_multiplier=1.00,
         multiplier_range=(0.95, 1.05),
     ),
+    BookingWindow(
+        code="T+45",
+        days_advance=45,
+        description="6-week advance booking (planned early purchase)",
+        price_multiplier=0.96,
+        multiplier_range=(0.92, 1.02),
+    ),
 ]
 
 # Mapping of window code -> BookingWindow
-BOOKING_WINDOW_MAP: Dict[str, BookingWindow] = {w.code: w for w in BOOKING_WINDOWS}
+BOOKING_WINDOW_MAP: dict[str, BookingWindow] = {w.code: w for w in BOOKING_WINDOWS}
 
 # Major Indian domestic airlines with DGCA market share calibration
-AIRLINES: List[Airline] = [
-    Airline(code="6E", name="IndiGo", market_share=0.60, fleet_type="LCC", base_price_factor=1.00),
-    Airline(code="AI", name="Air India", market_share=0.15, fleet_type="FSC", base_price_factor=1.18),
-    Airline(code="IX", name="Air India Express", market_share=0.10, fleet_type="LCC", base_price_factor=0.98),
-    Airline(code="QP", name="Akasa Air", market_share=0.10, fleet_type="LCC", base_price_factor=0.96),
-    Airline(code="SG", name="SpiceJet", market_share=0.05, fleet_type="LCC", base_price_factor=0.95),
+AIRLINES: list[Airline] = [
+    Airline(
+        code="6E",
+        name="IndiGo",
+        market_share=0.60,
+        fleet_type="LCC",
+        base_price_factor=1.00,
+    ),
+    Airline(
+        code="AI",
+        name="Air India",
+        market_share=0.15,
+        fleet_type="FSC",
+        base_price_factor=1.18,
+    ),
+    Airline(
+        code="IX",
+        name="Air India Express",
+        market_share=0.10,
+        fleet_type="LCC",
+        base_price_factor=0.98,
+    ),
+    Airline(
+        code="QP",
+        name="Akasa Air",
+        market_share=0.10,
+        fleet_type="LCC",
+        base_price_factor=0.96,
+    ),
+    Airline(
+        code="SG",
+        name="SpiceJet",
+        market_share=0.05,
+        fleet_type="LCC",
+        base_price_factor=0.95,
+    ),
 ]
 
-AIRLINE_MAP: Dict[str, Airline] = {a.code: a for a in AIRLINES}
+AIRLINE_MAP: dict[str, Airline] = {a.code: a for a in AIRLINES}
 VALID_AIRLINE_CODES = frozenset(AIRLINE_MAP.keys())
 
 # Default User Agents for stealth scraping
-DEFAULT_USER_AGENTS: List[str] = [
+DEFAULT_USER_AGENTS: list[str] = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
@@ -132,10 +229,13 @@ class IngestionConfig:
 
     api_base_url: str = field(
         default_factory=lambda: os.getenv("INGESTION_ENDPOINT_URL")
-        or os.getenv("API_BASE_URL", "http://localhost:8000")
+        or os.getenv("API_BASE_URL")
+        or "http://localhost:8000"
     )
     ingestion_key: str = field(
-        default_factory=lambda: os.getenv("INGESTION_API_KEY", "apix-ingestion-secret-key-2026")
+        default_factory=lambda: os.getenv(
+            "INGESTION_API_KEY", "apix-ingestion-secret-key-2026"
+        )
     )
     batch_size: int = field(
         default_factory=lambda: int(os.getenv("INGESTION_BATCH_SIZE", "100"))
@@ -155,8 +255,43 @@ class IngestionConfig:
     rate_limit_jitter_seconds: float = field(
         default_factory=lambda: float(os.getenv("RATE_LIMIT_JITTER_SECONDS", "1.0"))
     )
+    respect_robots_txt: bool = field(
+        default=True,
+        metadata={
+            "help": "Gate tier 1 crawling on the origin's robots.txt. Disable only for a documented reason."
+        },
+    )
+    robots_user_agent: str = field(
+        default="APIxBot",
+        metadata={"help": "Token matched against robots.txt user-agent groups."},
+    )
+    robots_min_delay_seconds: float = field(
+        default=5.0,
+        metadata={
+            "help": "Floor applied to any published crawl delay, so a permissive file cannot drive an aggressive crawl."
+        },
+    )
+    robots_fetch_timeout_seconds: float = field(
+        default=10.0, metadata={"help": "Timeout for the robots.txt fetch."}
+    )
+    robots_strict_fail_closed: bool = field(
+        default_factory=lambda: os.getenv("ROBOTS_STRICT_FAIL_CLOSED", "true").lower()
+        == "true",
+        metadata={
+            "help": "When false, treats robots fetch network timeouts as permissive with warning for staging/eval."
+        },
+    )
+    playwright_browser_executable: str | None = field(
+        default=None,
+        metadata={
+            "help": "Path to a Chromium binary to drive instead of Playwright's bundled build. "
+            "Akamai rejects the bundled build with ERR_HTTP2_PROTOCOL_ERROR but accepts the "
+            "system build. Auto-detected when left unset."
+        },
+    )
     playwright_headless: bool = field(
-        default_factory=lambda: os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() == "true"
+        default_factory=lambda: os.getenv("PLAYWRIGHT_HEADLESS", "true").lower()
+        == "true"
     )
     amadeus_client_id: str = field(
         default_factory=lambda: os.getenv("AMADEUS_CLIENT_ID", "")
@@ -170,7 +305,5 @@ class IngestionConfig:
     ingestion_mode: str = field(
         default_factory=lambda: os.getenv("INGESTION_MODE", "synthetic")
     )
-    proxy_url: Optional[str] = field(
-        default_factory=lambda: os.getenv("PROXY_URL")
-    )
-    user_agents: List[str] = field(default_factory=lambda: list(DEFAULT_USER_AGENTS))
+    proxy_url: str | None = field(default_factory=lambda: os.getenv("PROXY_URL"))
+    user_agents: list[str] = field(default_factory=lambda: list(DEFAULT_USER_AGENTS))

@@ -22,6 +22,7 @@ import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 # Ensure repository root is on sys.path
 TESTS_DIR = Path(__file__).resolve().parent
@@ -29,6 +30,7 @@ REPO_ROOT = TESTS_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+import backend.app.models  # noqa: F401
 from backend.app.db.seed import seed_all
 from backend.app.db.session import Base
 from backend.app.models.raw_fare import RawFare
@@ -48,6 +50,7 @@ def in_memory_engine() -> Generator[Engine, None, None]:
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
 
     @event.listens_for(engine, "connect")

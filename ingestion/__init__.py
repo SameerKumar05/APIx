@@ -21,6 +21,12 @@ from ingestion.config import (
 )
 from ingestion.crawlers.easemytrip import EaseMyTripScraper
 from ingestion.crawlers.synthetic import SyntheticFlightGenerator
+from ingestion.loaders import (
+    DgcaTrafficLoader,
+    DgcaTrafficRecord,
+    MospiCpiLoader,
+    MospiCpiRecord,
+)
 
 __all__ = [
     # Configuration & domain entities
@@ -45,4 +51,9 @@ __all__ = [
     "EaseMyTripScraper",
     # Client
     "IngestionClient",
+    # Benchmark loaders
+    "MospiCpiLoader",
+    "MospiCpiRecord",
+    "DgcaTrafficLoader",
+    "DgcaTrafficRecord",
 ]

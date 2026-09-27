@@ -20,7 +20,7 @@ import json
 import os
 import sys
 from datetime import date, datetime
-from typing import Any, Dict, List
+from typing import Any
 
 # Ensure repository root is on sys.path
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -36,9 +36,9 @@ from ingestion.client import IngestionClient
 from ingestion.config import (
     BOOKING_WINDOWS,
     DEFAULT_ROUTES,
-    IngestionConfig,
     VALID_AIRLINE_CODES,
     VALID_IATA_CODES,
+    IngestionConfig,
 )
 from ingestion.crawlers.amadeus import AmadeusFlightClient
 from ingestion.crawlers.easemytrip import EaseMyTripScraper
@@ -53,18 +53,22 @@ class LocalTestClientIngestionClient(IngestionClient):
         super().__init__(config=config)
         self.test_client = TestClient(fastapi_app)
 
-    def _post_with_urllib(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _post_with_urllib(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Routes batch payload directly to in-process FastAPI TestClient."""
         headers = {
             "Content-Type": "application/json",
             "X-Ingestion-Key": self.ingestion_key,
         }
-        resp = self.test_client.post("/api/v1/ingestion/batch", json=payload, headers=headers)
+        resp = self.test_client.post(
+            "/api/v1/ingestion/batch", json=payload, headers=headers
+        )
         if resp.status_code != 200:
-            raise RuntimeError(f"FastAPI TestClient returned {resp.status_code}: {resp.text}")
+            raise RuntimeError(
+                f"FastAPI TestClient returned {resp.status_code}: {resp.text}"
+            )
         return resp.json()
 
-    def _post_with_httpx(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _post_with_httpx(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._post_with_urllib(payload)
 
 
@@ -98,7 +102,9 @@ def run_pipeline_verification() -> None:
     summary_syn = orchestrator_syn.run_all_slots(dry_run=False)
 
     print(f"  -> Total Slots Executed:     {summary_syn.total_slots} (Expected: 40)")
-    print(f"  -> Successful Slots:         {summary_syn.successful_slots} (Expected: 40)")
+    print(
+        f"  -> Successful Slots:         {summary_syn.successful_slots} (Expected: 40)"
+    )
     print(f"  -> Failed Slots:             {summary_syn.failed_slots} (Expected: 0)")
     print(f"  -> Total Records Collected:  {summary_syn.total_records_collected}")
     print(f"  -> Total Batches Dispatched: {summary_syn.total_batches_dispatched}")
@@ -106,17 +112,31 @@ def run_pipeline_verification() -> None:
     print(f"  -> Backend Status:           {summary_syn.backend_status}")
     print(f"  -> Tier Distribution:        {summary_syn.tier_distribution}")
 
-    assert summary_syn.total_slots == 40, f"Expected 40 slots, got {summary_syn.total_slots}"
-    assert summary_syn.successful_slots == 40, f"Expected 40 successful slots, got {summary_syn.successful_slots}"
-    assert summary_syn.failed_slots == 0, f"Expected 0 failed slots, got {summary_syn.failed_slots}"
-    assert summary_syn.total_records_collected > 0, "No records collected in synthetic mode"
-    assert summary_syn.batches_successful == summary_syn.total_batches_dispatched, "Not all batches succeeded"
-    assert summary_syn.backend_status == "success", f"Backend status not success: {summary_syn.backend_status}"
-    assert summary_syn.tier_distribution.get("tier_3") == 40, "All 40 slots should be Tier 3 in synthetic mode"
+    assert (
+        summary_syn.total_slots == 40
+    ), f"Expected 40 slots, got {summary_syn.total_slots}"
+    assert (
+        summary_syn.successful_slots == 40
+    ), f"Expected 40 successful slots, got {summary_syn.successful_slots}"
+    assert (
+        summary_syn.failed_slots == 0
+    ), f"Expected 0 failed slots, got {summary_syn.failed_slots}"
+    assert (
+        summary_syn.total_records_collected > 0
+    ), "No records collected in synthetic mode"
+    assert (
+        summary_syn.batches_successful == summary_syn.total_batches_dispatched
+    ), "Not all batches succeeded"
+    assert (
+        summary_syn.backend_status == "success"
+    ), f"Backend status not success: {summary_syn.backend_status}"
+    assert (
+        summary_syn.tier_distribution.get("tier_3") == 40
+    ), "All 40 slots should be Tier 3 in synthetic mode"
 
     # Verify run summary artifact written
     assert os.path.exists(summary_file), f"Summary artifact missing at {summary_file}"
-    with open(summary_file, "r", encoding="utf-8") as f:
+    with open(summary_file, encoding="utf-8") as f:
         artifact_data = json.load(f)
     assert artifact_data["total_slots"] == 40
     assert artifact_data["successful_slots"] == 40
@@ -126,7 +146,9 @@ def run_pipeline_verification() -> None:
     # --------------------------------------------------------------------------
     # TEST 2: Orchestrator in Mock Mode (Tier 2 Amadeus API Adapter)
     # --------------------------------------------------------------------------
-    print("\n[STEP 2/3] Testing Ingestion Orchestrator in MOCK Mode (Tier 2 Amadeus)...")
+    print(
+        "\n[STEP 2/3] Testing Ingestion Orchestrator in MOCK Mode (Tier 2 Amadeus)..."
+    )
     config_mock = IngestionConfig(
         ingestion_mode="mock",
         batch_size=80,
@@ -144,7 +166,9 @@ def run_pipeline_verification() -> None:
     summary_mock = orchestrator_mock.run_all_slots(dry_run=False)
 
     print(f"  -> Total Slots Executed:     {summary_mock.total_slots} (Expected: 40)")
-    print(f"  -> Successful Slots:         {summary_mock.successful_slots} (Expected: 40)")
+    print(
+        f"  -> Successful Slots:         {summary_mock.successful_slots} (Expected: 40)"
+    )
     print(f"  -> Failed Slots:             {summary_mock.failed_slots} (Expected: 0)")
     print(f"  -> Total Records Collected:  {summary_mock.total_records_collected}")
     print(f"  -> Total Batches Dispatched: {summary_mock.total_batches_dispatched}")
@@ -152,21 +176,37 @@ def run_pipeline_verification() -> None:
     print(f"  -> Backend Status:           {summary_mock.backend_status}")
     print(f"  -> Tier Distribution:        {summary_mock.tier_distribution}")
 
-    assert summary_mock.total_slots == 40, f"Expected 40 slots, got {summary_mock.total_slots}"
-    assert summary_mock.successful_slots == 40, f"Expected 40 successful slots, got {summary_mock.successful_slots}"
-    assert summary_mock.failed_slots == 0, f"Expected 0 failed slots, got {summary_mock.failed_slots}"
-    assert summary_mock.total_records_collected == 320, f"Expected 320 records (8/slot), got {summary_mock.total_records_collected}"
-    assert summary_mock.batches_successful == summary_mock.total_batches_dispatched, "Not all batches succeeded"
-    assert summary_mock.backend_status == "success", f"Backend status not success: {summary_mock.backend_status}"
-    assert summary_mock.tier_distribution.get("tier_2") == 40, "All 40 slots should be Tier 2 in mock mode"
+    assert (
+        summary_mock.total_slots == 40
+    ), f"Expected 40 slots, got {summary_mock.total_slots}"
+    assert (
+        summary_mock.successful_slots == 40
+    ), f"Expected 40 successful slots, got {summary_mock.successful_slots}"
+    assert (
+        summary_mock.failed_slots == 0
+    ), f"Expected 0 failed slots, got {summary_mock.failed_slots}"
+    assert (
+        summary_mock.total_records_collected == 320
+    ), f"Expected 320 records (8/slot), got {summary_mock.total_records_collected}"
+    assert (
+        summary_mock.batches_successful == summary_mock.total_batches_dispatched
+    ), "Not all batches succeeded"
+    assert (
+        summary_mock.backend_status == "success"
+    ), f"Backend status not success: {summary_mock.backend_status}"
+    assert (
+        summary_mock.tier_distribution.get("tier_2") == 40
+    ), "All 40 slots should be Tier 2 in mock mode"
 
     print("  ✓ Mock Amadeus mode verification passed with 100% backend acceptance!")
 
     # --------------------------------------------------------------------------
     # TEST 3: Domain Invariant and Data Quality Validation
     # --------------------------------------------------------------------------
-    print("\n[STEP 3/3] Validating Domain Invariants & Schema Quality across all slots...")
-    with open(summary_file, "r", encoding="utf-8") as f:
+    print(
+        "\n[STEP 3/3] Validating Domain Invariants & Schema Quality across all slots..."
+    )
+    with open(summary_file, encoding="utf-8") as f:
         latest_summary = json.load(f)
 
     slots = latest_summary["slots"]
@@ -191,14 +231,20 @@ def run_pipeline_verification() -> None:
         assert rec_cnt > 0, f"Zero records collected for slot {route_str} {win}"
         assert tier in (1, 2, 3), f"Invalid tier: {tier}"
 
-    assert len(seen_routes) == 10, f"Expected 10 distinct routes, found {len(seen_routes)}"
-    assert len(seen_windows) == 4, f"Expected 4 distinct windows, found {len(seen_windows)}"
+    assert (
+        len(seen_routes) == 10
+    ), f"Expected 10 distinct routes, found {len(seen_routes)}"
+    assert (
+        len(seen_windows) == 4
+    ), f"Expected 4 distinct windows, found {len(seen_windows)}"
 
     print(f"  ✓ Validated all {len(seen_routes)} unique trunk routes:")
     for r in sorted(seen_routes):
         print(f"      - {r}")
     print(f"  ✓ Validated all 4 advance booking windows: {sorted(seen_windows)}")
-    print(f"  ✓ Verified summary artifact: {summary_file} ({os.path.getsize(summary_file)} bytes)")
+    print(
+        f"  ✓ Verified summary artifact: {summary_file} ({os.path.getsize(summary_file)} bytes)"
+    )
 
     print("\n" + "=" * 80)
     print("🏆 ALL 40 SLOTS VERIFIED: ZERO ERRORS, CLEAN BATCHES DISPATCHED")
@@ -215,5 +261,6 @@ if __name__ == "__main__":
     except Exception as exc:
         print(f"\n❌ UNEXPECTED ERROR: {exc}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         sys.exit(2)

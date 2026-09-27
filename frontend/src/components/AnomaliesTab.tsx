@@ -40,6 +40,38 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
     return Array.from(routeSet).sort();
   }, [anomalies]);
 
+  const availableTypes = useMemo(() => {
+    const typeSet = new Set<string>();
+    for (const a of anomalies) {
+      if (a.anomaly_type) typeSet.add(a.anomaly_type);
+    }
+    ['SURGE_PRICING', 'SURGE', 'DGCA_CAP_EXCEEDED', 'PRICE_CRASH', 'FLASH_SALE'].forEach((t) => typeSet.add(t));
+    return Array.from(typeSet);
+  }, [anomalies]);
+
+  const formatAnomalyType = (type: string) => {
+    switch (type) {
+      case 'SURGE_PRICING':
+        return 'Surge Pricing';
+      case 'SURGE':
+        return 'Surge Alert';
+      case 'DGCA_CAP_EXCEEDED':
+        return 'DGCA Cap Exceeded';
+      case 'PRICE_CRASH':
+        return 'Price Crash';
+      case 'FLASH_SALE':
+        return 'Flash Sale';
+      case 'PRICE_GOUGING':
+        return 'Price Gouging';
+      case 'DISPERSION_SPIKE':
+        return 'Dispersion Spike';
+      case 'FLASH_DROP':
+        return 'Flash Drop';
+      default:
+        return type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+  };
+
   // Filter alerts by route, severity, type, and search query
   const filteredAlerts = useMemo(() => {
     return anomalies.filter((a) => {
@@ -54,7 +86,7 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
         if (selectedSeverity === 'CRITICAL' && (z < 3.0 && a.severity !== 'CRITICAL')) {
           return false;
         }
-        if (selectedSeverity === 'WARNING' && ((z < 2.0 || z >= 3.0) && a.severity !== 'HIGH')) {
+        if (selectedSeverity === 'WARNING' && ((z < 2.0 || z >= 3.0) && a.severity !== 'HIGH' && a.severity !== 'WARNING')) {
           return false;
         }
         if (selectedSeverity === 'MODERATE' && (z >= 2.0 && a.severity !== 'MEDIUM' && a.severity !== 'LOW')) {
@@ -63,17 +95,21 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
       }
 
       // Filter by Anomaly Type
-      if (selectedType !== 'ALL' && a.anomaly_type !== selectedType) {
-        return false;
+      if (selectedType !== 'ALL') {
+        const typeMatches =
+          a.anomaly_type === selectedType ||
+          (selectedType === 'SURGE' && a.anomaly_type === 'SURGE_PRICING') ||
+          (selectedType === 'SURGE_PRICING' && a.anomaly_type === 'SURGE');
+        if (!typeMatches) return false;
       }
 
       // Search Query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
-        const matchesFlight = a.flight_number?.toLowerCase().includes(query) ?? false;
-        const matchesAirline = a.airline_code.toLowerCase().includes(query);
-        const matchesRoute = a.route_code.toLowerCase().includes(query);
-        const matchesDesc = a.description?.toLowerCase().includes(query) ?? false;
+        const matchesFlight = (a.flight_number || '').toLowerCase().includes(query);
+        const matchesAirline = (a.airline_code || '').toLowerCase().includes(query);
+        const matchesRoute = (a.route_code || '').toLowerCase().includes(query);
+        const matchesDesc = (a.description || '').toLowerCase().includes(query);
         if (!matchesFlight && !matchesAirline && !matchesRoute && !matchesDesc) {
           return false;
         }
@@ -94,18 +130,26 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
   const warningCount = useMemo(() => {
     return anomalies.filter((a) => {
       const z = a.z_score ?? (a.deviation_percent / 25);
-      return (z >= 2.0 && z < 3.0) || a.severity === 'HIGH';
+      return a.severity === 'WARNING' || a.severity === 'HIGH' || (z >= 2.0 && z < 3.0 && a.severity !== 'CRITICAL');
     }).length;
   }, [anomalies]);
 
-  const maxZScore = useMemo(() => {
+  const peakAnomaly = useMemo(() => {
+    let peak: AnomalyAlertItem | null = null;
     let max = 0;
     for (const a of anomalies) {
       const z = a.z_score ?? (a.deviation_percent / 25);
-      if (z > max) max = z;
+      if (z > max) {
+        max = z;
+        peak = a;
+      }
     }
-    return max;
+    return { zScore: max, peak };
   }, [anomalies]);
+  const maxZScore = peakAnomaly.zScore;
+  const peakRouteLabel = peakAnomaly.peak
+    ? [peakAnomaly.peak.route_code, peakAnomaly.peak.booking_window].filter(Boolean).join(' ') || 'Live feed'
+    : 'No live alerts';
 
   const toggleAcknowledge = (id: string) => {
     setAcknowledgedMap((prev) => ({
@@ -181,7 +225,7 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
             <span className="text-3xl font-extrabold text-rose-400">
               +{maxZScore.toFixed(2)}σ
             </span>
-            <span className="text-xs text-slate-400 font-sans">BOM-GOI T+3</span>
+            <span className="text-xs text-slate-400 font-sans">{peakRouteLabel}</span>
           </div>
           <div className="mt-3 text-xs text-slate-400 flex items-center justify-between border-t border-slate-800/80 pt-2 font-sans">
             <span>Surge Threshold:</span>
@@ -261,13 +305,14 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
                 className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
               >
                 <option value="ALL">All Types</option>
-                <option value="SURGE_SPIKE">Surge Spike</option>
-                <option value="PRICE_GOUGING">Price Gouging</option>
-                <option value="DISPERSION_SPIKE">Dispersion Spike</option>
-                <option value="FLASH_DROP">Flash Drop</option>
+                {availableTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {formatAnomalyType(type)}
+                  </option>
+                ))}
               </select>
             </div>
-            <div className="flex items-center rounded-lg bg-slate-950 border border-slate-800 p-0.5 text-xs font-mono">
+            <div className="flex flex-wrap items-center rounded-lg bg-slate-950 border border-slate-800 p-0.5 text-xs font-mono">
               <button
                 onClick={() => setSelectedSeverity('ALL')}
                 className={`px-2.5 py-1 rounded-md transition-all ${
@@ -387,35 +432,43 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {dgcaValidation.violations.map((v) => {
-                const isBreach = v.compliance_status === 'BREACH';
+              {dgcaValidation.data_available === false || dgcaValidation.evaluation_status === 'not_evaluated' ? (
+                <tr>
+                  <td colSpan={6} className="py-6 px-3 text-center text-slate-400 font-sans">
+                    Not evaluated. No DGCA violation rows are stored.
+                  </td>
+                </tr>
+              ) : dgcaValidation.violations.map((v) => {
+                const isBreach = v.compliance_status === 'BREACH' || v.compliance_status === 'BREACH_DETECTED';
                 const isWarning = v.compliance_status === 'WARNING';
-                const utilization = (((v.observed_max_fare_inr ?? 0) / (v.statutory_band_cap_inr ?? 1))) * 100;
+                const utilization = v.statutory_band_cap_inr > 0
+                  ? (v.observed_max_fare_inr / v.statutory_band_cap_inr) * 100
+                  : null;
 
                 return (
                   <tr key={v.route_code} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 px-3 font-sans font-bold text-white">{v.route_code}</td>
                     <td className="py-3 px-3 text-slate-300">
-                      ₹{(v.statutory_band_cap_inr ?? v.band_cap ?? v.cap ?? 0).toLocaleString('en-IN')}
+                      ₹{v.statutory_band_cap_inr.toLocaleString('en-IN')}
                     </td>
                     <td
                       className={`py-3 px-3 font-bold ${
                         isBreach ? 'text-rose-400' : isWarning ? 'text-amber-400' : 'text-slate-200'
                       }`}
                     >
-                      ₹{(v.observed_max_fare_inr ?? v.observed_fare ?? v.max_fare ?? 0).toLocaleString('en-IN')}
+                      ₹{v.observed_max_fare_inr.toLocaleString('en-IN')}
                     </td>
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-2">
                         <span className={`w-12 font-bold ${isBreach ? 'text-rose-400' : 'text-slate-300'}`}>
-                          {utilization.toFixed(1)}%
+                          {utilization == null ? '—' : `${utilization.toFixed(1)}%`}
                         </span>
                         <div className="w-20 bg-slate-800 rounded-full h-1.5 overflow-hidden">
                           <div
                             className={`h-1.5 rounded-full ${
                               isBreach ? 'bg-rose-500' : isWarning ? 'bg-amber-400' : 'bg-emerald-400'
                             }`}
-                            style={{ width: `${Math.min(100, utilization)}%` }}
+                            style={{ width: `${utilization == null ? 0 : Math.min(100, utilization)}%` }}
                           ></div>
                         </div>
                       </div>
@@ -464,9 +517,9 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
             const hasEnquiry = enquiryNotices[alert.id] ?? false;
             const zScore = alert.z_score ?? Number((alert.deviation_percent / 25).toFixed(2));
             const isCriticalZ = zScore >= 3.0 || alert.severity === 'CRITICAL';
-            const isWarningZ = (zScore >= 2.0 && zScore < 3.0) || alert.severity === 'HIGH';
-            const baseline = alert.baseline_fare_inr ?? alert.expected_fare_inr ?? 0;
-            const variance = (alert.observed_fare_inr ?? 0) - baseline;
+            const isWarningZ = alert.severity === 'WARNING' || alert.severity === 'HIGH' || (zScore >= 2.0 && zScore < 3.0);
+            const baseline = alert.baseline_fare_inr || alert.expected_fare_inr;
+            const variance = alert.observed_fare_inr - baseline;
 
             return (
               <div
@@ -541,21 +594,21 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
                         <div>
                           <span className="text-[10px] text-slate-500 block">Baseline Expected</span>
                           <span className="font-bold text-slate-300 text-sm">
-                            ₹{(baseline ?? 0).toLocaleString('en-IN')}
+                            ₹{baseline.toLocaleString('en-IN')}
                           </span>
                         </div>
 
                         <div>
                           <span className="text-[10px] text-slate-500 block">Observed Surge</span>
                           <span className="font-bold text-rose-400 text-sm">
-                            ₹{(alert.observed_fare_inr ?? alert.fare_inr ?? alert.observed_fare ?? alert.fare ?? 0).toLocaleString('en-IN')}
+                            ₹{alert.observed_fare_inr.toLocaleString('en-IN')}
                           </span>
                         </div>
 
                         <div>
                           <span className="text-[10px] text-slate-500 block">Spread Above Base</span>
                           <span className="font-bold text-rose-400 text-sm">
-                            {variance >= 0 ? `+₹${(variance ?? 0).toLocaleString('en-IN')}` : `-₹${Math.abs(variance ?? 0).toLocaleString('en-IN')}`}
+                            {variance >= 0 ? `+₹${variance.toLocaleString('en-IN')}` : `-₹${Math.abs(variance).toLocaleString('en-IN')}`}
                           </span>
                         </div>
 
@@ -573,13 +626,13 @@ export const AnomaliesTab: React.FC<AnomaliesTabProps> = ({ anomalies, dgcaValid
                         <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden flex">
                           <div
                             className="bg-sky-500 h-2"
-                            style={{ width: `${Math.min(100, (baseline / (alert.observed_fare_inr ?? alert.fare_inr ?? 1)) * 100)}%` }}
-                            title={`Baseline Fare: ₹${(baseline ?? 0).toLocaleString()}`}
+                            style={{ width: `${Math.min(100, (baseline / alert.observed_fare_inr) * 100)}%` }}
+                            title={`Baseline Fare: ₹${baseline.toLocaleString()}`}
                           ></div>
                           <div
                             className="bg-rose-500 h-2"
-                            style={{ width: `${Math.max(0, 100 - (baseline / (alert.observed_fare_inr ?? alert.fare_inr ?? 1)) * 100)}%` }}
-                            title={`Surge Markup: +₹${(variance ?? 0).toLocaleString()}`}
+                            style={{ width: `${Math.max(0, 100 - (baseline / alert.observed_fare_inr) * 100)}%` }}
+                            title={`Surge Markup: +₹${variance.toLocaleString()}`}
                           ></div>
                         </div>
                         <div className="flex justify-between text-[10px] text-slate-500 mt-1">

@@ -3,7 +3,8 @@ import {
   ActiveTab,
   DashboardSummaryData,
 } from './types/api';
-import apiClient from './services/apiClient';
+import apiClient, { ApiError } from './services/apiClient';
+import { ApiErrorBoundary } from './components/ApiErrorBoundary';
 import { OverviewTab } from './components/OverviewTab';
 import { RoutesTab } from './components/RoutesTab';
 import { ElasticityTab } from './components/ElasticityTab';
@@ -20,33 +21,46 @@ import {
   Clock,
   ShieldCheck,
   ShieldAlert,
-  Database,
   Server,
   Scale,
   TrendingUp,
 } from 'lucide-react';
+type DashboardState = {kind:"loading"} | {kind:"live"; data:DashboardSummaryData; fetchedAt:Date} | {kind:"error"; error:ApiError; retry:()=>void};
+
+function describeApiError(error: ApiError): string {
+  switch (error.kind) {
+    case "http":
+      return `Live API request failed (HTTP ${error.status}) at ${error.endpoint}.`;
+    case "network":
+      return `Network error reaching ${error.endpoint}. Check backend connectivity.`;
+    case "timeout":
+      return `Live API request timed out at ${error.endpoint}.`;
+    case "parse":
+      return `Invalid response from ${error.endpoint}.`;
+  }
+}
+
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
-  const [loading, setLoading] = useState<boolean>(true);
+  const [state, setState] = useState<DashboardState>({kind:"loading"});
   const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [data, setData] = useState<DashboardSummaryData | null>(null);
-  const [isUsingMock, setIsUsingMock] = useState<boolean>(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
   const loadData = useCallback(async (isManualRefresh: boolean = false) => {
     if (isManualRefresh) {
       setRefreshing(true);
     } else {
-      setLoading(true);
+      setState({kind:"loading"});
     }
 
     try {
       const summary = await apiClient.getDashboardSummary();
-      setData(summary);
-      setIsUsingMock(apiClient.isUsingMock());
+      setState({kind:"live", data: summary, fetchedAt: new Date()});
       setLastRefreshed(new Date());
+    } catch (err) {
+      const error = err as ApiError;
+      setState({kind:"error", error, retry: () => { void loadData(true); }});
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   }, []);
@@ -54,172 +68,148 @@ export const App: React.FC = () => {
   useEffect(() => {
     loadData();
 
-    const unsubscribe = apiClient.subscribeSourceChange((usingMock) => {
-      setIsUsingMock(usingMock);
-    });
-
     // Background refresh every 60 seconds
     const interval = setInterval(() => {
       loadData(false);
     }, 60000);
 
     return () => {
-      unsubscribe();
       clearInterval(interval);
     };
   }, [loadData]);
 
-  const toggleMockMode = () => {
-    const nextMock = !isUsingMock;
-    apiClient.setPreferMock(nextMock);
-    setIsUsingMock(nextMock);
-    loadData(true);
-  };
-
-  const criticalAlertsCount = data?.anomalies.filter((a) => a.severity === 'CRITICAL').length || 0;
-  const dgcaViolationsCount = data?.dgcaSurveillance?.total_violations || 0;
-  const arbitrageSpreadsCount = data?.arbitrage?.opportunities_count || 0;
+  const liveData = state.kind === "live" ? state.data : null;
+  const healthStatus = liveData?.systemHealth.status ?? null;
+  const statusLabel = state.kind === "loading" ? "LOADING" : state.kind === "error" ? "UNREACHABLE" : healthStatus;
+  const statusDot =
+    state.kind === "error" ? "bg-red-400" : healthStatus === "DEGRADED" ? "bg-amber-400" : liveData ? "bg-emerald-400" : "bg-neutral-500";
+  const sourceLabel = state.kind === "error" ? "No live data" : state.kind === "loading" ? "Connecting" : "Live API";
+  const criticalAlertsCount = liveData?.anomalies.filter((a) => a.severity === 'CRITICAL').length || 0;
+  const dgcaViolationsCount = liveData?.dgcaSurveillance?.total_violations || 0;
+  const arbitrageSpreadsCount = liveData?.arbitrage?.opportunities_count || 0;
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      {/* Top Header */}
-      <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80">
+    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans selection:bg-neutral-800 selection:text-white">
+      {/* Vercel Restrained Masthead */}
+      <header className="sticky top-0 z-50 bg-neutral-950/95 backdrop-blur-md border-b border-neutral-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 gap-4">
-            {/* Logo and Titles */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
-                <Plane className="w-5 h-5 text-white" />
+          <div className="flex items-center justify-between h-14 gap-4">
+            {/* Sharp Monochrome Wordmark & Subtitle */}
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className="text-base font-bold tracking-tight text-white font-mono">
+                  API<span className="text-neutral-400">x</span>
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-neutral-900 text-neutral-400 border border-neutral-800">
+                  PS 26056
+                </span>
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xl font-extrabold tracking-tight text-white font-mono">
-                    API<span className="text-sky-400">x</span>
-                  </span>
-                  <span className="hidden sm:inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                    PS 26056 • SIH 2026
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400 font-medium hidden sm:block">
-                  Real-time Airfare Price Index for India • MoSPI CPI Augmentation & DGCA Oversight
-                </p>
-              </div>
+              <div className="hidden md:block h-3.5 w-px bg-neutral-800 flex-shrink-0" />
+              <p className="text-xs text-neutral-400 truncate hidden md:block">
+                Real-time Airfare Price Index for India
+                <span className="text-neutral-600 mx-1.5">•</span>
+                <span className="text-neutral-500">MoSPI CPI Augmentation &amp; DGCA Oversight</span>
+              </p>
             </div>
 
-            {/* Live Pipeline Telemetry & Controls */}
-            <div className="flex items-center gap-3">
-              {/* Ingestion Run Status Indicator */}
+            {/* Live Pipeline Telemetry & Quiet Controls */}
+            <div className="flex items-center gap-2.5 flex-shrink-0">
+              {/* Ingestion Run Status - Quiet Evidence */}
               <div
-                className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs shadow-inner"
+                className="hidden lg:flex items-center gap-2.5 px-2.5 py-1 rounded-md bg-neutral-900/60 border border-neutral-800 text-xs font-mono text-neutral-400"
                 title="Ingestion Pipeline Run Status • Continuous Scraper Feeds"
               >
-                {/* Health Pill */}
-                <div
-                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-mono font-bold border shadow-sm ${
-                    data?.systemHealth.status === 'HEALTHY'
-                      ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800/80'
-                      : data?.systemHealth.status === 'DEGRADED'
-                      ? 'bg-amber-950/80 text-amber-400 border-amber-800/80'
-                      : 'bg-sky-950/80 text-sky-400 border-sky-800/80'
-                  }`}
-                >
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                <div className="flex items-center gap-1.5 text-neutral-300">
+                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${statusDot}`} />
+                  <span className="text-[11px] font-medium tracking-wide">
+                    {statusLabel}
                   </span>
-                  <span>{data?.systemHealth.status || 'HEALTHY'}</span>
                 </div>
 
-                {/* Active Scrapers Count */}
-                <div className="flex items-center gap-1 text-slate-300 font-medium">
-                  <Server className="w-3.5 h-3.5 text-sky-400" />
-                  <span className="font-mono text-sky-400 font-semibold">
-                    {data?.systemHealth.active_scrapers ?? 8}
+                <span className="text-neutral-700">/</span>
+
+                <div className="flex items-center gap-1 text-[11px] text-neutral-400">
+                  <span className="text-neutral-500">Scrapers:</span>
+                  <span className="font-mono text-neutral-200 tabular-nums">
+                      {liveData ? liveData.systemHealth.active_scrapers : "—"}
                   </span>
-                  <span className="text-slate-400 hidden sm:inline">Active Scrapers</span>
                 </div>
 
-                <span className="text-slate-700 hidden md:inline">|</span>
+                <span className="text-neutral-700">/</span>
 
-                {/* Last Scrape Timestamp */}
-                <div className="flex items-center gap-1 text-slate-400 font-mono text-[11px]">
-                  <Clock className="w-3 h-3 text-slate-400" />
-                  <span className="text-slate-500 hidden md:inline">Last Scrape:</span>
-                  <span className="text-slate-200 font-semibold">
-                    {data?.systemHealth.last_sync_timestamp
-                      ? new Date(data.systemHealth.last_sync_timestamp).toLocaleTimeString([], {
+                <div className="flex items-center gap-1 text-[11px] text-neutral-500">
+                  <span>Sync:</span>
+                  <span className="text-neutral-300 tabular-nums">
+                    {liveData?.systemHealth.last_sync_timestamp
+                      ? new Date(liveData.systemHealth.last_sync_timestamp).toLocaleTimeString([], {
                           hour: '2-digit',
                           minute: '2-digit',
                           second: '2-digit',
                         })
-                      : 'Just now'}
+                      : "—"}
                   </span>
                 </div>
               </div>
-              {/* Data Source Badge with Toggle */}
-              <button
-                onClick={toggleMockMode}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono font-medium border transition-all ${
-                  isUsingMock
-                    ? 'bg-amber-950/40 text-amber-300 border-amber-800 hover:bg-amber-900/40'
-                    : 'bg-emerald-950/40 text-emerald-300 border-emerald-800 hover:bg-emerald-900/40'
-                }`}
-                title="Click to toggle between Mock Fallback and Live Backend API"
+
+              {/* Live Source Indicator */}
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono border border-neutral-800 bg-neutral-900/60 text-neutral-300"
+                title={state.kind === "error" ? "Backend API unreachable" : "Live Backend API"}
               >
-                <Database className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Source:</span>
-                <span>{isUsingMock ? 'Mock Fallback' : 'Live API'}</span>
-              </button>
+                <span className={`h-1.5 w-1.5 rounded-full ${statusDot}`} />
+                <span className="text-neutral-500 hidden sm:inline">Source:</span>
+                <span className="font-medium">{sourceLabel}</span>
+              </div>
 
               {/* Refresh Button */}
               <button
                 onClick={() => loadData(true)}
                 disabled={refreshing}
-                className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-colors disabled:opacity-50"
+                className="p-1.5 rounded-md bg-neutral-900/60 border border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-950 disabled:opacity-50"
                 title={`Last updated: ${lastRefreshed.toLocaleTimeString()}`}
               >
-                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-sky-400' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'motion-safe:animate-spin text-neutral-200' : ''}`} />
               </button>
             </div>
           </div>
 
-          {/* Navigation Tabs */}
-          <div className="flex space-x-1 border-t border-slate-800/80 overflow-x-auto py-1">
+          {/* Crisp Segmented Tab Controls */}
+          <div className="flex items-center space-x-1 border-t border-neutral-800 py-1.5 overflow-x-auto scrollbar-none">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'overview'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  ? 'bg-neutral-800 text-white'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
               }`}
             >
-              <Activity className="w-3.5 h-3.5 text-sky-400" />
+              <Activity className="w-3.5 h-3.5" />
               <span>National Overview</span>
             </button>
 
             <button
               onClick={() => setActiveTab('econometrics')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'econometrics'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  ? 'bg-neutral-800 text-white'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
               }`}
             >
-              <TrendingUp className="w-3.5 h-3.5 text-sky-400" />
+              <TrendingUp className="w-3.5 h-3.5" />
               <span>Econometrics &amp; CPI Gap</span>
             </button>
 
             <button
               onClick={() => setActiveTab('dgca')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all relative ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'dgca'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  ? 'bg-neutral-800 text-white'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
               }`}
             >
-              <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+              <ShieldAlert className="w-3.5 h-3.5" />
               <span>DGCA Surveillance</span>
               {dgcaViolationsCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-rose-600 text-white">
+                <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-mono tabular-nums font-semibold bg-rose-950/80 text-rose-300 border border-rose-800/80">
                   {dgcaViolationsCount}
                 </span>
               )}
@@ -227,40 +217,40 @@ export const App: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('routes')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'routes'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  ? 'bg-neutral-800 text-white'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
               }`}
             >
-              <Plane className="w-3.5 h-3.5 text-sky-400" />
+              <Plane className="w-3.5 h-3.5" />
               <span>Trunk Routes (10)</span>
             </button>
 
             <button
               onClick={() => setActiveTab('elasticity')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'elasticity'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  ? 'bg-neutral-800 text-white'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
               }`}
             >
-              <Clock className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Booking Elasticity (T-Days)</span>
+              <Clock className="w-3.5 h-3.5" />
+              <span>Booking Elasticity</span>
             </button>
 
             <button
               onClick={() => setActiveTab('anomalies')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all relative ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'anomalies'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  ? 'bg-neutral-800 text-white'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
               }`}
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+              <ShieldCheck className="w-3.5 h-3.5" />
               <span>Anomaly Detector</span>
               {criticalAlertsCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-600 text-white">
+                <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-mono tabular-nums font-semibold bg-amber-950/80 text-amber-300 border border-amber-800/80">
                   {criticalAlertsCount}
                 </span>
               )}
@@ -268,31 +258,31 @@ export const App: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('telemetry')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'telemetry'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  ? 'bg-neutral-800 text-white'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
               }`}
             >
-              <Server className="w-3.5 h-3.5 text-emerald-400" />
+              <Server className="w-3.5 h-3.5" />
               <span>Crawler Telemetry</span>
-              {data?.telemetry && (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              {liveData?.telemetry && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-0.5"></span>
               )}
             </button>
 
             <button
               onClick={() => setActiveTab('arbitrage')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-all relative ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-1 focus-visible:ring-offset-neutral-950 ${
                 activeTab === 'arbitrage'
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                  ? 'bg-neutral-800 text-white'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900/60'
               }`}
             >
-              <Scale className="w-3.5 h-3.5 text-indigo-400" />
+              <Scale className="w-3.5 h-3.5" />
               <span>Fare Arbitrage</span>
               {arbitrageSpreadsCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-indigo-600 text-white">
+                <span className="ml-1 px-1.5 py-0.2 rounded text-[10px] font-mono tabular-nums font-semibold bg-neutral-800 text-neutral-300 border border-neutral-700">
                   {arbitrageSpreadsCount}
                 </span>
               )}
@@ -303,19 +293,20 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {loading ? (
+        <ApiErrorBoundary onRetry={() => loadData(true)}>
+        {state.kind === "loading" ? (
           <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
-            <RefreshCw className="w-8 h-8 text-sky-500 animate-spin" />
-            <p className="text-xs text-slate-400 font-mono">
+            <RefreshCw className="w-6 h-6 text-neutral-400 motion-safe:animate-spin" />
+            <p className="text-xs text-neutral-500 font-mono">
               Aggregating live flight fares & calculating weighted median indices...
             </p>
           </div>
-        ) : !data ? (
-          <div className="text-center py-16 bg-slate-900/40 rounded-xl border border-slate-800">
-            <p className="text-sm text-slate-300">Unable to load dashboard summary.</p>
+        ) : state.kind === "error" ? (
+          <div className="text-center py-16 bg-neutral-950 rounded-lg border border-neutral-800">
+            <p className="text-sm text-neutral-300">{describeApiError(state.error)}</p>
             <button
-              onClick={() => loadData(true)}
-              className="mt-4 px-4 py-2 bg-sky-600 text-white text-xs font-medium rounded-lg"
+              onClick={state.retry}
+              className="mt-4 px-3.5 py-1.5 bg-neutral-100 hover:bg-white text-neutral-950 text-xs font-medium rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-950"
             >
               Retry Connection
             </button>
@@ -332,79 +323,80 @@ export const App: React.FC = () => {
             {/* Active Tab Views */}
             {activeTab === 'overview' && (
               <OverviewTab
-                latest={data.nationalLatest}
-                history={data.nationalHistory}
-                routes={data.routes}
-                anomalies={data.anomalies}
+                latest={state.data.nationalLatest}
+                history={state.data.nationalHistory}
+                routes={state.data.routes}
+                anomalies={state.data.anomalies}
                 onSelectTab={setActiveTab}
               />
             )}
             {activeTab === 'econometrics' && (
               <EconometricsTab
-                indices={data.econometricIndices}
-                cpiDivergence={data.cpiDivergence}
-                priceElasticity={data.priceElasticity}
+                indices={state.data.econometricIndices}
+                cpiDivergence={state.data.cpiDivergence}
+                priceElasticity={state.data.priceElasticity}
               />
             )}
 
             {activeTab === 'dgca' && (
               <DgcaSurveillanceTab
-                surveillance={data.dgcaSurveillance}
+                surveillance={state.data.dgcaSurveillance}
               />
             )}
 
 
             {activeTab === 'routes' && (
               <RoutesTab
-                routes={data.routes}
-                nationalIndex={data.nationalLatest.index_value}
-                anomalies={data.anomalies}
+                routes={state.data.routes}
+                nationalIndex={state.data.nationalLatest.index_value}
+                anomalies={state.data.anomalies}
               />
             )}
 
             {activeTab === 'elasticity' && (
               <ElasticityTab
-                leadTimeCurve={data.leadTimeCurve}
-                heatmap={data.heatmap}
+                leadTimeCurve={state.data.leadTimeCurve}
+                heatmap={state.data.heatmap}
               />
             )}
 
             {activeTab === 'anomalies' && (
               <AnomaliesTab
-                anomalies={data.anomalies}
-                dgcaValidation={data.dgcaValidation}
+                anomalies={state.data.anomalies}
+                dgcaValidation={state.data.dgcaValidation}
               />
             )}
 
             {activeTab === 'telemetry' && (
               <TelemetryTab
-                telemetry={data.telemetry}
+                telemetry={state.data.telemetry}
                 onRefresh={() => loadData(true)}
               />
             )}
 
             {activeTab === 'arbitrage' && (
               <ArbitrageTab
-                arbitrage={data.arbitrage}
+                arbitrage={state.data.arbitrage}
                 onRefresh={() => loadData(true)}
               />
             )}
           </div>
         )}
+        </ApiErrorBoundary>
       </main>
 
-      {/* Footer */}
-      <footer className="bg-slate-950 border-t border-slate-800/80 py-6 text-xs text-slate-500">
+      {/* Footer - Restrained Vercel Editorial Style */}
+      <footer className="bg-neutral-950 border-t border-neutral-800 py-6 text-xs text-neutral-500 font-mono">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-400">Team Woven tech</span>
-            <span>•</span>
+            <span className="font-semibold text-neutral-300">Team Woven tech</span>
+            <span className="text-neutral-700">•</span>
             <span>Smart India Hackathon 2026 (PS 26056)</span>
-            <span>•</span>
-            <span className="font-mono text-sky-400">APIx Engine v0.1.0-cycle1</span>
+            <span className="text-neutral-700">•</span>
+            <span className="text-neutral-400">APIx Engine v0.1.0</span>
           </div>
 
-          <div className="flex items-center gap-4 text-[11px] font-mono">
+          <div className="flex items-center gap-4 text-[11px] text-neutral-500">
             <span>Sources: IndiGo • Air India • SpiceJet • Akasa Air • MMT • EaseMyTrip</span>
           </div>
         </div>

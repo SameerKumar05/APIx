@@ -11,11 +11,10 @@ executes seed data routines, and asserts invariants:
 from __future__ import annotations
 
 import math
-import sys
-from datetime import date, datetime, timezone
-from pathlib import Path
-
 import os
+import sys
+from datetime import UTC, date, datetime, timezone
+from pathlib import Path
 
 # Ensure backend package is in python path
 repo_root = Path(__file__).resolve().parent.parent
@@ -97,7 +96,9 @@ def run_tests() -> bool:
         # 3. Seed Reference Data
         print("\n[3/6] Running seed routines (routes & airlines)...")
         seed_result = seed_all(session)
-        print(f"  -> Seeded {seed_result['routes']} routes and {seed_result['airlines']} airlines.")
+        print(
+            f"  -> Seeded {seed_result['routes']} routes and {seed_result['airlines']} airlines."
+        )
 
         # 4. Verify Route Counts and DGCA Weights
         print("\n[4/6] Verifying Route table invariants...")
@@ -118,7 +119,9 @@ def run_tests() -> bool:
             ("HYD", "DEL"),
         }
         actual_pairs = {(r.origin, r.destination) for r in routes}
-        assert actual_pairs == expected_pairs, f"Route pairs mismatch: {actual_pairs ^ expected_pairs}"
+        assert (
+            actual_pairs == expected_pairs
+        ), f"Route pairs mismatch: {actual_pairs ^ expected_pairs}"
 
         total_weight = sum(r.weight for r in routes)
         total_pax = sum(r.dgca_monthly_pax for r in routes)
@@ -141,13 +144,15 @@ def run_tests() -> bool:
             code = expected["code"]
             assert code in airline_dict, f"Missing airline {code}"
             assert airline_dict[code].market_share_pct == expected["market_share_pct"]
-            print(f"     - {code}: {airline_dict[code].name} ({airline_dict[code].market_share_pct}%)")
+            print(
+                f"     - {code}: {airline_dict[code].name} ({airline_dict[code].market_share_pct}%)"
+            )
 
         # 5. Verify Operational Models (RawFare, Index, Anomaly, ScrapingRun)
         print("\n[6/6] Verifying operational models CRUD and constraints...")
 
         # Test RawFare
-        now_utc = datetime.now(timezone.utc)
+        now_utc = datetime.now(UTC)
         test_fare = RawFare(
             batch_id="batch-test-001",
             origin="DEL",
@@ -193,7 +198,9 @@ def run_tests() -> bool:
             return False
         except IntegrityError:
             session.rollback()
-            print("  -> RawFare unique hash_id constraint verified (duplicate rejected).")
+            print(
+                "  -> RawFare unique hash_id constraint verified (duplicate rejected)."
+            )
 
         # Test RouteDailyIndex
         route_del_bom = routes[0]
@@ -273,10 +280,14 @@ def run_tests() -> bool:
         assert session.execute(select(func.count(NationalDailyIndex.id))).scalar() == 1
         assert session.execute(select(func.count(AnomalyAlert.id))).scalar() == 1
         assert session.execute(select(func.count(ScrapingRun.id))).scalar() == 1
-        print("  -> RouteDailyIndex, NationalDailyIndex, AnomalyAlert, and ScrapingRun models verified.")
+        print(
+            "  -> RouteDailyIndex, NationalDailyIndex, AnomalyAlert, and ScrapingRun models verified."
+        )
 
     print("\n" + "=" * 70)
-    print("ALL VERIFICATION CHECKS PASSED SUCCESSFULLY (10 routes, 5 airlines, sum=1.000)")
+    print(
+        "ALL VERIFICATION CHECKS PASSED SUCCESSFULLY (10 routes, 5 airlines, sum=1.000)"
+    )
     print("=" * 70)
     return True
 

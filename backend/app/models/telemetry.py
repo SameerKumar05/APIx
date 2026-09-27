@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import DateTime, Float, Index, Integer, String, Text
@@ -80,7 +80,7 @@ class ScraperTelemetry(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         index=True,
         doc="UTC timestamp when telemetry was captured",
     )
@@ -167,7 +167,7 @@ class ProxyHealthRecord(Base):
     last_checked_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         index=True,
         doc="UTC timestamp of the most recent health check probe",
     )
@@ -179,7 +179,7 @@ class ProxyHealthRecord(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         index=True,
         doc="UTC timestamp when record was created",
     )
@@ -194,7 +194,9 @@ class ProxyHealthRecord(Base):
             "success_count": self.success_count,
             "failure_count": self.failure_count,
             "consecutive_failures": self.consecutive_failures,
-            "last_checked_at": self.last_checked_at.isoformat() if self.last_checked_at else None,
+            "last_checked_at": (
+                self.last_checked_at.isoformat() if self.last_checked_at else None
+            ),
             "error_message": self.error_message,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

@@ -9,26 +9,39 @@ from __future__ import annotations
 import abc
 import hashlib
 import logging
+import os
 import random
 import re
 import time
+from collections.abc import Callable, Set
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, TypeVar, Union
+from datetime import date, datetime
+from typing import TYPE_CHECKING, Any, TypeVar
 
+from backend.app.core.cleaning import sourced_duration_minutes
+from backend.app.core.fare_components import (
+    canonical_booking_class,
+    canonical_flight_status,
+    classify_fare_split,
+)
 from ingestion.config import (
-    AIRLINE_MAP,
-    BOOKING_WINDOW_MAP,
     BookingWindow,
-    DEFAULT_ROUTES,
     IngestionConfig,
     Route,
-    VALID_AIRLINE_CODES,
-    VALID_IATA_CODES,
 )
+
+if TYPE_CHECKING:
+    from ingestion.robots import RobotsPolicy
 
 logger = logging.getLogger("ingestion.base")
 T = TypeVar("T")
+
+SYSTEM_CHROMIUM_CANDIDATES: tuple[str, ...] = (
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+)
 
 
 @dataclass
@@ -46,14 +59,19 @@ class RawFareRecord:
     cabin_class: str = "economy"
     stops: int = 0
     source: str = "synthetic"  # "synthetic", "easemytrip", "makemytrip", etc.
-    booking_window: Optional[str] = None  # "T+1", "T+7", "T+15", "T+30"
-    flight_date: Optional[str] = None  # YYYY-MM-DD
-    duration_minutes: Optional[int] = None
-    base_fare: Optional[float] = None
-    taxes_and_fees: Optional[float] = None
-    total_fare: Optional[float] = None
+    booking_window: str | None = None  # "T+1", "T+7", "T+15", "T+30"
+    flight_date: str | None = None  # YYYY-MM-DD
+    duration_minutes: int | None = None
+    base_fare: float | None = None
+    taxes_and_fees: float | None = None
+    total_fare: float | None = None
     is_synthetic: bool = False
-    source_platform: Optional[str] = None
+    source_platform: str | None = None
+    booking_class: str | None = None  # RBD / fare basis (Y, B, M). Not cabin.
+    udf_fee: float | None = None  # INR. NULL unless the source supplied it.
+    convenience_fee: float | None = None  # INR. NULL unless the source supplied it.
+    flight_status: str | None = None  # scheduled / cancelled / sold_out, or None.
+    fare_split_basis: str | None = None  # measured / residual / estimated.
 
     def __post_init__(self) -> None:
         # Align secondary / compatibility fields
@@ -63,10 +81,24 @@ class RawFareRecord:
             self.total_fare = self.fare_inr
         if self.source_platform is None:
             self.source_platform = self.source
-        if self.base_fare is None:
-            # DGCA standard breakdown: approx 78% base fare, 22% taxes/UDF/PSF
-            self.base_fare = round(self.fare_inr * 0.78, 2)
-            self.taxes_and_fees = round(self.fare_inr - self.base_fare, 2)
+        split = classify_fare_split(
+            self.total_fare,
+            self.base_fare,
+            self.taxes_and_fees,
+        )
+        self.base_fare = split.base_fare
+        self.taxes_and_fees = split.taxes_and_fees
+        self.fare_split_basis = split.basis.value
+        self.booking_class = canonical_booking_class(self.booking_class)
+        self.flight_status = canonical_flight_status(self.flight_status)
+        if not self.departure_datetime:
+            self.duration_minutes = None
+        else:
+            self.duration_minutes = sourced_duration_minutes(
+                self.duration_minutes,
+                self.departure_datetime,
+                self.arrival_datetime,
+            )
 
     @property
     def origin_iata(self) -> str:
@@ -84,7 +116,7 @@ class RawFareRecord:
         )
         return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dict with both API and DB-compatible keys."""
         data = asdict(self)
         data["origin_iata"] = self.origin
@@ -99,36 +131,129 @@ class ScrapeResult:
 
     source: str
     success: bool
-    records: List[RawFareRecord] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    records: list[RawFareRecord] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
     duration_ms: float = 0.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class BaseScraper(abc.ABC):
     """Abstract Base Class for all airfare scrapers and generators."""
 
-    def __init__(self, config: Optional[IngestionConfig] = None) -> None:
+    def __init__(self, config: IngestionConfig | None = None) -> None:
         self.config = config or IngestionConfig()
+        # Declared here because the orchestrator assigns scraper.proxy per slot
+        # and the portal crawlers read it; both were relying on an attribute
+        # BaseScraper never defined.
+        self.proxy: str | dict[str, str] | None = getattr(
+            self.config, "proxy_url", None
+        )
+
+    @staticmethod
+    def playwright_proxy_config(proxy: Any) -> dict[str, str] | None:
+        """Normalise any accepted proxy form into a Playwright proxy dict.
+
+        Accepts a bare server string, an already-shaped dict, or a ProxyPool
+        Proxy. The Proxy form matters: Proxy carries username and password as
+        separate fields, so collapsing it to a URL string first loses
+        credentials that Playwright needs as distinct keys.
+        """
+        if proxy is None:
+            return None
+        if hasattr(proxy, "to_playwright_proxy"):
+            proxy_dict: dict[str, str] = proxy.to_playwright_proxy()
+            return proxy_dict
+        if isinstance(proxy, str):
+            if not proxy:
+                return None
+            return {"server": proxy}
+        if isinstance(proxy, dict):
+            return dict(proxy) or None
+        return None
+
+    def resolve_launch_kwargs(self) -> dict[str, Any]:
+        """Chromium launch options for a portal scraper.
+
+        Prefers a system Chromium when one is installed, because Playwright's
+        bundled build can fail to open a page at all. Does not hide automation
+        flags or solve challenges.
+        """
+        kwargs: dict[str, Any] = {
+            "headless": self.config.playwright_headless,
+            "args": ["--no-sandbox", "--disable-dev-shm-usage"],
+        }
+        explicit = self.config.playwright_browser_executable
+        candidates = (explicit,) if explicit else SYSTEM_CHROMIUM_CANDIDATES
+        for path in candidates:
+            if path and os.path.isfile(path) and os.access(path, os.X_OK):
+                kwargs["executable_path"] = path
+                return kwargs
+        return kwargs
+
+    def robots_policy(self) -> RobotsPolicy:
+        """Policy for this scraper's origin, resolved once per agent per config."""
+        from ingestion.robots import cached_policy
+
+        base_url = getattr(self, "BASE_URL", "") or ""
+        return cached_policy(base_url, self.config, self.config.robots_user_agent)
+
+    def robots_gate(self, url: str) -> str | None:
+        """Authorise one request against the origin's robots.txt.
+
+        Returns a denial reason when the request must not be made, otherwise None
+        after honouring the effective crawl delay. Living on the base class means a
+        new crawler cannot accidentally skip the check.
+        """
+        if not self.config.respect_robots_txt:
+            return None
+        policy = self.robots_policy()
+        if policy.is_deny_all:
+            return f"robots.txt unavailable ({policy.denial_reason})"
+        if not policy.can_fetch(url, self.config.robots_user_agent):
+            return f"robots.txt disallows {url}"
+        self.rate_limit_delay()
+        return None
+
+    def effective_rate_limit_delay(self) -> float:
+        """Seconds to wait before the next request to this origin.
+
+        Takes the stricter of our own configured delay and any crawl-delay the
+        origin publishes, so a permissive robots.txt cannot talk us into crawling
+        faster than our own ethics baseline.
+        """
+        delay = self.config.rate_limit_delay_seconds + random.uniform(
+            0.0, self.config.rate_limit_jitter_seconds
+        )
+        if self.config.respect_robots_txt:
+            policy = self.robots_policy()
+            if not policy.is_deny_all:
+                delay = max(
+                    delay,
+                    policy.effective_delay(self.config, self.config.robots_user_agent),
+                )
+        return delay
 
     def rate_limit_delay(self) -> None:
-        """Applies configured sleep with randomized jitter to prevent anti-bot blocks."""
-        delay = self.config.rate_limit_delay_seconds
-        jitter = random.uniform(0.0, self.config.rate_limit_jitter_seconds)
-        total_delay = delay + jitter
-        logger.debug("Applying rate limit delay of %.2fs", total_delay)
-        time.sleep(total_delay)
+        """Throttle before the next request. Single choke point for all tier 1 crawlers."""
+        total_delay = self.effective_rate_limit_delay()
+        if total_delay > 0:
+            logger.debug("Throttling %.2fs before request", total_delay)
+            time.sleep(total_delay)
 
     def retry_with_backoff(
         self,
         operation: Callable[[], T],
-        max_retries: Optional[int] = None,
-        backoff_factor: Optional[float] = None,
-        exceptions: Tuple[type, ...] = (Exception,),
+        max_retries: int | None = None,
+        backoff_factor: float | None = None,
+        exceptions: tuple[type[BaseException], ...] = (Exception,),
     ) -> T:
         """Executes an operation with exponential backoff and jitter."""
         retries = max_retries if max_retries is not None else self.config.max_retries
-        factor = backoff_factor if backoff_factor is not None else self.config.retry_backoff_factor
+        factor = (
+            backoff_factor
+            if backoff_factor is not None
+            else self.config.retry_backoff_factor
+        )
 
         for attempt in range(1, retries + 1):
             try:
@@ -194,7 +319,7 @@ class BaseScraper(abc.ABC):
         return round(fare, 2)
 
     @staticmethod
-    def normalize_datetime(dt_val: Union[datetime, str]) -> str:
+    def normalize_datetime(dt_val: datetime | str) -> str:
         """Normalizes datetime into canonical ISO 8601 string (YYYY-MM-DDTHH:MM:SS)."""
         if isinstance(dt_val, datetime):
             return dt_val.strftime("%Y-%m-%dT%H:%M:%S")
@@ -214,15 +339,15 @@ class BaseScraper(abc.ABC):
     def validate_record(
         self,
         record: RawFareRecord,
-        allowed_origins: Optional[Set[str]] = None,
-        allowed_destinations: Optional[Set[str]] = None,
-        allowed_airlines: Optional[Set[str]] = None,
-    ) -> Tuple[bool, List[str]]:
+        allowed_origins: Set[str] | None = None,
+        allowed_destinations: Set[str] | None = None,
+        allowed_airlines: Set[str] | None = None,
+    ) -> tuple[bool, list[str]]:
         """Validates a RawFareRecord against strict business rules.
 
         Returns (is_valid, list_of_error_reasons).
         """
-        errors: List[str] = []
+        errors: list[str] = []
 
         # 1. Null / non-positive fare
         if record.fare_inr is None:
@@ -246,7 +371,9 @@ class BaseScraper(abc.ABC):
             errors.append(str(e))
 
         if record.origin == record.destination:
-            errors.append(f"Origin and destination cannot be identical: {record.origin}")
+            errors.append(
+                f"Origin and destination cannot be identical: {record.origin}"
+            )
 
         # 3. Airline code
         try:
@@ -265,7 +392,9 @@ class BaseScraper(abc.ABC):
             dep = datetime.fromisoformat(record.departure_datetime)
             arr = datetime.fromisoformat(record.arrival_datetime)
             if arr <= dep:
-                errors.append(f"Arrival {record.arrival_datetime} must be after departure {record.departure_datetime}")
+                errors.append(
+                    f"Arrival {record.arrival_datetime} must be after departure {record.departure_datetime}"
+                )
         except Exception as e:
             errors.append(f"Invalid timestamp format: {e}")
 
@@ -285,8 +414,8 @@ class BaseScraper(abc.ABC):
     @abc.abstractmethod
     def scrape_all(
         self,
-        routes: Optional[List[Route]] = None,
-        windows: Optional[List[BookingWindow]] = None,
-    ) -> List[ScrapeResult]:
+        routes: list[Route] | None = None,
+        windows: list[BookingWindow] | None = None,
+    ) -> list[ScrapeResult]:
         """Executes a full scraping/generation cycle across all configured routes and windows."""
         raise NotImplementedError

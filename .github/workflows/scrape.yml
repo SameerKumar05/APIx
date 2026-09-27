@@ -16,10 +16,23 @@ on:
           - synthetic
           - mock
       sources:
-        description: "Scraper sources to execute (comma-separated: all, easemytrip, amadeus, synthetic)"
+        description: "Single SCRAPER_SOURCE value. 'all' is accepted and mapped to multi_source."
         required: false
-        default: "all"
-        type: string
+        default: "multi_source"
+        type: choice
+        options:
+          - multi_source
+          - all
+          - easemytrip
+          - makemytrip
+          - spicejet
+          - amadeus
+          - synthetic
+      force:
+        description: "Run even if this UTC day already completed"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -59,11 +72,21 @@ jobs:
         run: |
           playwright install --with-deps chromium
 
+      - name: UTC day for the once-per-day marker
+        id: day
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore today's sweep marker
+        uses: actions/cache@v4
+        with:
+          path: artifacts/scheduler
+          key: apix-daily-sweep-${{ steps.day.outputs.day }}
+
       - name: Prepare Artifacts Directory
         run: |
-          mkdir -p artifacts
+          mkdir -p artifacts/scheduler
 
-      - name: Run Ingestion Orchestrator
+      - name: Run daily scheduler sweep
         env:
           INGESTION_ENDPOINT_URL: ${{ secrets.INGESTION_ENDPOINT_URL }}
           API_BASE_URL: ${{ secrets.INGESTION_ENDPOINT_URL }}
@@ -71,12 +94,20 @@ jobs:
           AMADEUS_CLIENT_ID: ${{ secrets.AMADEUS_CLIENT_ID }}
           AMADEUS_CLIENT_SECRET: ${{ secrets.AMADEUS_CLIENT_SECRET }}
           INGESTION_MODE: ${{ github.event.inputs.mode || 'live' }}
-          SCRAPER_SOURCES: ${{ github.event.inputs.sources || 'all' }}
+          SCRAPER_SOURCE: ${{ github.event.inputs.sources || 'multi_source' }}
+          SCHEDULER_CRON: "0 2 * * *"
+          SCHEDULER_DISPATCH: direct
+          SCHEDULER_STATE_DIR: artifacts/scheduler
+          SCRAPER_SESSION_REUSE: "0"
           PLAYWRIGHT_HEADLESS: "true"
           PYTHONPATH: .
           PYTHONUNBUFFERED: "1"
+          FORCE_SWEEP: ${{ github.event.inputs.force || 'false' }}
         run: |
-          python -m ingestion.orchestrator
+          if [ "$FORCE_SWEEP" = "true" ]; then
+            rm -f artifacts/scheduler/completed-*
+          fi
+          python -m ingestion.scheduler --run-once --jitter-min 0 --jitter-max 0
 
       - name: Upload Scraper Run Summary Artifacts
         if: always()

@@ -31,31 +31,7 @@ interface ElasticityTabProps {
 type ChartViewMode = 'composed' | 'envelope' | 'multipliers';
 type MatrixViewMode = 'routes_leadtime' | 'day_hour';
 
-// Pre-calculated route lead-time matrix for the 10 trunk corridors
-interface RouteLeadTimeRow {
-  route_code: string;
-  corridor: string;
-  t30_fare: number;
-  t21_fare: number;
-  t14_fare: number;
-  t7_fare: number;
-  t3_fare: number;
-  t1_fare: number;
-  surge_ratio: number;
-}
 
-const ROUTE_LEADTIME_DATA: RouteLeadTimeRow[] = [
-  { route_code: 'DEL-BOM', corridor: 'Delhi - Mumbai', t30_fare: 4500, t21_fare: 4800, t14_fare: 5300, t7_fare: 6500, t3_fare: 8500, t1_fare: 10900, surge_ratio: 2.42 },
-  { route_code: 'DEL-BLR', corridor: 'Delhi - Bengaluru', t30_fare: 5200, t21_fare: 5600, t14_fare: 6200, t7_fare: 7800, t3_fare: 10400, t1_fare: 13400, surge_ratio: 2.58 },
-  { route_code: 'BOM-BLR', corridor: 'Mumbai - Bengaluru', t30_fare: 3600, t21_fare: 3850, t14_fare: 4200, t7_fare: 5100, t3_fare: 6700, t1_fare: 8200, surge_ratio: 2.28 },
-  { route_code: 'DEL-CCU', corridor: 'Delhi - Kolkata', t30_fare: 4400, t21_fare: 4700, t14_fare: 5150, t7_fare: 6300, t3_fare: 8200, t1_fare: 10600, surge_ratio: 2.41 },
-  { route_code: 'DEL-HYD', corridor: 'Delhi - Hyderabad', t30_fare: 4200, t21_fare: 4450, t14_fare: 4900, t7_fare: 5950, t3_fare: 7600, t1_fare: 9800, surge_ratio: 2.33 },
-  { route_code: 'DEL-MAA', corridor: 'Delhi - Chennai', t30_fare: 5100, t21_fare: 5500, t14_fare: 6100, t7_fare: 7650, t3_fare: 10100, t1_fare: 12800, surge_ratio: 2.51 },
-  { route_code: 'MAA-BOM', corridor: 'Chennai - Mumbai', t30_fare: 3800, t21_fare: 4050, t14_fare: 4450, t7_fare: 5400, t3_fare: 7000, t1_fare: 8900, surge_ratio: 2.34 },
-  { route_code: 'BOM-CCU', corridor: 'Mumbai - Kolkata', t30_fare: 5300, t21_fare: 5700, t14_fare: 6300, t7_fare: 7800, t3_fare: 10200, t1_fare: 12900, surge_ratio: 2.43 },
-  { route_code: 'BLR-HYD', corridor: 'Bengaluru - Hyderabad', t30_fare: 2600, t21_fare: 2750, t14_fare: 3000, t7_fare: 3650, t3_fare: 4600, t1_fare: 5800, surge_ratio: 2.23 },
-  { route_code: 'BOM-GOI', corridor: 'Mumbai - Goa', t30_fare: 2800, t21_fare: 3100, t14_fare: 3600, t7_fare: 4900, t3_fare: 6800, t1_fare: 8600, surge_ratio: 3.07 },
-];
 
 export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, heatmap }) => {
   const [selectedRoute, setSelectedRoute] = useState<string>('DEL-BOM');
@@ -64,7 +40,7 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
 
   // Lead-time points ordered from advance booking (T+60, T+30) down to departure (T+1)
   const chartData = useMemo(() => {
-    return [...leadTimeCurve.curve_points]
+    return [...(leadTimeCurve?.curve_points || [])]
       .sort((a, b) => b.days_before_departure - a.days_before_departure)
       .map((p) => ({
         window: p.booking_window_label || `T+${p.days_before_departure}`,
@@ -73,98 +49,92 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
         medianFare: p.median_fare_inr,
         p10Fare: p.p10_fare_inr,
         p90Fare: p.p90_fare_inr,
-        elasticity: Number(p.elasticity_factor.toFixed(2)),
+        elasticity: p.elasticity_factor == null ? null : Number(p.elasticity_factor.toFixed(2)),
         samples: p.sample_count,
         spread: p.p90_fare_inr - p.p10_fare_inr,
       }));
   }, [leadTimeCurve]);
 
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const hours = [6, 9, 12, 15, 18, 21];
-
-  // Cell color helper for Route x Booking Window matrix
-  const getFareCellClass = (fare: number, baseline: number) => {
-    const ratio = fare / baseline;
-    if (ratio >= 2.5) return 'bg-rose-950/90 text-rose-300 border border-rose-700/80 font-bold';
-    if (ratio >= 2.0) return 'bg-rose-950/70 text-rose-300 border border-rose-800/60 font-semibold';
-    if (ratio >= 1.5) return 'bg-amber-950/70 text-amber-300 border border-amber-800/60';
-    if (ratio >= 1.2) return 'bg-sky-950/70 text-sky-300 border border-sky-800/60';
-    return 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/50';
-  };
+  const [hourViewMode, setHourViewMode] = useState<'all_24h' | 'sample_6h'>('all_24h');
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const sampleHours = [6, 9, 12, 15, 18, 21];
+  const allHours = Array.from({ length: 24 }, (_, i) => i);
+  const displayedHours = hourViewMode === 'all_24h' ? allHours : sampleHours;
 
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 backdrop-blur-md">
+      <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Clock className="w-5 h-5 text-indigo-400" />
-                Advance Booking Window & Lead-Time Price Elasticity
+              <h2 className="text-base font-semibold text-white tracking-tight flex items-center gap-2">
+                <Clock className="w-4 h-4 text-neutral-400" />
+                Advance Booking Window &amp; Lead-Time Price Elasticity
               </h2>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono">
+              <span className="text-[11px] px-2 py-0.5 rounded border border-neutral-800 bg-neutral-900 text-neutral-300 font-mono">
                 T+30 to T+1 Surge Model
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-neutral-400 mt-1">
               Empirical modeling of algorithmic dynamic pricing multipliers as departure approaches across domestic airline booking windows.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400">Target Corridor:</span>
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs text-neutral-400 font-mono">Corridor:</span>
             <select
               value={selectedRoute}
               onChange={(e) => setSelectedRoute(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
+              className="bg-neutral-900 border border-neutral-800 rounded px-2.5 py-1 text-xs text-neutral-200 focus:outline-none focus:border-neutral-700 font-mono"
             >
               <option value="DEL-BOM">DEL-BOM (Delhi - Mumbai)</option>
+              <option value="BOM-DEL">BOM-DEL (Mumbai - Delhi)</option>
               <option value="DEL-BLR">DEL-BLR (Delhi - Bengaluru)</option>
+              <option value="BLR-DEL">BLR-DEL (Bengaluru - Delhi)</option>
               <option value="BOM-BLR">BOM-BLR (Mumbai - Bengaluru)</option>
+              <option value="BLR-BOM">BLR-BOM (Bengaluru - Mumbai)</option>
               <option value="DEL-CCU">DEL-CCU (Delhi - Kolkata)</option>
-              <option value="BOM-GOI">BOM-GOI (Mumbai - Goa)</option>
+              <option value="CCU-DEL">CCU-DEL (Kolkata - Delhi)</option>
+              <option value="DEL-HYD">DEL-HYD (Delhi - Hyderabad)</option>
+              <option value="HYD-DEL">HYD-DEL (Hyderabad - Delhi)</option>
             </select>
           </div>
         </div>
       </div>
 
+      {leadTimeCurve.data_available === false && (
+        <p className="text-xs text-neutral-500 font-mono">
+          No fare observations are stored for this curve.
+        </p>
+      )}
+
       {/* Booking Window Multipliers Grid (T+1 to T+60) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 font-mono">
         {leadTimeCurve.curve_points.map((pt) => {
           const isExtreme = pt.days_before_departure === 1;
-          const isUrgent = pt.days_before_departure === 3 || pt.days_before_departure === 7;
-          const isBase = pt.days_before_departure === 30;
 
           return (
             <div
               key={pt.days_before_departure}
-              className={`p-3.5 rounded-xl border text-center transition-all ${
+              className={`p-3 rounded-lg border text-center transition-colors hover:border-neutral-700 ${
                 isExtreme
-                  ? 'bg-rose-950/40 border-rose-700/80 shadow-md shadow-rose-950/30'
-                  : isUrgent
-                  ? 'bg-amber-950/30 border-amber-800/60'
-                  : isBase
-                  ? 'bg-sky-950/30 border-sky-800/60'
-                  : 'bg-slate-900/80 border-slate-800'
+                  ? 'bg-neutral-900/60 border-neutral-700'
+                  : 'bg-neutral-950 border-neutral-800'
               }`}
             >
-              <div className="flex items-center justify-center gap-1 text-[11px] text-slate-400">
-                {isExtreme && <Flame className="w-3 h-3 text-rose-400" />}
+              <div className="flex items-center justify-center gap-1 text-[11px] text-neutral-400">
+                {isExtreme && <Flame className="w-3 h-3 text-neutral-300" />}
                 <span>{pt.booking_window_label || `T+${pt.days_before_departure}`}</span>
               </div>
-              <div className="text-[10px] text-slate-500 font-sans mt-0.5">
+              <div className="text-[10px] text-neutral-500 font-sans mt-0.5">
                 {pt.days_before_departure}d out
               </div>
-              <div
-                className={`mt-1.5 text-lg font-extrabold ${
-                  isExtreme ? 'text-rose-400' : isUrgent ? 'text-amber-400' : 'text-white'
-                }`}
-              >
-                {pt.elasticity_factor.toFixed(2)}x
+              <div className="mt-1.5 text-lg font-semibold text-white tabular-nums">
+                {pt.elasticity_factor == null ? '—' : `${pt.elasticity_factor.toFixed(2)}x`}
               </div>
-              <div className="text-[11px] text-slate-300 mt-1">
-                ₹{pt.median_fare_inr.toLocaleString('en-IN')}
+              <div className="text-xs text-neutral-400 mt-1 tabular-nums">
+                {pt.median_fare_inr !== undefined && pt.median_fare_inr !== null ? `₹${pt.median_fare_inr.toLocaleString('en-IN')}` : '—'}
               </div>
             </div>
           );
@@ -172,56 +142,56 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
       </div>
 
       {/* Main Dynamic Pricing Lead-Time Elasticity Bar/Area Chart */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-6 backdrop-blur-md space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+      <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-800 pb-4">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-sky-400" />
+              <h3 className="text-base font-semibold text-white tracking-tight flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-neutral-400" />
                 Dynamic Pricing Surge Curve (T+30 Baseline down to T+1 Emergency)
               </h3>
-              <span className="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
+              <span className="text-[11px] px-2 py-0.5 rounded border border-neutral-800 bg-neutral-900 text-neutral-300 font-mono">
                 {selectedRoute}
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-neutral-400 mt-1">
               Visualizes the hyperbolic price acceleration from promotional advance fares (T+30) to steep surge tariffs (T+1).
             </p>
           </div>
 
           {/* Chart View Toggles */}
-          <div className="flex items-center rounded-lg bg-slate-950 border border-slate-800 p-0.5 text-xs font-mono">
+          <div className="flex items-center rounded-md bg-neutral-900 border border-neutral-800 p-0.5 text-xs font-mono">
             <button
               onClick={() => setChartView('composed')}
-              className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1.5 ${
                 chartView === 'composed'
-                  ? 'bg-slate-800 text-white font-semibold'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-neutral-800 text-white font-medium'
+                  : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
-              <Layers className="w-3.5 h-3.5 text-sky-400" />
-              Fare & Multipliers
+              <Layers className="w-3.5 h-3.5 text-neutral-400" />
+              Fare &amp; Multipliers
             </button>
             <button
               onClick={() => setChartView('envelope')}
-              className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1.5 ${
                 chartView === 'envelope'
-                  ? 'bg-slate-800 text-white font-semibold'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-neutral-800 text-white font-medium'
+                  : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+              <TrendingUp className="w-3.5 h-3.5 text-neutral-400" />
               P10-P90 Envelope
             </button>
             <button
               onClick={() => setChartView('multipliers')}
-              className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded transition-colors flex items-center gap-1.5 ${
                 chartView === 'multipliers'
-                  ? 'bg-slate-800 text-white font-semibold'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-neutral-800 text-white font-medium'
+                  : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
-              <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+              <BarChart3 className="w-3.5 h-3.5 text-neutral-400" />
               Surge Bars
             </button>
           </div>
@@ -231,14 +201,22 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
         <div className="h-80 w-full pt-2">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-              <XAxis dataKey="window" stroke="#64748b" tick={{ fontSize: 11 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#262626" vertical={false} />
+              <XAxis
+                dataKey="window"
+                stroke="#737373"
+                tick={{ fill: '#a3a3a3', fontSize: 11, fontFamily: 'monospace' }}
+                tickLine={false}
+                axisLine={{ stroke: '#262626' }}
+              />
 
               {/* Primary Y-Axis: Fares in INR */}
               <YAxis
                 yAxisId="fare"
-                stroke="#64748b"
-                tick={{ fontSize: 11 }}
+                stroke="#737373"
+                tick={{ fill: '#a3a3a3', fontSize: 11, fontFamily: 'monospace' }}
+                tickLine={false}
+                axisLine={{ stroke: '#262626' }}
                 domain={['dataMin - 1000', 'dataMax + 1000']}
                 tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
               />
@@ -247,139 +225,197 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
               <YAxis
                 yAxisId="multiplier"
                 orientation="right"
-                stroke="#818cf8"
-                tick={{ fontSize: 11 }}
+                stroke="#737373"
+                tick={{ fill: '#a3a3a3', fontSize: 11, fontFamily: 'monospace' }}
+                tickLine={false}
+                axisLine={{ stroke: '#262626' }}
                 domain={[0.8, 2.8]}
                 tickFormatter={(v) => `${v.toFixed(1)}x`}
               />
 
               <Tooltip
-                contentStyle={{
-                  backgroundColor: '#0f172a',
-                  borderColor: '#334155',
-                  borderRadius: '0.75rem',
-                  fontSize: '12px',
-                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.7)',
-                }}
-                formatter={(val: unknown, name: unknown) => {
-                  if (typeof val === 'number') {
-                    if (String(name).includes('Surge Multiplier')) {
-                      return [`${val.toFixed(2)}x`, String(name)];
-                    }
-                    return [`₹${val.toLocaleString('en-IN')}`, String(name)];
-                  }
-                  return [String(val), String(name)];
+                content={({ active, payload, label }) => {
+                  if (!active || !payload || !payload.length) return null;
+                  return (
+                    <div className="bg-neutral-950 border border-neutral-800 p-3 rounded-md shadow-xl text-xs font-mono tabular-nums text-neutral-200 min-w-[200px]">
+                      <div className="text-neutral-400 font-medium border-b border-neutral-800 pb-1.5 mb-2 flex items-center justify-between">
+                        <span>{label}</span>
+                        <span className="text-[10px] text-neutral-400">Lead-Time Curve</span>
+                      </div>
+                      <div className="space-y-1">
+                        {payload.map((item) => {
+                          const isMultiplier = String(item.name).includes('Multiplier');
+                          const formatted = typeof item.value === 'number'
+                            ? (isMultiplier ? `${item.value.toFixed(2)}x` : `₹${item.value.toLocaleString('en-IN')}`)
+                            : String(item.value ?? '');
+                          return (
+                            <div key={item.name} className="flex justify-between items-center text-neutral-300">
+                              <span className="flex items-center gap-1.5 text-neutral-400">
+                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
+                                {item.name}:
+                              </span>
+                              <span className="font-semibold text-white">{formatted}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
                 }}
               />
-              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+              {/* Custom legend: the default legend paints each label in its series'
+  colour (e.g. #525252 = 2.53:1 on this surface), so labels render in
+  readable #e5e5e5 while the series colour stays on the dot. */}
+              <Legend
+                wrapperStyle={{ fontSize: '11px', paddingTop: '10px', fontFamily: 'monospace' }}
+                content={({ payload }) => (
+                  <ul className="recharts-default-legend" style={{ padding: 0, margin: 0, textAlign: 'center' }}>
+                    {(payload ?? []).map((entry, i) => (
+                      <li
+                        key={`legend-item-${i}`}
+                        className={`recharts-legend-item legend-item-${i}`}
+                        style={{ display: 'inline-block', marginRight: 10 }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            display: 'inline-block',
+                            width: 8,
+                            height: 8,
+                            borderRadius: 9999,
+                            backgroundColor: entry.color ?? '#e5e5e5',
+                            marginRight: 4,
+                            verticalAlign: 'middle',
+                          }}
+                        />
+                        <span className="recharts-legend-item-text" style={{ color: '#e5e5e5' }}>
+                          {entry.value}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              />
 
               {/* Composed Mode: Area for Median, Bar for Multiplier, Lines for P90/P10 */}
+              {/* NOTE: keep each series as a direct child (no fragment wrapper):
+                  recharts v2 cannot see series through fragments under React 19,
+                  which renders an empty chart whose tooltip can never appear. */}
               {chartView === 'composed' && (
-                <>
-                  <Bar
-                    yAxisId="multiplier"
-                    dataKey="elasticity"
-                    name="Surge Multiplier (x Baseline)"
-                    fill="#6366f1"
-                    opacity={0.35}
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Area
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="medianFare"
-                    name="Median Fare (INR)"
-                    stroke="#38bdf8"
-                    strokeWidth={2.5}
-                    fill="#38bdf8"
-                    fillOpacity={0.15}
-                  />
-                  <Line
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="p90Fare"
-                    name="P90 (Surge Ceiling)"
-                    stroke="#f43f5e"
-                    strokeWidth={2}
-                    strokeDasharray="4 4"
-                    dot={{ r: 3 }}
-                  />
-                  <Line
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="p10Fare"
-                    name="P10 (Promo Floor)"
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    strokeDasharray="4 4"
-                    dot={{ r: 3 }}
-                  />
-                </>
+                <Bar
+                  yAxisId="multiplier"
+                  dataKey="elasticity"
+                  name="Surge Multiplier (x)"
+                  fill="#404040"
+                  radius={[4, 4, 0, 0]}
+                />
+              )}
+              {chartView === 'composed' && (
+                <Area
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="medianFare"
+                  name="Median Fare (INR)"
+                  stroke="#ffffff"
+                  strokeWidth={2.5}
+                  fill="#ffffff"
+                  fillOpacity={0.04}
+                />
+              )}
+              {chartView === 'composed' && (
+                <Line
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="p90Fare"
+                  name="P90 (Surge Ceiling)"
+                  stroke="#e5e5e5"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  dot={false}
+                />
+              )}
+              {chartView === 'composed' && (
+                <Line
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="p10Fare"
+                  name="P10 (Promo Floor)"
+                  stroke="#737373"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  dot={false}
+                />
               )}
 
-              {/* Envelope Mode: P10, Average, Median, P90 */}
+              {/* Envelope Mode: P10, Average, Median, P90 (direct children, no fragment — see note above) */}
               {chartView === 'envelope' && (
-                <>
-                  <Area
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="p90Fare"
-                    name="P90 (Upper Bound)"
-                    stroke="#f43f5e"
-                    strokeWidth={2}
-                    fill="#f43f5e"
-                    fillOpacity={0.1}
-                  />
-                  <Line
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="avgFare"
-                    name="Average Fare"
-                    stroke="#a855f7"
-                    strokeWidth={1.75}
-                    dot={{ r: 3 }}
-                  />
-                  <Line
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="medianFare"
-                    name="Median Fare"
-                    stroke="#38bdf8"
-                    strokeWidth={2.5}
-                    dot={{ r: 4 }}
-                  />
-                  <Line
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="p10Fare"
-                    name="P10 (Lower Bound)"
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                  />
-                </>
+                <Area
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="p90Fare"
+                  name="P90 (Upper Bound)"
+                  stroke="#e5e5e5"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  fill="#ffffff"
+                  fillOpacity={0.03}
+                />
+              )}
+              {chartView === 'envelope' && (
+                <Line
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="avgFare"
+                  name="Average Fare"
+                  stroke="#a3a3a3"
+                  strokeWidth={1.5}
+                  dot={{ r: 3, fill: '#a3a3a3' }}
+                />
+              )}
+              {chartView === 'envelope' && (
+                <Line
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="medianFare"
+                  name="Median Fare"
+                  stroke="#ffffff"
+                  strokeWidth={2.5}
+                  dot={{ r: 4, fill: '#ffffff', stroke: '#262626', strokeWidth: 1.5 }}
+                />
+              )}
+              {chartView === 'envelope' && (
+                <Line
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="p10Fare"
+                  name="P10 (Lower Bound)"
+                  stroke="#737373"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  dot={{ r: 3, fill: '#737373' }}
+                />
               )}
 
-              {/* Multipliers Mode: Bar chart of elasticity multipliers */}
+              {/* Multipliers Mode: Bar chart of elasticity multipliers (direct children, no fragment — see note above) */}
               {chartView === 'multipliers' && (
-                <>
-                  <Bar
-                    yAxisId="multiplier"
-                    dataKey="elasticity"
-                    name="Surge Multiplier (x Baseline)"
-                    fill="#f43f5e"
-                    radius={[6, 6, 0, 0]}
-                  />
-                  <Line
-                    yAxisId="fare"
-                    type="monotone"
-                    dataKey="medianFare"
-                    name="Median Fare (INR)"
-                    stroke="#38bdf8"
-                    strokeWidth={2.5}
-                    dot={{ r: 4 }}
-                  />
-                </>
+                <Bar
+                  yAxisId="multiplier"
+                  dataKey="elasticity"
+                  name="Surge Multiplier (x)"
+                  fill="#404040"
+                  radius={[4, 4, 0, 0]}
+                />
+              )}
+              {chartView === 'multipliers' && (
+                <Line
+                  yAxisId="fare"
+                  type="monotone"
+                  dataKey="medianFare"
+                  name="Median Fare (INR)"
+                  stroke="#ffffff"
+                  strokeWidth={2.5}
+                  dot={{ r: 4, fill: '#ffffff', stroke: '#262626', strokeWidth: 1.5 }}
+                />
               )}
             </ComposedChart>
           </ResponsiveContainer>
@@ -387,46 +423,46 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
       </div>
 
       {/* Route Price Heatmap Matrix Section */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-6 backdrop-blur-md space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+      <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-800 pb-4">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Grid3X3 className="w-4 h-4 text-indigo-400" />
+              <h3 className="text-base font-semibold text-white tracking-tight flex items-center gap-2">
+                <Grid3X3 className="w-4 h-4 text-neutral-400" />
                 Route Price Heatmap Matrix
               </h3>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
-                {matrixView === 'routes_leadtime' ? '10 Trunk Corridors × Booking Windows' : 'Departure Day × Hour Slots'}
+              <span className="text-[11px] px-2 py-0.5 rounded border border-neutral-800 bg-neutral-900 text-neutral-300 font-mono">
+                {matrixView === 'routes_leadtime' ? '10 Corridors × Booking Windows' : hourViewMode === 'all_24h' ? 'Day of Week × 24h Slots (168 Cells)' : 'Day of Week × 6 Key Slots (42 Cells)'}
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-neutral-400 mt-1">
               Cross-sectional price matrix illuminating surge hot-spots across advance purchase windows and departure slots.
             </p>
           </div>
 
           {/* Matrix View Toggle Buttons */}
-          <div className="flex items-center rounded-lg bg-slate-950 border border-slate-800 p-0.5 text-xs font-mono">
+          <div className="flex items-center rounded-md bg-neutral-900 border border-neutral-800 p-0.5 text-xs font-mono">
             <button
               onClick={() => setMatrixView('routes_leadtime')}
-              className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded transition-colors flex items-center gap-1.5 ${
                 matrixView === 'routes_leadtime'
-                  ? 'bg-indigo-600 text-white font-semibold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-neutral-800 text-white font-medium'
+                  : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
-              <Grid3X3 className="w-3.5 h-3.5" />
-              Routes × Booking Windows (10 Corridors)
+              <Grid3X3 className="w-3.5 h-3.5 text-neutral-400" />
+              Routes × Booking Windows
             </button>
             <button
               onClick={() => setMatrixView('day_hour')}
-              className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded transition-colors flex items-center gap-1.5 ${
                 matrixView === 'day_hour'
-                  ? 'bg-indigo-600 text-white font-semibold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-neutral-800 text-white font-medium'
+                  : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
-              <Calendar className="w-3.5 h-3.5" />
-              Day of Week × Departure Slot
+              <Calendar className="w-3.5 h-3.5 text-neutral-400" />
+              Day of Week × Slot
             </button>
           </div>
         </div>
@@ -434,20 +470,23 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
         {/* Matrix View 1: 10 Trunk Routes x Lead-Time Windows Matrix */}
         {matrixView === 'routes_leadtime' && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-neutral-400">
               <span className="font-mono">Fare Heatmap Matrix (INR) across Booking Horizons:</span>
-              <div className="flex items-center gap-3 text-[11px] font-mono">
-                <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded bg-emerald-950 border border-emerald-700"></span> 1.0x Base
+              <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded bg-neutral-950 border border-neutral-800"></span> 1.0x Base
                 </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded bg-sky-950 border border-sky-700"></span> 1.2x - 1.5x
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded bg-neutral-900 border border-neutral-700"></span> 1.2x - 1.5x
                 </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded bg-amber-950 border border-amber-700"></span> 1.5x - 2.0x
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded bg-neutral-800 border border-neutral-600"></span> 1.5x - 2.0x
                 </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded bg-rose-950 border border-rose-700"></span> &gt; 2.0x Surge
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded bg-neutral-700 border border-neutral-500"></span> 2.0x - 2.5x
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded bg-white border border-white"></span> ≥ 2.5x Surge
                 </span>
               </div>
             </div>
@@ -455,82 +494,31 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-mono">
                 <thead>
-                  <tr className="border-b border-slate-800 text-slate-400 bg-slate-950/60">
+                  <tr className="border-b border-neutral-800 text-neutral-400 bg-neutral-900/50">
                     <th className="py-2.5 px-3 font-sans font-medium">Corridor</th>
-                    <th className="py-2.5 px-3 text-center">T+30 (Base)</th>
-                    <th className="py-2.5 px-3 text-center">T+21</th>
-                    <th className="py-2.5 px-3 text-center">T+14</th>
-                    <th className="py-2.5 px-3 text-center">T+7</th>
-                    <th className="py-2.5 px-3 text-center">T+3</th>
-                    <th className="py-2.5 px-3 text-center font-sans font-bold text-rose-400">T+1 (Urgent)</th>
+                    <th className="py-2.5 px-3 text-right">T+30 (Base)</th>
+                    <th className="py-2.5 px-3 text-right">T+21</th>
+                    <th className="py-2.5 px-3 text-right">T+14</th>
+                    <th className="py-2.5 px-3 text-right">T+7</th>
+                    <th className="py-2.5 px-3 text-right">T+3</th>
+                    <th className="py-2.5 px-3 text-right font-sans font-medium text-white">T+1 (Urgent)</th>
                     <th className="py-2.5 px-3 text-right">Surge Multiplier</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {ROUTE_LEADTIME_DATA.map((row) => (
-                    <tr key={row.route_code} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="py-3 px-3 font-sans">
-                        <div className="font-extrabold text-white font-mono">{row.route_code}</div>
-                        <div className="text-[10px] text-slate-400">{row.corridor}</div>
-                      </td>
-
-                      {/* T+30 */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`px-2.5 py-1 rounded-md text-xs inline-block ${getFareCellClass(row.t30_fare, row.t30_fare)}`}>
-                          ₹{row.t30_fare.toLocaleString()}
-                        </span>
-                      </td>
-
-                      {/* T+21 */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`px-2.5 py-1 rounded-md text-xs inline-block ${getFareCellClass(row.t21_fare, row.t30_fare)}`}>
-                          ₹{row.t21_fare.toLocaleString()}
-                        </span>
-                      </td>
-
-                      {/* T+14 */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`px-2.5 py-1 rounded-md text-xs inline-block ${getFareCellClass(row.t14_fare, row.t30_fare)}`}>
-                          ₹{row.t14_fare.toLocaleString()}
-                        </span>
-                      </td>
-
-                      {/* T+7 */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`px-2.5 py-1 rounded-md text-xs inline-block ${getFareCellClass(row.t7_fare, row.t30_fare)}`}>
-                          ₹{row.t7_fare.toLocaleString()}
-                        </span>
-                      </td>
-
-                      {/* T+3 */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`px-2.5 py-1 rounded-md text-xs inline-block ${getFareCellClass(row.t3_fare, row.t30_fare)}`}>
-                          ₹{row.t3_fare.toLocaleString()}
-                        </span>
-                      </td>
-
-                      {/* T+1 */}
-                      <td className="py-3 px-3 text-center">
-                        <span className={`px-2.5 py-1 rounded-md text-xs inline-block ${getFareCellClass(row.t1_fare, row.t30_fare)}`}>
-                          ₹{row.t1_fare.toLocaleString()}
-                        </span>
-                      </td>
-
-                      {/* Surge Ratio */}
-                      <td className="py-3 px-3 text-right">
-                        <span
-                          className={`font-bold px-2 py-0.5 rounded text-xs ${
-                            row.surge_ratio >= 2.5
-                              ? 'bg-rose-950 text-rose-300 border border-rose-800'
-                              : 'bg-slate-800 text-slate-200'
-                          }`}
-                        >
-                          {row.surge_ratio.toFixed(2)}x
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
+                <tbody className="divide-y divide-neutral-900">
+                  <tr>
+                    <td colSpan={8} className="py-6 px-3 text-center">
+                      <div className="text-sm text-neutral-300 font-sans">
+                        No per-corridor lead-time matrix is available from the live API.
+                      </div>
+                      <div className="mt-1 text-xs text-neutral-500 font-sans">
+                        <code>/api/v1/analytics/lead-time-curve</code> returns a single aggregated curve
+                        {leadTimeCurve.route_code ? ` for ${leadTimeCurve.route_code}` : ''}, not one row per
+                        corridor. Publishing a per-corridor table would require inventing the figures, so the
+                        live curve above is shown instead.
+                      </div>
+                    </td>
+                  </tr>                </tbody>
               </table>
             </div>
           </div>
@@ -539,59 +527,102 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
         {/* Matrix View 2: Day of Week x Departure Hour Slot Matrix */}
         {matrixView === 'day_hour' && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-slate-400">
-              <span>{selectedRoute} Departure Slot Intensity Matrix:</span>
-              <div className="flex items-center gap-2 text-[10px]">
-                <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300">&lt; 100 Base</span>
-                <span className="px-2 py-0.5 rounded bg-sky-950 text-sky-300">100-120 Moderate</span>
-                <span className="px-2 py-0.5 rounded bg-amber-950 text-amber-300">120-135 Elevated</span>
-                <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300">&gt; 135 Peak Surge</span>
+            {heatmap.data_available === false && (
+              <p className="text-xs text-neutral-500 font-mono">
+                No departure-timed fare observations are stored for this matrix.
+              </p>
+            )}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-neutral-400">
+              <div className="flex items-center gap-2">
+                <span className="font-mono">{selectedRoute} Departure Slot Intensity Matrix:</span>
+                <div className="flex items-center rounded-md bg-neutral-900 border border-neutral-800 p-0.5 text-[11px] font-mono">
+                  <button
+                    onClick={() => setHourViewMode('all_24h')}
+                    className={`px-2 py-0.5 rounded transition-colors ${
+                      hourViewMode === 'all_24h'
+                        ? 'bg-neutral-800 text-white font-medium'
+                        : 'text-neutral-400 hover:text-neutral-200'
+                    }`}
+                  >
+                    Full 24h (168 cells)
+                  </button>
+                  <button
+                    onClick={() => setHourViewMode('sample_6h')}
+                    className={`px-2 py-0.5 rounded transition-colors ${
+                      hourViewMode === 'sample_6h'
+                        ? 'bg-neutral-800 text-white font-medium'
+                        : 'text-neutral-400 hover:text-neutral-200'
+                    }`}
+                  >
+                    Peak Slots (42 cells)
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono">
+                <span className="px-2 py-0.5 rounded border border-neutral-900 bg-neutral-950 text-neutral-400">&lt; 100 Base</span>
+                <span className="px-2 py-0.5 rounded border border-neutral-800 bg-neutral-900 text-neutral-300">100-119 Moderate</span>
+                <span className="px-2 py-0.5 rounded border border-neutral-700 bg-neutral-800 text-neutral-100">120-134 Elevated</span>
+                <span className="px-2 py-0.5 rounded border border-white bg-white text-black font-semibold">≥ 135 Peak Surge</span>
               </div>
             </div>
 
             <div className="overflow-x-auto">
-              <div className="min-w-[540px]">
+              <div className={hourViewMode === 'all_24h' ? 'min-w-[800px]' : 'min-w-[540px]'}>
                 {/* Hour Header */}
-                <div className="grid grid-cols-7 gap-2 text-center text-xs text-slate-400 font-mono mb-2">
-                  <div className="text-left font-sans text-slate-500 font-medium">Day \ Hour</div>
-                  {hours.map((h) => (
-                    <div key={h} className="bg-slate-950/60 py-1 rounded">
-                      {h.toString().padStart(2, '0')}:00
+                <div className={hourViewMode === 'all_24h' ? 'grid grid-cols-[45px_repeat(24,minmax(28px,1fr))] gap-1 text-center text-xs text-neutral-400 font-mono mb-2' : 'grid grid-cols-7 gap-2 text-center text-xs text-neutral-400 font-mono mb-2'}>
+                  <div className="text-left font-sans text-neutral-500 font-medium">Day \ Hour</div>
+                  {displayedHours.map((h) => (
+                    <div key={h} className="bg-neutral-900/50 border border-neutral-800/80 py-1 rounded">
+                      {hourViewMode === 'all_24h' ? `${h}` : `${h.toString().padStart(2, '0')}:00`}
                     </div>
                   ))}
                 </div>
 
                 {/* Rows for each day of week */}
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {dayNames.map((dayName, dow) => (
-                    <div key={dayName} className="grid grid-cols-7 gap-2 items-center">
-                      <div className="text-xs font-semibold text-slate-300 font-mono">{dayName}</div>
-                      {hours.map((hr) => {
-                        const cell = heatmap.matrix.find(
+                    <div key={dayName} className={hourViewMode === 'all_24h' ? 'grid grid-cols-[45px_repeat(24,minmax(28px,1fr))] gap-1 items-center' : 'grid grid-cols-7 gap-2 items-center'}>
+                      <div className="text-xs font-semibold text-neutral-300 font-mono">{dayName}</div>
+                      {displayedHours.map((hr) => {
+                        const cell = (heatmap.matrix || []).find(
                           (m) => m.day_of_week === dow && m.hour_of_day === hr
                         );
-                        const index = cell ? cell.fare_index : 100;
-                        const fare = cell ? cell.avg_fare_inr : 4500;
 
-                        let bgClass = 'bg-slate-800 text-slate-200';
+                        if (!cell || cell.fare_index == null) {
+                          return (
+                            <div
+                              key={hr}
+                              className="py-1.5 px-0.5 rounded text-center font-mono cursor-default bg-neutral-950/40 text-neutral-600 border border-neutral-900 border-dashed"
+                              title={`${dayName} ${hr.toString().padStart(2, '0')}:00 - Data unavailable`}
+                            >
+                              <div className={hourViewMode === 'all_24h' ? 'text-[11px] font-bold tabular-nums text-neutral-600' : 'text-xs font-bold tabular-nums text-neutral-600'}>—</div>
+                              <div className="text-[9px] opacity-40 tabular-nums">—</div>
+                            </div>
+                          );
+                        }
+
+                        const index = cell.fare_index;
+                        const fare = cell.avg_fare_inr;
+
+                        let bgClass = 'bg-neutral-900 text-neutral-300 border border-neutral-800';
                         if (index >= 135) {
-                          bgClass = 'bg-rose-950/90 text-rose-300 border border-rose-800/80';
+                          bgClass = 'bg-white text-black font-semibold border border-white shadow-sm';
                         } else if (index >= 120) {
-                          bgClass = 'bg-amber-950/80 text-amber-300 border border-amber-800/60';
+                          bgClass = 'bg-neutral-700 text-white font-medium border border-neutral-600';
                         } else if (index >= 100) {
-                          bgClass = 'bg-sky-950/80 text-sky-300 border border-sky-800/60';
+                          bgClass = 'bg-neutral-800 text-neutral-200 border border-neutral-700';
                         } else {
-                          bgClass = 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/60';
+                          bgClass = 'bg-neutral-950 text-neutral-400 border border-neutral-900';
                         }
 
                         return (
                           <div
                             key={hr}
-                            className={`py-2 px-1 rounded-lg text-center font-mono transition-transform hover:scale-105 cursor-default ${bgClass}`}
-                            title={`${dayName} ${hr}:00 - Index: ${index}, Fare: ₹${fare}`}
+                            className={`py-1.5 px-0.5 rounded text-center font-mono transition-transform hover:scale-105 cursor-default ${bgClass}`}
+                            title={`${dayName} ${hr.toString().padStart(2, '0')}:00 - Index: ${index}, Fare: ₹${fare}`}
                           >
-                            <div className="text-xs font-bold">{index}</div>
-                            <div className="text-[10px] opacity-75">₹{(fare / 1000).toFixed(1)}k</div>
+                            <div className={hourViewMode === 'all_24h' ? 'text-[11px] font-bold tabular-nums' : 'text-xs font-bold tabular-nums'}>{hourViewMode === 'all_24h' ? Math.round(index) : index}</div>
+                            <div className="text-[9px] opacity-75 tabular-nums">₹{(fare / 1000).toFixed(1)}k</div>
                           </div>
                         );
                       })}
@@ -605,11 +636,11 @@ export const ElasticityTab: React.FC<ElasticityTabProps> = ({ leadTimeCurve, hea
       </div>
 
       {/* CPI Augmentation Methodology Info Box */}
-      <div className="bg-indigo-950/20 border border-indigo-800/50 rounded-xl p-5 backdrop-blur-md">
+      <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-5">
         <div className="flex items-start gap-3">
-          <Info className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
-          <div className="text-xs text-slate-300 space-y-1">
-            <h4 className="font-bold text-white text-sm">
+          <Info className="w-4 h-4 text-neutral-400 shrink-0 mt-0.5" />
+          <div className="text-xs text-neutral-400 space-y-1">
+            <h4 className="font-semibold text-white text-sm">
               Methodological Significance for Consumer Price Index (CPI):
             </h4>
             <p>

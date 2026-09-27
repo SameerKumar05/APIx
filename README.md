@@ -1,8 +1,148 @@
-# APIx - Airfare Price Index
+# APIx
 
-SIH 2026 PS 26056 - Real-time Airfare Price Index for India (CPI augmentation).
+**A real-time airfare price index for India, built to augment the Consumer Price Index.**
 
-## source/
-Original deck + PDF + page JPGs from Woventech-adi-IL.
+Smart India Hackathon 2026 · Problem Statement 26056 · Team Woven Tech
 
-Team: Woven tech
+[![CI](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml/badge.svg)](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-388%20passed-brightgreen.svg)](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-see%20LICENSE-informational.svg)](LICENSE)
+
+---
+
+> ### Status: the pipeline is complete, the fares are not real yet
+>
+> **No live airfare has ever been read by this system.** Not one. The fare feed
+> reads `SIMULATED` and the database contains **0** rows claiming to be live.
+>
+> All 11 scrapers named by the problem statement are implemented and registered.
+> Every one of them is currently blocked by the operator's `robots.txt`, by bot
+> defence, or by publishing no fare field. That is a finding about the sources,
+> not a missing feature, and the project treats it as a result rather than
+> something to route around.
+>
+> See [Data provenance](docs/data_provenance.md) for the per-source detail.
+
+## The problem
+
+MoSPI collects airfare prices for the CPI by manual survey, with a reporting lag
+of roughly 38 days. That misses what travellers actually pay: the same sector can
+vary by 200–400% within a day, driven by booking lead time, day of week, festivals,
+and fuel surcharges.
+
+APIx is an attempt at the missing instrument: high-frequency collection across
+city-pairs and advance-purchase windows, combined into a weighted index at daily,
+weekly, and monthly frequencies.
+
+## Quick start
+
+```bash
+git clone https://github.com/SameerKumar05/APIx.git
+cd APIx
+
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+playwright install chromium
+
+# Create the schema and seed the corridor basket
+python -m backend.app.db.seed
+
+# Run the three services, in three terminals
+uvicorn backend.app.main:app --reload --port 8000      # API
+python -m ingestion.worker                             # crawler worker
+cd frontend && bun install && bun run dev              # dashboard
+```
+
+Then open <http://localhost:3000>. The API reference is served at
+<http://localhost:8000/api/v1/docs>.
+
+Verify the install:
+
+```bash
+pytest -q                                              # 388 tests
+python scripts/audit_provenance.py apix.db             # must exit 0
+```
+
+## How it works
+
+```
+11 portal scrapers  ->  durable job queue  ->  cleaned raw_fares  ->  weighted index  ->  REST + WebSocket  ->  dashboard
+      (Playwright)        (leased, fenced)      (dedup, outliers)     (Fisher ideal)     (rate limited)
+```
+
+- **Collection.** Playwright drives each portal's JavaScript-rendered search. A
+  durable queue with worker heartbeats and lease fencing means a crashed worker
+  cannot strand a job or double-run one.
+- **Compliance.** Every request passes a `robots.txt` gate implementing RFC 9309.
+  It fails closed: an unreachable policy denies the request. Crawl delays are
+  honoured with a floor, so a permissive file cannot make the crawler aggressive.
+  Rate limiting is a single choke point, taking the stricter of our own baseline
+  and anything the origin publishes.
+- **Cleaning.** Fares are deduplicated on a database unique constraint, outliers
+  are rejected by Tukey IQR at ingest, and cancelled or sold-out flights are
+  excluded from the index rather than averaged into it.
+- **Index.** A Fisher ideal index over 10 corridors and 5 advance-purchase
+  windows (T+1 through T+45), with weights summing to exactly 1.0.
+- **Delivery.** A versioned REST API and a WebSocket feed, both rate limited, plus
+  a React dashboard across 8 tabs.
+
+## What is real and what is not
+
+| Component | State |
+| --- | --- |
+| Scraping engine, queue, cleaning, index, API, dashboard | Built and tested |
+| robots.txt compliance, rate limiting, IP rotation | Built and enforced in code |
+| 11 portal scrapers | Implemented; all blocked or fare-less in practice |
+| Live airfare data | **None. Zero rows.** |
+| Route and carrier weights | **Modelled**, not published DGCA figures |
+| 30-day back-test vs DGCA fares | **Impossible as specified**, see below |
+
+Two honest notes that matter more than the feature list:
+
+**The 30-day back-test the PS asks for cannot be run against DGCA fare data,
+because DGCA does not publish it.** The Tariff Monitoring Unit monitors 78 routes
+monthly but releases no dataset, no dashboard, and not even the route list, only
+aggregate percentages in Parliament answers (Lok Sabha Unstarred Q.1934, 30 July
+2026). The back-test harness is implemented and estimates the relationship
+correctly; it **exits non-zero rather than printing a verdict** until 30 days of
+index history exist. It is waiting on time, not code.
+
+**The Fisher index here does not satisfy factor reversal.** The Paasche side is
+the textbook index; the Laspeyres side is a fixed-weight mean of price relatives
+rather than a true Laspeyres. `tests/test_factor_reversal.py` proves both halves
+of that statement. Time reversal *is* asserted.
+
+## Documentation
+
+| Document | Contents |
+| --- | --- |
+| [Data provenance](docs/data_provenance.md) | Per-source status, badge mechanics, what is estimated |
+| [Master specification](docs/APIX_MASTER_SPECIFICATION.md) | Full system spec, econometrics, verification matrix |
+| [Architecture](docs/architecture.md) | Component design, data flow, schema |
+| [Scraping architecture](docs/scraping_architecture.md) | Scraping topology, compliance, anti-bot handling |
+| [Econometrics and CPI gap](docs/econometrics_and_cpi_gap.md) | Index formulae, lead-time elasticity, MoSPI divergence |
+| [Deployment](docs/deployment.md) | Concepts, schema migrations, operations (GCE + Vercel) |
+| [Deployment runbook](docs/deployment_run_2026-09-26.md) | Literal 2026-09-26 command sequence that produced the live system |
+| [Backend auto-deploy](docs/ci_deploy.md) | CI-gated GCE deploy wiring (`deploy-backend.yml`) |
+| [Frontend auto-deploy](docs/ci_deploy_frontend.md) | Vercel deploy wiring (`deploy-frontend.yml`) |
+
+## Operational commands
+
+```bash
+pytest -q                                   # full suite
+./scripts/verify_all.sh                   # 23-step master verification harness
+ruff check . && black --check .             # lint and format
+mypy backend/app/schemas backend/app/models backend/app/services ingestion
+alembic upgrade head                        # apply schema migrations
+python scripts/audit_provenance.py apix.db  # provenance gate, exits non-zero on any lie
+python scripts/backtest_vs_mospi.py         # back-test, refuses to report without 30 days
+```
+
+`alembic upgrade head` is required against an existing database.
+`create_all()` creates missing tables but will not add a column to one that
+already exists.
+
+## License
+
+See [LICENSE](LICENSE).

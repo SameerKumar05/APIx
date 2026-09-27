@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -125,6 +125,14 @@ class RawFare(Base):
         default="Economy",
         doc="Cabin fare class (Economy, Premium Economy, Business)",
     )
+    booking_class: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        doc=(
+            "Airline booking / fare-basis code (Y, B, M, X). Distinct from "
+            "fare_class, which is cabin. NULL when the source did not supply one."
+        ),
+    )
     base_fare: Mapped[float] = mapped_column(
         Float,
         nullable=False,
@@ -135,7 +143,50 @@ class RawFare(Base):
         Float,
         nullable=False,
         default=0.0,
-        doc="Fuel surcharge, passenger service fee, and GST in INR",
+        doc=(
+            "Fuel surcharge, passenger service fee, and GST in INR. "
+            "Does not include a separately reported udf_fee or convenience_fee."
+        ),
+    )
+    udf_fee: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        doc=(
+            "User development fee in INR, kept separate from taxes_and_fees. "
+            "NULL when the source did not supply it; never estimated."
+        ),
+    )
+    convenience_fee: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        doc=(
+            "Convenience charge in INR. NULL when the source did not supply it; "
+            "never estimated."
+        ),
+    )
+    flight_status: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        doc=(
+            "Reported flight status: scheduled, cancelled, or sold_out. "
+            "NULL when the source did not report one; never defaulted to scheduled."
+        ),
+    )
+    index_exclusion_reason: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+        doc=(
+            "Why this row is kept out of the index: outlier, cancelled, or "
+            "sold_out. NULL means eligible. The row is never deleted for this."
+        ),
+    )
+    fare_split_basis: Mapped[str | None] = mapped_column(
+        String(16),
+        nullable=True,
+        doc=(
+            "measured, residual, or estimated. NULL on rows written before the "
+            "basis was recorded. estimated is the ratio, not a measurement."
+        ),
     )
     total_fare: Mapped[float] = mapped_column(
         Float,
@@ -151,7 +202,7 @@ class RawFare(Base):
     scraped_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         doc="Timestamp when price quote was captured",
     )
     hash_id: Mapped[str] = mapped_column(
@@ -200,6 +251,7 @@ class RawFare(Base):
     @fare.setter
     def fare(self, value: float) -> None:
         self.total_fare = value
+
     @property
     def cabin_class(self) -> str:
         return self.fare_class
@@ -244,8 +296,14 @@ class RawFare(Base):
             "duration_minutes": self.duration_minutes,
             "stops": self.stops,
             "fare_class": self.fare_class,
+            "booking_class": self.booking_class,
             "base_fare": self.base_fare,
             "taxes_and_fees": self.taxes_and_fees,
+            "udf_fee": self.udf_fee,
+            "convenience_fee": self.convenience_fee,
+            "flight_status": self.flight_status,
+            "index_exclusion_reason": self.index_exclusion_reason,
+            "fare_split_basis": self.fare_split_basis,
             "total_fare": self.total_fare,
             "source_platform": self.source_platform,
             "scraped_at": self.scraped_at.isoformat() if self.scraped_at else None,

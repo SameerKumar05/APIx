@@ -14,13 +14,13 @@ Implements:
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
-from enum import Enum
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from enum import StrEnum
+from typing import Any
 
 
-class AnomalySeverity(str, Enum):
+class AnomalySeverity(StrEnum):
     """Classification of airfare pricing anomalies."""
 
     NORMAL = "NORMAL"
@@ -36,16 +36,16 @@ class AnomalyResult:
     baseline_mean: float
     baseline_std: float
     z_score: float
-    dod_surge: Optional[float]
+    dod_surge: float | None
     severity: AnomalySeverity
     is_anomaly: bool
     reason: str
-    route_id: Optional[str] = None
-    booking_window: Optional[str] = None
-    timestamp: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    route_id: str | None = None
+    booking_window: str | None = None
+    timestamp: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert anomaly result to dictionary."""
         d = asdict(self)
         d["severity"] = self.severity.value
@@ -112,7 +112,7 @@ def calculate_dod_surge(
 
 def classify_anomaly(
     z_score: float,
-    dod_surge: Optional[float] = None,
+    dod_surge: float | None = None,
 ) -> AnomalySeverity:
     """Classifies anomaly severity based on Z-score and DoD surge thresholds.
 
@@ -144,7 +144,7 @@ def classify_anomaly(
 
 def compute_baseline_stats(
     fares: Sequence[float],
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Computes sample mean and sample standard deviation over a sequence of fares.
 
     Args:
@@ -174,10 +174,10 @@ def detect_anomaly(
     observed_fare: float,
     baseline_mean: float,
     baseline_std: float,
-    previous_fare: Optional[float] = None,
-    route_id: Optional[str] = None,
-    booking_window: Optional[str] = None,
-    timestamp: Optional[str] = None,
+    previous_fare: float | None = None,
+    route_id: str | None = None,
+    booking_window: str | None = None,
+    timestamp: str | None = None,
 ) -> AnomalyResult:
     """Evaluates an observed fare against rolling baseline statistics.
 
@@ -195,14 +195,14 @@ def detect_anomaly(
     """
     z_score = calculate_z_score(observed_fare, baseline_mean, baseline_std)
 
-    dod_surge: Optional[float] = None
+    dod_surge: float | None = None
     if previous_fare is not None:
         dod_surge = calculate_dod_surge(observed_fare, previous_fare)
 
     severity = classify_anomaly(z_score, dod_surge)
     is_anomaly = severity != AnomalySeverity.NORMAL
 
-    reasons: List[str] = []
+    reasons: list[str] = []
     if z_score >= 3.0:
         reasons.append(f"Z-score {z_score:.2f} >= 3.0 (3-sigma surge)")
     elif z_score >= 2.0:
@@ -237,9 +237,9 @@ class AnomalyDetector:
     def __init__(self, window_size: int = 30):
         self.window_size = window_size
         # key: (route_id, booking_window) -> list of historical fares
-        self.history: Dict[Tuple[str, str], List[float]] = {}
+        self.history: dict[tuple[str, str], list[float]] = {}
         # key: (route_id, booking_window) -> last observed fare
-        self.last_fares: Dict[Tuple[str, str], float] = {}
+        self.last_fares: dict[tuple[str, str], float] = {}
 
     def record_fare(
         self,
@@ -261,7 +261,7 @@ class AnomalyDetector:
         route_id: str,
         booking_window: str,
         current_fare: float,
-        timestamp: Optional[str] = None,
+        timestamp: str | None = None,
     ) -> AnomalyResult:
         """Evaluates current fare against stored rolling baseline for route/window."""
         key = (route_id.strip().upper(), booking_window.strip().upper())

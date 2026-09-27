@@ -14,8 +14,8 @@ import random
 import threading
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import urlparse
 
 logger = logging.getLogger("ingestion.proxy_pool")
@@ -28,18 +28,18 @@ class Proxy:
     ip: str
     port: int
     protocol: str = "http"  # "http", "https", "socks5"
-    username: Optional[str] = None
-    password: Optional[str] = None
+    username: str | None = None
+    password: str | None = None
     status: str = "active"  # "active", "degraded", "blacklisted", "testing"
     latency_ms: float = 0.0
     score: float = 100.0  # EWMA latency score (lower is better)
     success_count: int = 0
     failure_count: int = 0
     consecutive_failures: int = 0
-    last_checked_at: Optional[datetime] = None
-    last_used_at: Optional[datetime] = None
-    blacklisted_until: Optional[datetime] = None
-    error_message: Optional[str] = None
+    last_checked_at: datetime | None = None
+    last_used_at: datetime | None = None
+    blacklisted_until: datetime | None = None
+    error_message: str | None = None
 
     @property
     def identifier(self) -> str:
@@ -53,7 +53,7 @@ class Proxy:
             return f"{self.protocol.lower()}://{self.username}:{self.password}@{self.ip}:{self.port}"
         return f"{self.protocol.lower()}://{self.ip}:{self.port}"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serializes proxy attributes to a dictionary."""
         d = asdict(self)
         if self.last_checked_at:
@@ -66,19 +66,21 @@ class Proxy:
         d["url"] = self.url
         return d
 
-    def to_dict_safe(self) -> Dict[str, Any]:
+    def to_dict_safe(self) -> dict[str, Any]:
         """Serializes proxy attributes with sensitive credentials redacted."""
         d = self.to_dict()
         if d.get("password"):
             d["password"] = "***"
         if self.username and self.password:
-            d["url"] = f"{self.protocol.lower()}://{self.username}:***@{self.ip}:{self.port}"
+            d["url"] = (
+                f"{self.protocol.lower()}://{self.username}:***@{self.ip}:{self.port}"
+            )
         return d
 
-    def to_playwright_proxy(self) -> Dict[str, str]:
+    def to_playwright_proxy(self) -> dict[str, str]:
         """Formats proxy options for Playwright browser.new_context(proxy=...)."""
         server = f"{self.protocol.lower()}://{self.ip}:{self.port}"
-        cfg: Dict[str, str] = {"server": server}
+        cfg: dict[str, str] = {"server": server}
         if self.username:
             cfg["username"] = self.username
         if self.password:
@@ -89,9 +91,9 @@ class Proxy:
         """Returns proxy URL suitable for httpx.Client(proxy=...)."""
         return self.url
 
-    def is_available(self, current_time: Optional[datetime] = None) -> bool:
+    def is_available(self, current_time: datetime | None = None) -> bool:
         """Checks if the proxy is available for assignment, evaluating cooldowns."""
-        now = current_time or datetime.now(timezone.utc)
+        now = current_time or datetime.now(UTC)
         if self.status == "blacklisted":
             if self.blacklisted_until and now >= self.blacklisted_until:
                 # Cooldown expired, transition to testing/active
@@ -114,7 +116,7 @@ class ProxyPoolConfig:
     latency_penalty_on_failure_ms: float = 1000.0
     default_timeout_seconds: float = 5.0
     health_check_url: str = "https://httpbin.org/ip"
-    default_test_urls: List[str] = field(
+    default_test_urls: list[str] = field(
         default_factory=lambda: [
             "https://httpbin.org/ip",
             "https://api.ipify.org?format=json",
@@ -138,12 +140,12 @@ class ProxyPoolManager:
 
     def __init__(
         self,
-        proxies: Optional[List[Union[str, Proxy, Dict[str, Any]]]] = None,
-        config: Optional[ProxyPoolConfig] = None,
+        proxies: list[str | Proxy | dict[str, Any]] | None = None,
+        config: ProxyPoolConfig | None = None,
         auto_seed: bool = True,
     ) -> None:
         self.config = config or ProxyPoolConfig()
-        self._proxies: Dict[str, Proxy] = {}
+        self._proxies: dict[str, Proxy] = {}
         self._lock = threading.RLock()
         self._rr_index = 0
 
@@ -163,7 +165,7 @@ class ProxyPoolManager:
         with self._lock:
             return len(self._proxies)
 
-    def _parse_proxy_input(self, proxy_in: Union[str, Proxy, Dict[str, Any]]) -> Proxy:
+    def _parse_proxy_input(self, proxy_in: str | Proxy | dict[str, Any]) -> Proxy:
         """Parses various proxy input representations into a standard Proxy dataclass."""
         if isinstance(proxy_in, Proxy):
             return proxy_in
@@ -212,7 +214,7 @@ class ProxyPoolManager:
 
         raise ValueError(f"Unsupported proxy input type: {type(proxy_in)}")
 
-    def add_proxy(self, proxy_in: Union[str, Proxy, Dict[str, Any]]) -> Proxy:
+    def add_proxy(self, proxy_in: str | Proxy | dict[str, Any]) -> Proxy:
         """Adds or updates a proxy endpoint in the pool."""
         proxy = self._parse_proxy_input(proxy_in)
         with self._lock:
@@ -228,12 +230,14 @@ class ProxyPoolManager:
             logger.debug("Added proxy to pool: %s", key)
             return proxy
 
-    def remove_proxy(self, ip_or_identifier: str, port: Optional[int] = None) -> bool:
+    def remove_proxy(self, ip_or_identifier: str, port: int | None = None) -> bool:
         """Removes a proxy endpoint from the pool by identifier or ip:port."""
         with self._lock:
             if port is not None:
                 key_pattern = f"://{ip_or_identifier}:{port}"
-                matched_key = next((k for k in self._proxies if k.endswith(key_pattern)), None)
+                matched_key = next(
+                    (k for k in self._proxies if k.endswith(key_pattern)), None
+                )
                 if matched_key:
                     del self._proxies[matched_key]
                     return True
@@ -244,17 +248,19 @@ class ProxyPoolManager:
                 del self._proxies[ip_or_identifier]
                 return True
 
-            matched_key = next((k for k in self._proxies if ip_or_identifier in k), None)
+            matched_key = next(
+                (k for k in self._proxies if ip_or_identifier in k), None
+            )
             if matched_key:
                 del self._proxies[matched_key]
                 return True
 
             return False
 
-    def check_cooldowns(self) -> List[Proxy]:
+    def check_cooldowns(self) -> list[Proxy]:
         """Scans blacklisted proxies and restores those whose quarantine period has elapsed."""
-        now = datetime.now(timezone.utc)
-        recovered: List[Proxy] = []
+        now = datetime.now(UTC)
+        recovered: list[Proxy] = []
         with self._lock:
             for proxy in self._proxies.values():
                 if proxy.status == "blacklisted":
@@ -264,10 +270,13 @@ class ProxyPoolManager:
                         proxy.blacklisted_until = None
                         proxy.error_message = None
                         recovered.append(proxy)
-                        logger.info("Proxy %s cooldown elapsed; restored to testing status", proxy.identifier)
+                        logger.info(
+                            "Proxy %s cooldown elapsed; restored to testing status",
+                            proxy.identifier,
+                        )
         return recovered
 
-    def get_proxy(self, strategy: str = "best_score") -> Optional[Proxy]:
+    def get_proxy(self, strategy: str = "best_score") -> Proxy | None:
         """Selects an available proxy from the pool according to the specified strategy.
 
         Strategies:
@@ -276,7 +285,7 @@ class ProxyPoolManager:
         - "random": Uniformly selects from available candidates.
         - "lowest_latency": Selects candidate with the absolute lowest raw latency.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with self._lock:
             # First check and recover any expired cooldowns
             self.check_cooldowns()
@@ -284,7 +293,9 @@ class ProxyPoolManager:
             available = [p for p in self._proxies.values() if p.is_available(now)]
             if not available:
                 # If all proxies are blacklisted, fallback to testing candidates or the oldest blacklisted
-                blacklisted = [p for p in self._proxies.values() if p.status == "blacklisted"]
+                blacklisted = [
+                    p for p in self._proxies.values() if p.status == "blacklisted"
+                ]
                 if blacklisted:
                     # Emergency unblacklist of the oldest blacklisted proxy to prevent complete starvation
                     emergency_candidate = min(
@@ -302,7 +313,7 @@ class ProxyPoolManager:
                 else:
                     return None
 
-            selected: Optional[Proxy] = None
+            selected: Proxy | None = None
 
             if strategy == "round_robin":
                 self._rr_index = (self._rr_index + 1) % len(available)
@@ -322,14 +333,14 @@ class ProxyPoolManager:
 
             return selected
 
-    def report_success(self, proxy_ref: Union[str, Proxy], latency_ms: float) -> None:
+    def report_success(self, proxy_ref: str | Proxy, latency_ms: float) -> None:
         """Records a successful request using the specified proxy, updating latency and EWMA score."""
         with self._lock:
             proxy = self._resolve_proxy(proxy_ref)
             if not proxy:
                 return
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             proxy.success_count += 1
             proxy.consecutive_failures = 0
             proxy.latency_ms = latency_ms
@@ -358,9 +369,9 @@ class ProxyPoolManager:
 
     def report_failure(
         self,
-        proxy_ref: Union[str, Proxy],
-        error: Optional[str] = None,
-        status_code: Optional[int] = None,
+        proxy_ref: str | Proxy,
+        error: str | None = None,
+        status_code: int | None = None,
     ) -> None:
         """Records a failed request or network error, applying penalty and auto-blacklisting if warranted."""
         with self._lock:
@@ -368,12 +379,16 @@ class ProxyPoolManager:
             if not proxy:
                 return
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             proxy.failure_count += 1
             proxy.consecutive_failures += 1
             proxy.last_used_at = now
             proxy.last_checked_at = now
-            proxy.error_message = error or f"HTTP status {status_code}" if status_code else "Unknown error"
+            proxy.error_message = (
+                error or f"HTTP status {status_code}"
+                if status_code
+                else "Unknown error"
+            )
 
             # Apply latency penalty to EWMA score
             proxy.score += self.config.latency_penalty_on_failure_ms
@@ -397,9 +412,9 @@ class ProxyPoolManager:
 
     def blacklist_proxy(
         self,
-        proxy_ref: Union[str, Proxy],
+        proxy_ref: str | Proxy,
         reason: str = "Manual blacklisting",
-        cooldown_seconds: Optional[float] = None,
+        cooldown_seconds: float | None = None,
     ) -> None:
         """Explicitly blacklists a proxy with an optional quarantine cooldown duration."""
         with self._lock:
@@ -407,8 +422,12 @@ class ProxyPoolManager:
             if not proxy:
                 return
 
-            cooldown = cooldown_seconds if cooldown_seconds is not None else self.config.cooldown_seconds
-            now = datetime.now(timezone.utc)
+            cooldown = (
+                cooldown_seconds
+                if cooldown_seconds is not None
+                else self.config.cooldown_seconds
+            )
+            now = datetime.now(UTC)
             proxy.status = "blacklisted"
             proxy.blacklisted_until = now + timedelta(seconds=cooldown)
             proxy.error_message = reason
@@ -419,7 +438,7 @@ class ProxyPoolManager:
                 reason,
             )
 
-    def unblacklist_proxy(self, proxy_ref: Union[str, Proxy]) -> None:
+    def unblacklist_proxy(self, proxy_ref: str | Proxy) -> None:
         """Re-activates a blacklisted proxy and resets its consecutive failure count."""
         with self._lock:
             proxy = self._resolve_proxy(proxy_ref)
@@ -432,7 +451,7 @@ class ProxyPoolManager:
             proxy.error_message = None
             logger.info("Proxy %s manually unblacklisted", proxy.identifier)
 
-    def _resolve_proxy(self, proxy_ref: Union[str, Proxy]) -> Optional[Proxy]:
+    def _resolve_proxy(self, proxy_ref: str | Proxy) -> Proxy | None:
         """Resolves a Proxy instance from either an object, identifier, or ip string."""
         if isinstance(proxy_ref, Proxy):
             return self._proxies.get(proxy_ref.identifier, proxy_ref)
@@ -449,8 +468,8 @@ class ProxyPoolManager:
     async def health_check_proxy(
         self,
         proxy: Proxy,
-        target_url: Optional[str] = None,
-        timeout: Optional[float] = None,
+        target_url: str | None = None,
+        timeout: float | None = None,
     ) -> bool:
         """Performs an asynchronous health probe against a target test endpoint."""
         import httpx
@@ -469,7 +488,11 @@ class ProxyPoolManager:
                     self.report_success(proxy, latency_ms)
                     return True
                 else:
-                    self.report_failure(proxy, error=f"HTTP {resp.status_code}", status_code=resp.status_code)
+                    self.report_failure(
+                        proxy,
+                        error=f"HTTP {resp.status_code}",
+                        status_code=resp.status_code,
+                    )
                     return False
 
         except Exception as exc:
@@ -479,9 +502,9 @@ class ProxyPoolManager:
 
     async def health_check_all(
         self,
-        target_url: Optional[str] = None,
-        timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        target_url: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         """Runs concurrent health checks across all registered proxies in the pool."""
         with self._lock:
             proxy_list = list(self._proxies.values())
@@ -497,19 +520,21 @@ class ProxyPoolManager:
             "total_tested": len(proxy_list),
             "healthy_count": healthy_count,
             "failed_count": len(proxy_list) - healthy_count,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
-    def get_pool_status(self) -> Dict[str, Any]:
+    def get_pool_status(self) -> dict[str, Any]:
         """Provides a statistical summary of the proxy pool for monitoring and API endpoints."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with self._lock:
             self.check_cooldowns()
 
             total = len(self._proxies)
             active = sum(1 for p in self._proxies.values() if p.status == "active")
             degraded = sum(1 for p in self._proxies.values() if p.status == "degraded")
-            blacklisted = sum(1 for p in self._proxies.values() if p.status == "blacklisted")
+            blacklisted = sum(
+                1 for p in self._proxies.values() if p.status == "blacklisted"
+            )
             testing = sum(1 for p in self._proxies.values() if p.status == "testing")
 
             active_proxies = [p for p in self._proxies.values() if p.is_available(now)]
@@ -536,9 +561,9 @@ class ProxyPoolManager:
                 "proxies": [p.to_dict_safe() for p in self._proxies.values()],
             }
 
-    def get_active_proxies(self) -> List[Proxy]:
+    def get_active_proxies(self) -> list[Proxy]:
         """Returns all currently available active and degraded proxies."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         with self._lock:
             self.check_cooldowns()
             return [p for p in self._proxies.values() if p.is_available(now)]
@@ -558,13 +583,13 @@ class ProxyPoolManager:
 
 
 # Singleton instance container
-_GLOBAL_PROXY_POOL: Optional[ProxyPoolManager] = None
+_GLOBAL_PROXY_POOL: ProxyPoolManager | None = None
 _GLOBAL_POOL_LOCK = threading.Lock()
 
 
 def get_proxy_pool(
-    config: Optional[ProxyPoolConfig] = None,
-    initial_proxies: Optional[List[Union[str, Proxy, Dict[str, Any]]]] = None,
+    config: ProxyPoolConfig | None = None,
+    initial_proxies: list[str | Proxy | dict[str, Any]] | None = None,
 ) -> ProxyPoolManager:
     """Returns the process-wide singleton ProxyPoolManager instance."""
     global _GLOBAL_PROXY_POOL

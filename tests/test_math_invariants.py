@@ -459,8 +459,16 @@ class TestBookingWindowCompositeFormula:
             "T+30": 5200.0,  # Early leisure discount
         }
 
-        # Expected: 0.20*12000 + 0.35*8500 + 0.30*6500 + 0.15*5200 = 2400 + 2975 + 1950 + 780 = 8105.0
-        expected_composite = 8105.0
+        # Derived from the weight table rather than hardcoded, so changing the
+        # weights cannot leave a stale magic number here. The composite
+        # renormalises over the windows actually supplied, so T+45's share is
+        # excluded and redistributed rather than silently dropped.
+        present = {w.replace("+", ""): w for w in window_fares}
+        weight_sum = sum(DEFAULT_BOOKING_WINDOW_WEIGHTS[w] for w in present)
+        expected_composite = sum(
+            (DEFAULT_BOOKING_WINDOW_WEIGHTS[w] / weight_sum) * window_fares[code]
+            for w, code in present.items()
+        )
         composite = calculate_route_composite_fare(window_fares)
         assert math.isclose(composite, expected_composite, abs_tol=1e-9)
 

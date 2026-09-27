@@ -363,26 +363,24 @@ class TestMasterDataAlignment:
         assert db_airline_codes == expected_carriers
         assert quant_airline_codes == expected_carriers
 
-        # Verify market shares align with official DGCA stats
-        # IndiGo: ~62%, Air India: ~20%, AIX: ~8%, Akasa: ~5%, SpiceJet: ~4%
-        assert DEFAULT_AIRLINE_MARKET_SHARES["6E"] == 0.62
-        assert DEFAULT_AIRLINE_MARKET_SHARES["AI"] == 0.20
-        assert DEFAULT_AIRLINE_MARKET_SHARES["IX"] == 0.08
-        assert DEFAULT_AIRLINE_MARKET_SHARES["QP"] == 0.05
-        assert DEFAULT_AIRLINE_MARKET_SHARES["SG"] == 0.04
+        # Modelled shares mirroring ingestion.config.AIRLINES, not DGCA figures.
+        assert DEFAULT_AIRLINE_MARKET_SHARES["6E"] == 0.60
+        assert DEFAULT_AIRLINE_MARKET_SHARES["AI"] == 0.15
+        assert DEFAULT_AIRLINE_MARKET_SHARES["IX"] == 0.10
+        assert DEFAULT_AIRLINE_MARKET_SHARES["QP"] == 0.10
+        assert DEFAULT_AIRLINE_MARKET_SHARES["SG"] == 0.05
 
+        # These previously summed to 0.99, which under-weighted every carrier.
         total_market_share = sum(DEFAULT_AIRLINE_MARKET_SHARES.values())
-        assert (
-            pytest.approx(total_market_share, abs=1e-5) == 0.99
-        )  # 99% covered domestic carriers
+        assert pytest.approx(total_market_share, abs=1e-9) == 1.0
 
     def test_booking_windows_standardization(self) -> None:
-        """The 4 standard booking windows (T+1, T+7, T+15, T+30) match across subsystems."""
+        """The 5 standard booking windows (T+1, T+7, T+15, T+30, T+45) match across subsystems."""
         codes = [w.code for w in BOOKING_WINDOWS]
-        assert codes == ["T+1", "T+7", "T+15", "T+30"]
+        assert codes == ["T+1", "T+7", "T+15", "T+30", "T+45"]
 
         days = [w.days_advance for w in BOOKING_WINDOWS]
-        assert days == [1, 7, 15, 30]
+        assert days == [1, 7, 15, 30, 45]
 
         # Quant engine weights sum to 1.0
         window_weights_sum = sum(DEFAULT_BOOKING_WINDOW_WEIGHTS.values())

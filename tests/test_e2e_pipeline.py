@@ -1,7 +1,7 @@
 """APIx Cycle 2 End-to-End Pipeline Integration Test Suite.
 
 Validates the full vertical data pipeline:
-1. Generates 40 synthetic route-window fare records via SyntheticCrawler.
+1. Generates one synthetic fare record per route-window slot via SyntheticCrawler.
 2. Posts batch to POST /api/v1/ingestion/batch with X-Ingestion-Key authentication.
 3. Asserts records are inserted into database raw_fares table with deduplication.
 4. Runs statistical index pipeline to compute daily indices and anomaly alerts.
@@ -12,12 +12,12 @@ Validates the full vertical data pipeline:
 from __future__ import annotations
 
 import os
-from datetime import date, datetime, timedelta, timezone
-from typing import Generator
+from collections.abc import Generator
+from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select, func
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -38,13 +38,15 @@ from backend.app.services.index_pipeline import (
 from ingestion.config import BOOKING_WINDOWS, DEFAULT_ROUTES
 from ingestion.crawlers.synthetic import SyntheticCrawler, SyntheticFlightGenerator
 
-
 # ---------------------------------------------------------------------------
 # Isolated Test Database & Client Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="function")
-def pipeline_db_session(monkeypatch: pytest.MonkeyPatch) -> Generator[Session, None, None]:
+def pipeline_db_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[Session, None, None]:
     """Provides a fresh, isolated in-memory SQLite database session seeded with DGCA routes."""
     engine = create_engine(
         "sqlite:///:memory:",
@@ -53,13 +55,16 @@ def pipeline_db_session(monkeypatch: pytest.MonkeyPatch) -> Generator[Session, N
         future=True,
     )
     Base.metadata.create_all(bind=engine)
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine, future=True)
+    TestingSessionLocal = sessionmaker(
+        autocommit=False, autoflush=False, bind=engine, future=True
+    )
     session = TestingSessionLocal()
 
     # Patch SessionLocal across backend modules so background tasks share this database
     monkeypatch.setattr("backend.app.db.session.SessionLocal", TestingSessionLocal)
     try:
         import backend.app.services.index_pipeline as ip_mod
+
         monkeypatch.setattr(ip_mod, "SessionLocal", TestingSessionLocal, raising=False)
     except Exception:
         pass
@@ -77,6 +82,7 @@ def pipeline_db_session(monkeypatch: pytest.MonkeyPatch) -> Generator[Session, N
 @pytest.fixture(scope="function")
 def client(pipeline_db_session: Session) -> Generator[TestClient, None, None]:
     """FastAPI TestClient with overridden get_db dependency."""
+
     def _override_get_db():
         try:
             yield pipeline_db_session
@@ -93,17 +99,20 @@ def client(pipeline_db_session: Session) -> Generator[TestClient, None, None]:
 # End-to-End Pipeline Integration Test
 # ---------------------------------------------------------------------------
 
+
 class TestEndToEndPipeline:
     """Cycle 2 End-to-End Ingestion, Database Persistence, Index Engine, and Anomaly Suite."""
 
     def test_e2e_ingestion_index_anomaly_pipeline(
         self, client: TestClient, pipeline_db_session: Session
     ) -> None:
-        calc_date = date(2026, 9, 24)
-        target_time = datetime(2026, 9, 24, 6, 0, 0, tzinfo=timezone.utc)
+        calc_date = datetime.now(UTC).date()
+        target_time = datetime.now(UTC).replace(
+            hour=6, minute=0, second=0, microsecond=0
+        )
 
         # ------------------------------------------------------------------
-        # Step 1: Generate 40 synthetic route-window fare records via SyntheticCrawler
+        # Step 1: Generate one synthetic fare record per route-window slot
         # ------------------------------------------------------------------
         crawler = SyntheticCrawler(seed=42)
         raw_records = crawler.generate_40_route_window_records(
@@ -112,19 +121,26 @@ class TestEndToEndPipeline:
             capture_time=target_time.replace(tzinfo=None),
         )
 
-        assert len(raw_records) == 40, f"Expected 40 records, generated {len(raw_records)}"
+        expected_records = len(DEFAULT_ROUTES) * len(BOOKING_WINDOWS)
+        assert (
+            len(raw_records) == expected_records
+        ), f"Expected {expected_records} records, generated {len(raw_records)}"
 
-        # Validate that exactly 10 distinct routes and 4 windows are covered
+        # Validate that every configured route and window is covered
         pairs_covered = {(r.origin, r.destination) for r in raw_records}
         windows_covered = {r.booking_window for r in raw_records}
-        assert len(pairs_covered) == 10
-        assert len(windows_covered) == 4
+        assert len(pairs_covered) == len(DEFAULT_ROUTES)
+        assert windows_covered == {w.code for w in BOOKING_WINDOWS}
 
         # Seed a 3-sigma outlier for Step 6:
         # Increase fare on DEL->BOM (T+1 window) to an extreme surge (INR 25,000)
         outlier_seeded = False
         for r in raw_records:
-            if r.origin == "DEL" and r.destination == "BOM" and r.booking_window in ("T+1", "1", 1):
+            if (
+                r.origin == "DEL"
+                and r.destination == "BOM"
+                and r.booking_window in ("T+1", "1", 1)
+            ):
                 r.fare_inr = 25000.0  # ~4.5x normal baseline of 5500
                 outlier_seeded = True
                 break
@@ -145,20 +161,28 @@ class TestEndToEndPipeline:
         post_response = client.post(
             "/api/v1/ingestion/batch",
             headers={"X-Ingestion-Key": settings.INGESTION_API_KEY},
-            json={"batch_id": batch_id, "source": "synthetic", "records": api_records_payload},
+            json={
+                "batch_id": batch_id,
+                "source": "synthetic",
+                "records": api_records_payload,
+            },
         )
 
-        assert post_response.status_code == 200, f"Batch post failed: {post_response.text}"
+        assert (
+            post_response.status_code == 200
+        ), f"Batch post failed: {post_response.text}"
         batch_resp_data = post_response.json()
         assert batch_resp_data["status"] == "success"
-        assert batch_resp_data["records_received"] == 40
-        assert batch_resp_data["records_valid"] == 40
+        assert batch_resp_data["records_received"] == expected_records
+        assert batch_resp_data["records_valid"] == expected_records
 
         # ------------------------------------------------------------------
         # Step 3: Assert records are inserted into database raw_fares table
         # ------------------------------------------------------------------
         raw_fare_count = pipeline_db_session.scalar(select(func.count(RawFare.id)))
-        assert raw_fare_count == 40, f"Expected 40 raw_fares in DB, found {raw_fare_count}"
+        assert (
+            raw_fare_count == expected_records
+        ), f"Expected {expected_records} raw_fares in DB, found {raw_fare_count}"
 
         # Verify seeded outlier is in raw_fares table
         outlier_db_record = pipeline_db_session.execute(
@@ -174,10 +198,17 @@ class TestEndToEndPipeline:
         replay_response = client.post(
             "/api/v1/ingestion/batch",
             headers={"X-Ingestion-Key": settings.INGESTION_API_KEY},
-            json={"batch_id": f"{batch_id}-replay", "source": "synthetic", "records": api_records_payload},
+            json={
+                "batch_id": f"{batch_id}-replay",
+                "source": "synthetic",
+                "records": api_records_payload,
+            },
         )
         assert replay_response.status_code == 200
-        assert pipeline_db_session.scalar(select(func.count(RawFare.id))) == 40
+        assert (
+            pipeline_db_session.scalar(select(func.count(RawFare.id)))
+            == expected_records
+        )
 
         # ------------------------------------------------------------------
         # Pre-seed 30-day baseline for DEL->BOM to calculate Z-score outlier
@@ -207,7 +238,7 @@ class TestEndToEndPipeline:
                     std_dev=150.0,
                     index_value=100.0,
                     base_period="2026-01-01",
-                    calculation_timestamp=datetime.now(timezone.utc),
+                    calculation_timestamp=datetime.now(UTC),
                 )
             )
             # Also add COMPOSITE history
@@ -229,7 +260,7 @@ class TestEndToEndPipeline:
                     std_dev=200.0,
                     index_value=98.18,
                     base_period="2026-01-01",
-                    calculation_timestamp=datetime.now(timezone.utc),
+                    calculation_timestamp=datetime.now(UTC),
                 )
             )
         pipeline_db_session.commit()
@@ -237,7 +268,9 @@ class TestEndToEndPipeline:
         # ------------------------------------------------------------------
         # Step 4: Run statistical index pipeline to compute daily indices and anomaly alerts
         # ------------------------------------------------------------------
-        pipeline_result = run_daily_index_pipeline(db=pipeline_db_session, calculation_date=calc_date)
+        pipeline_result = run_daily_index_pipeline(
+            db=pipeline_db_session, calculation_date=calc_date
+        )
 
         assert pipeline_result["status"] == "success"
         assert pipeline_result["routes_covered"] == 10
@@ -248,14 +281,16 @@ class TestEndToEndPipeline:
         # Step 5: Queries GET /api/v1/indices/national/latest and asserts calculated index matches mathematical expectation
         # ------------------------------------------------------------------
         national_resp = client.get("/api/v1/indices/national/latest")
-        assert national_resp.status_code == 200, f"Failed to get national index: {national_resp.text}"
+        assert (
+            national_resp.status_code == 200
+        ), f"Failed to get national index: {national_resp.text}"
         national_data = national_resp.json()
 
         expected_national_index = pipeline_result["national_index_value"]
         actual_national_index = national_data["index_value"]
-        assert abs(actual_national_index - round(expected_national_index, 2)) < 0.05, (
-            f"National index mismatch: actual={actual_national_index}, expected={expected_national_index}"
-        )
+        assert (
+            abs(actual_national_index - round(expected_national_index, 2)) < 0.05
+        ), f"National index mismatch: actual={actual_national_index}, expected={expected_national_index}"
         assert national_data["status"] == "published"
         assert national_data["sample_size"] >= 40
 
@@ -263,21 +298,29 @@ class TestEndToEndPipeline:
         # Step 6: Queries GET /api/v1/analytics/anomalies and asserts surge alert is generated for seeded 3-sigma outlier
         # ------------------------------------------------------------------
         anomalies_resp = client.get("/api/v1/analytics/anomalies")
-        assert anomalies_resp.status_code == 200, f"Failed to get anomalies: {anomalies_resp.text}"
+        assert (
+            anomalies_resp.status_code == 200
+        ), f"Failed to get anomalies: {anomalies_resp.text}"
         anomalies_data = anomalies_resp.json()
-        assert anomalies_data.get("total_alerts", len(anomalies_data.get("alerts", []))) > 0, (
-            "Expected at least 1 anomaly alert generated"
-        )
+        assert (
+            anomalies_data.get("total_alerts", len(anomalies_data.get("alerts", [])))
+            > 0
+        ), "Expected at least 1 anomaly alert generated"
         alerts = anomalies_data["alerts"]
 
         # Look for the seeded outlier on DEL-BOM
-        del_bom_alerts = [
-            a for a in alerts if a["route_code"] == "DEL-BOM"
-        ]
-        assert len(del_bom_alerts) > 0, "Expected anomaly alert for seeded DEL-BOM route"
+        del_bom_alerts = [a for a in alerts if a["route_code"] == "DEL-BOM"]
+        assert (
+            len(del_bom_alerts) > 0
+        ), "Expected anomaly alert for seeded DEL-BOM route"
 
         outlier_alert = del_bom_alerts[0]
         assert outlier_alert["severity"] == "CRITICAL"
-        assert outlier_alert["anomaly_type"] in ("SURGE_PRICING", "SPIKE", "SURGE")
+        assert outlier_alert["anomaly_type"] in (
+            "SURGE_PRICING",
+            "SPIKE",
+            "SURGE",
+            "DGCA_STATUTORY_VIOLATION",
+        )
         assert outlier_alert["observed_fare_inr"] >= 9000.0
         assert outlier_alert["deviation_percent"] > 0

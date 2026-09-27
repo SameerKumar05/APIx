@@ -15,7 +15,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import yaml
 
@@ -32,15 +32,15 @@ def log_info(msg: str) -> None:
     print(f"\033[36mℹ INFO:\033[0m {msg}")
 
 
-def verify_scrape_workflow(workflow_path: Path) -> List[str]:
+def verify_scrape_workflow(workflow_path: Path) -> list[str]:
     """Validates .github/workflows/scrape.yml according to Cycle 2 requirements."""
-    errors: List[str] = []
+    errors: list[str] = []
     if not workflow_path.is_file():
         return [f"Workflow file does not exist: {workflow_path}"]
 
     try:
         content = workflow_path.read_text(encoding="utf-8")
-        data: Dict[str, Any] = yaml.safe_load(content)
+        data: dict[str, Any] = yaml.safe_load(content)
     except Exception as exc:
         return [f"YAML parsing failed for {workflow_path}: {exc}"]
 
@@ -56,7 +56,9 @@ def verify_scrape_workflow(workflow_path: Path) -> List[str]:
         else:
             crons = [s.get("cron") for s in schedule if isinstance(s, dict)]
             if "0 2 * * *" not in crons:
-                errors.append(f"Expected cron '0 2 * * *' not found in schedule: {crons}")
+                errors.append(
+                    f"Expected cron '0 2 * * *' not found in schedule: {crons}"
+                )
 
         # workflow_dispatch check
         if "workflow_dispatch" not in on:
@@ -100,11 +102,17 @@ def verify_scrape_workflow(workflow_path: Path) -> List[str]:
     playwright_install = False
     for step in steps:
         run_cmd = step.get("run", "")
-        if "playwright install" in run_cmd and "--with-deps" in run_cmd and "chromium" in run_cmd:
+        if (
+            "playwright install" in run_cmd
+            and "--with-deps" in run_cmd
+            and "chromium" in run_cmd
+        ):
             playwright_install = True
             break
     if not playwright_install:
-        errors.append("Playwright install command 'playwright install --with-deps chromium' not found")
+        errors.append(
+            "Playwright install command 'playwright install --with-deps chromium' not found"
+        )
 
     # Check secret injection
     required_secrets = {
@@ -151,15 +159,15 @@ def verify_scrape_workflow(workflow_path: Path) -> List[str]:
     return errors
 
 
-def verify_docker_compose(compose_path: Path) -> List[str]:
+def verify_docker_compose(compose_path: Path) -> list[str]:
     """Validates docker-compose.yml services, ports, and healthchecks."""
-    errors: List[str] = []
+    errors: list[str] = []
     if not compose_path.is_file():
         return [f"docker-compose.yml does not exist at {compose_path}"]
 
     try:
         content = compose_path.read_text(encoding="utf-8")
-        data: Dict[str, Any] = yaml.safe_load(content)
+        data: dict[str, Any] = yaml.safe_load(content)
     except Exception as exc:
         return [f"YAML parsing failed for {compose_path}: {exc}"]
 
@@ -167,7 +175,9 @@ def verify_docker_compose(compose_path: Path) -> List[str]:
     required_services = {"db", "backend", "frontend"}
     missing_services = required_services - set(services.keys())
     if missing_services:
-        errors.append(f"Missing required service(s) in docker-compose.yml: {missing_services}")
+        errors.append(
+            f"Missing required service(s) in docker-compose.yml: {missing_services}"
+        )
 
     # Check db service
     db = services.get("db", {})
@@ -191,7 +201,9 @@ def verify_docker_compose(compose_path: Path) -> List[str]:
     if frontend:
         ports = [str(p) for p in frontend.get("ports", [])]
         if not any("3000" in p for p in ports):
-            errors.append("Service 'frontend' missing port mapping for 3000 (e.g. 3000:80)")
+            errors.append(
+                "Service 'frontend' missing port mapping for 3000 (e.g. 3000:80)"
+            )
         depends = frontend.get("depends_on", {})
         if "backend" not in depends:
             errors.append("Service 'frontend' must depend on 'backend'")
@@ -199,16 +211,16 @@ def verify_docker_compose(compose_path: Path) -> List[str]:
     return errors
 
 
-def verify_dockerfile(dockerfile_path: Path) -> List[str]:
+def verify_dockerfile(dockerfile_path: Path) -> list[str]:
     """Validates Dockerfile syntax, multi-stage targets, security, and directives."""
-    errors: List[str] = []
+    errors: list[str] = []
     if not dockerfile_path.is_file():
         return [f"Dockerfile does not exist at {dockerfile_path}"]
 
     content = dockerfile_path.read_text(encoding="utf-8")
     lines = content.splitlines()
 
-    from_stages = [l for l in lines if l.strip().upper().startswith("FROM")]
+    from_stages = [ln for ln in lines if ln.strip().upper().startswith("FROM")]
     if not any("AS backend" in s for s in from_stages):
         errors.append("Dockerfile missing stage 'AS backend'")
     if not any("AS frontend" in s for s in from_stages):
@@ -226,15 +238,17 @@ def verify_dockerfile(dockerfile_path: Path) -> List[str]:
     return errors
 
 
-def verify_deployment_docs(docs_path: Path) -> List[str]:
+def verify_deployment_docs(docs_path: Path) -> list[str]:
     """Validates docs/deployment.md for comprehensive deployment instructions."""
-    errors: List[str] = []
+    errors: list[str] = []
     if not docs_path.is_file():
         return [f"Documentation file does not exist: {docs_path}"]
 
     content = docs_path.read_text(encoding="utf-8")
     if len(content) < 5000:
-        errors.append(f"docs/deployment.md too brief ({len(content)} bytes), expected >= 5000 bytes")
+        errors.append(
+            f"docs/deployment.md too brief ({len(content)} bytes), expected >= 5000 bytes"
+        )
 
     required_keywords = [
         "Render",
@@ -262,10 +276,14 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
     os.chdir(repo_root)
 
-    print("================================================================================")
+    print(
+        "================================================================================"
+    )
     print("APIx Deployment Artifacts & Configuration Verification")
     print("SIH 2026 PS 26056 - LeadArchitect Deliverables Verification")
-    print("================================================================================\n")
+    print(
+        "================================================================================\n"
+    )
 
     total_failures = 0
 
@@ -278,7 +296,9 @@ def main() -> int:
             log_fail(err)
         total_failures += len(workflow_errors)
     else:
-        log_pass("Scraper workflow syntax, cron (0 2 * * *), Python 3.12, Playwright caching, secrets, and artifacts")
+        log_pass(
+            "Scraper workflow syntax, cron (0 2 * * *), Python 3.12, Playwright caching, secrets, and artifacts"
+        )
 
     # 2. Docker Compose verification
     compose_path = repo_root / "docker-compose.yml"
@@ -289,7 +309,9 @@ def main() -> int:
             log_fail(err)
         total_failures += len(compose_errors)
     else:
-        log_pass("Docker Compose syntax, services (db, backend, frontend), healthchecks, and dependency graph")
+        log_pass(
+            "Docker Compose syntax, services (db, backend, frontend), healthchecks, and dependency graph"
+        )
 
     # 3. Dockerfile verification
     dockerfile_path = repo_root / "Dockerfile"
@@ -300,7 +322,9 @@ def main() -> int:
             log_fail(err)
         total_failures += len(dockerfile_errors)
     else:
-        log_pass("Dockerfile multi-stage targets (backend, frontend), non-root security user, EXPOSE, and HEALTHCHECK")
+        log_pass(
+            "Dockerfile multi-stage targets (backend, frontend), non-root security user, EXPOSE, and HEALTHCHECK"
+        )
 
     # 4. Deployment docs verification
     docs_path = repo_root / "docs" / "deployment.md"
@@ -311,15 +335,16 @@ def main() -> int:
             log_fail(err)
         total_failures += len(docs_errors)
     else:
-        log_pass(f"Deployment guide comprehensive coverage ({len(docs_path.read_text())} characters)")
+        log_pass(
+            f"Deployment guide comprehensive coverage ({len(docs_path.read_text())} characters)"
+        )
 
     # 5. Docker Compose CLI Config Lint
     log_info("Executing 'docker compose config' for syntax and variable linting...")
     try:
         proc = subprocess.run(
             ["docker", "compose", "config"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=15,
         )
@@ -331,12 +356,18 @@ def main() -> int:
     except Exception as exc:
         log_info(f"docker compose command check skipped or failed: {exc}")
 
-    print("\n--------------------------------------------------------------------------------")
+    print(
+        "\n--------------------------------------------------------------------------------"
+    )
     if total_failures == 0:
-        print("\033[32m\033[1m>>> ALL DEPLOYMENT ARTIFACT VERIFICATIONS PASSED (0 FAILURES) <<<\033[0m")
+        print(
+            "\033[32m\033[1m>>> ALL DEPLOYMENT ARTIFACT VERIFICATIONS PASSED (0 FAILURES) <<<\033[0m"
+        )
         return 0
     else:
-        print(f"\033[31m\033[1m>>> DEPLOYMENT VERIFICATION ENCOUNTERED {total_failures} FAILURE(S) <<<\033[0m")
+        print(
+            f"\033[31m\033[1m>>> DEPLOYMENT VERIFICATION ENCOUNTERED {total_failures} FAILURE(S) <<<\033[0m"
+        )
         return 1
 
 

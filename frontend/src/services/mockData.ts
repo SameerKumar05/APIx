@@ -43,6 +43,7 @@ export const mockNationalLatest: NationalIndexLatestResponse = {
   t7_index: 128.60,
   t15_index: 114.10,
   t30_index: 99.40,
+  t45_index: 94.20,
 };
 export const generateMockNationalHistory = (days: number = 30): NationalIndexPoint[] => {
   const points: NationalIndexPoint[] = [];
@@ -75,6 +76,8 @@ export const generateMockNationalHistory = (days: number = 30): NationalIndexPoi
     const t15_index = Number((index_value * 0.96 + Math.sin(i * 0.5) * 1.2).toFixed(2));
     // T+30: advance baseline booking window (96 - 103)
     const t30_index = Number((index_value * 0.84 + Math.cos(i * 0.4) * 0.9).toFixed(2));
+    // T+45: long advance booking window (92 - 98)
+    const t45_index = Number((index_value * 0.79 + Math.sin(i * 0.3) * 0.7).toFixed(2));
 
     points.push({
       timestamp: d.toISOString(),
@@ -89,6 +92,7 @@ export const generateMockNationalHistory = (days: number = 30): NationalIndexPoi
       t7_index,
       t15_index,
       t30_index,
+      t45_index,
     });
   }
 
@@ -604,7 +608,36 @@ export const mockSystemHealth: SystemHealthResponse = {
   records_ingested_today: 142850,
   last_sync_timestamp: new Date().toISOString(),
   supported_airlines: ['IndiGo (6E)', 'Air India (AI)', 'SpiceJet (SG)', 'Akasa Air (QP)'],
-  supported_otas: ['MakeMyTrip', 'EaseMyTrip', 'Ixigo', 'Yatra'],
+  supported_sources: [
+    'makemytrip',
+    'easemytrip',
+    'spicejet',
+    'indigo',
+    'airindia',
+    'airindiaexpress',
+    'akasa',
+    'yatra',
+    'cleartrip',
+    'ixigo',
+    'goibibo',
+  ],
+  source_types: {
+    makemytrip: 'ota',
+    easemytrip: 'ota',
+    spicejet: 'airline_direct',
+    indigo: 'airline_direct',
+    airindia: 'airline_direct',
+    airindiaexpress: 'airline_direct',
+    akasa: 'airline_direct',
+    yatra: 'ota',
+    cleartrip: 'ota',
+    ixigo: 'ota',
+    goibibo: 'ota',
+  },
+  ps_named_sources_total: 11,
+  ps_named_sources_implemented: 11,
+  live_verified_sources: [],
+  produces_live_fares: false,
   latency_ms: 42,
 };
 
@@ -1064,6 +1097,14 @@ export const mockPriceElasticity: PriceElasticityResponse = {
   route_code: 'NATIONAL',
   as_of_date: new Date().toISOString().split('T')[0],
   gradient_points: [
+    {
+      lead_window: 'T+45',
+      days_before_departure: 45,
+      surge_multiplier: 0.92,
+      avg_fare_inr: 4020,
+      price_elasticity: -0.22,
+      demand_index: 74.8,
+    },
     {
       lead_window: 'T+30',
       days_before_departure: 30,

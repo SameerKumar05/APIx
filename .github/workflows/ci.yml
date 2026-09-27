@@ -113,6 +113,14 @@ jobs:
         run: |
           bun scripts/verify-mock-data.ts
 
+      - name: Install Playwright Chromium
+        run: |
+          bunx playwright-core install chromium --with-deps
+
+      - name: Verify Tooltip Contrast Gate
+        run: |
+          bun scripts/verify-contrast.ts
+
   master-verification:
     name: Master Verification Harness
     needs: [lint, test-backend]

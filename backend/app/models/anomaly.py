@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -118,7 +118,7 @@ class AnomalyAlert(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
     resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -153,9 +153,7 @@ class AnomalyAlert(Base):
             "description": self.description,
             "status": self.status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "resolved_at": (
-                self.resolved_at.isoformat() if self.resolved_at else None
-            ),
+            "resolved_at": (self.resolved_at.isoformat() if self.resolved_at else None),
         }
 
     def __repr__(self) -> str:

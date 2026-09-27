@@ -12,9 +12,10 @@ import hashlib
 import logging
 import time
 from collections import OrderedDict
-from dataclasses import asdict, dataclass, field
-from datetime import date, datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
+from typing import Any
 
 from backend.app.services.index_engine import (
     FlightQuote,
@@ -28,22 +29,22 @@ from backend.app.services.index_engine import (
 logger = logging.getLogger("apix.services.streaming_dedup")
 
 
-def _parse_timestamp(raw_ts: Any) -> Optional[datetime]:
+def _parse_timestamp(raw_ts: Any) -> datetime | None:
     """Parse various timestamp representations into timezone-aware UTC datetime."""
     if raw_ts is None:
         return None
     if isinstance(raw_ts, datetime):
         if raw_ts.tzinfo is None:
-            return raw_ts.replace(tzinfo=timezone.utc)
-        return raw_ts.astimezone(timezone.utc)
+            return raw_ts.replace(tzinfo=UTC)
+        return raw_ts.astimezone(UTC)
     if isinstance(raw_ts, date):
-        return datetime(raw_ts.year, raw_ts.month, raw_ts.day, tzinfo=timezone.utc)
+        return datetime(raw_ts.year, raw_ts.month, raw_ts.day, tzinfo=UTC)
     if isinstance(raw_ts, (int, float)):
         # Epoch timestamp in seconds or milliseconds
         val = float(raw_ts)
         if val > 1e11:  # Milliseconds
             val /= 1000.0
-        return datetime.fromtimestamp(val, tz=timezone.utc)
+        return datetime.fromtimestamp(val, tz=UTC)
     if isinstance(raw_ts, str):
         s = raw_ts.strip()
         if not s:
@@ -54,8 +55,8 @@ def _parse_timestamp(raw_ts: Any) -> Optional[datetime]:
         try:
             dt = datetime.fromisoformat(s)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt.astimezone(timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
+            return dt.astimezone(UTC)
         except ValueError:
             pass
         for fmt in (
@@ -67,8 +68,8 @@ def _parse_timestamp(raw_ts: Any) -> Optional[datetime]:
             try:
                 dt = datetime.strptime(s, fmt)
                 if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                return dt.astimezone(timezone.utc)
+                    dt = dt.replace(tzinfo=UTC)
+                return dt.astimezone(UTC)
             except ValueError:
                 continue
     return None
@@ -87,16 +88,18 @@ class FlightBufferState:
     flight_date: str
     departure_time: str
     cabin_class: str
-    quotes_by_portal: Dict[str, FlightQuote] = field(default_factory=dict)
+    quotes_by_portal: dict[str, FlightQuote] = field(default_factory=dict)
     min_fare: float = float("inf")
-    best_quote: Optional[FlightQuote] = None
+    best_quote: FlightQuote | None = None
     best_source_portal: str = "unknown"
-    first_seen_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    last_updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    latest_event_time: Optional[datetime] = None
+    first_seen_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    latest_event_time: datetime | None = None
     total_quotes_received: int = 0
 
-    def update_quote(self, quote: FlightQuote, arrival_dt: datetime) -> Tuple[bool, bool, Optional[float]]:
+    def update_quote(
+        self, quote: FlightQuote, arrival_dt: datetime
+    ) -> tuple[bool, bool, float | None]:
         """Updates buffer with quote.
 
         Returns:
@@ -107,7 +110,10 @@ class FlightBufferState:
         prev_quote_for_portal = self.quotes_by_portal.get(portal)
 
         is_duplicate = False
-        if prev_quote_for_portal is not None and abs(prev_quote_for_portal.fare - quote.fare) < 1e-6:
+        if (
+            prev_quote_for_portal is not None
+            and abs(prev_quote_for_portal.fare - quote.fare) < 1e-6
+        ):
             is_duplicate = True
 
         self.quotes_by_portal[portal] = quote
@@ -115,24 +121,31 @@ class FlightBufferState:
         self.total_quotes_received += 1
 
         # Check latest event time
-        event_dt = _parse_timestamp(quote.metadata.get("departure_datetime") or quote.metadata.get("booking_datetime"))
+        event_dt = _parse_timestamp(
+            quote.metadata.get("departure_datetime")
+            or quote.metadata.get("booking_datetime")
+        )
         if event_dt:
             if self.latest_event_time is None or event_dt > self.latest_event_time:
                 self.latest_event_time = event_dt
 
         # Re-resolve minimum consumer price across platforms
-        old_best = self.best_quote
-        best_q: Optional[FlightQuote] = None
+        best_q: FlightQuote | None = None
         min_p = float("inf")
 
-        for p_name, q in self.quotes_by_portal.items():
+        for _p_name, q in self.quotes_by_portal.items():
+            status = getattr(q, "flight_status", None)
+            if status in ("cancelled", "sold_out"):
+                continue
             if q.fare < min_p:
                 min_p = q.fare
                 best_q = q
 
         self.min_fare = min_p
         self.best_quote = best_q
-        self.best_source_portal = best_q.source_portal if best_q else "unknown"
+        self.best_source_portal = (
+            best_q.source_portal if best_q and best_q.source_portal else "unknown"
+        )
 
         is_new_min = False
         if prev_min is None or (self.min_fare < prev_min - 1e-6):
@@ -140,16 +153,20 @@ class FlightBufferState:
 
         return is_new_min, is_duplicate, prev_min
 
-    def get_fare_spread(self) -> Tuple[Optional[float], Optional[float]]:
+    def get_fare_spread(self) -> tuple[float | None, float | None]:
         """Calculates current fare spread (max - min) in INR and percentage across portals."""
-        if len(self.quotes_by_portal) <= 1 or self.min_fare <= 0 or self.min_fare == float("inf"):
+        if (
+            len(self.quotes_by_portal) <= 1
+            or self.min_fare <= 0
+            or self.min_fare == float("inf")
+        ):
             return None, None
         max_fare = max(q.fare for q in self.quotes_by_portal.values())
         spread_inr = round(max_fare - self.min_fare, 2)
         spread_pct = round((spread_inr / self.min_fare) * 100.0, 4)
         return spread_inr, spread_pct
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         spread_inr, spread_pct = self.get_fare_spread()
         return {
             "flight_key": self.flight_key,
@@ -185,17 +202,17 @@ class DedupResult:
     is_duplicate_price: bool
     min_fare: float
     best_quote: FlightQuote
-    previous_min_fare: Optional[float]
+    previous_min_fare: float | None
     portal_count: int
     current_portal: str
     current_fare: float
     latency_us: float
-    spread_inr: Optional[float] = None
-    spread_pct: Optional[float] = None
-    portal_fares: Dict[str, float] = field(default_factory=dict)
+    spread_inr: float | None = None
+    spread_pct: float | None = None
+    portal_fares: dict[str, float] = field(default_factory=dict)
     out_of_order: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "flight_key": self.flight_key,
             "hash_id": self.hash_id,
@@ -248,7 +265,7 @@ class StreamingDedupEngine:
         # Mapping: flight_key -> FlightBufferState
         self._buffer: OrderedDict[str, FlightBufferState] = OrderedDict()
         # Mapping: hash_id -> flight_key
-        self._hash_to_key: Dict[str, str] = {}
+        self._hash_to_key: dict[str, str] = {}
 
         # Streaming metrics & statistics
         self._total_processed: int = 0
@@ -259,12 +276,12 @@ class StreamingDedupEngine:
         self._out_of_order_count: int = 0
         self._total_latency_ns: int = 0
         self._max_latency_ns: int = 0
-        self._watermark_ts: Optional[datetime] = None
+        self._watermark_ts: datetime | None = None
 
     @staticmethod
     def generate_flight_key(
-        item: Union[FlightQuote, Mapping[str, Any], Any],
-    ) -> Tuple[str, str]:
+        item: FlightQuote | Mapping[str, Any] | Any,
+    ) -> tuple[str, str]:
         """Generates deterministic canonical flight key and SHA-256 hash fingerprint.
 
         Canonical components:
@@ -279,9 +296,13 @@ class StreamingDedupEngine:
         origin = _normalize_code(_extract_field(item, "origin"))
         destination = _normalize_code(_extract_field(item, "destination"))
         flight_date = _normalize_date(_extract_field(item, "flight_date"))
-        departure_time = _normalize_departure_time(_extract_field(item, "departure_time"))
+        departure_time = _normalize_departure_time(
+            _extract_field(item, "departure_time")
+        )
 
-        cabin_class = str(_extract_field(item, "cabin_class", "economy")).strip().lower()
+        cabin_class = (
+            str(_extract_field(item, "cabin_class", "economy")).strip().lower()
+        )
         if not cabin_class:
             cabin_class = "economy"
 
@@ -299,8 +320,8 @@ class StreamingDedupEngine:
 
     def _normalize_to_quote(
         self,
-        item: Union[FlightQuote, Mapping[str, Any], Any],
-    ) -> Tuple[FlightQuote, str, str, str]:
+        item: FlightQuote | Mapping[str, Any] | Any,
+    ) -> tuple[FlightQuote, str, str, str]:
         """Convert input item into normalized FlightQuote and extracted key components."""
         origin = _normalize_code(_extract_field(item, "origin"))
         destination = _normalize_code(_extract_field(item, "destination"))
@@ -308,7 +329,9 @@ class StreamingDedupEngine:
         airline_code = _normalize_code(_extract_field(item, "airline_code"))
         raw_flight_num = _extract_field(item, "flight_number")
         flight_number = _normalize_flight_number(raw_flight_num, airline_code)
-        departure_time = _normalize_departure_time(_extract_field(item, "departure_time"))
+        departure_time = _normalize_departure_time(
+            _extract_field(item, "departure_time")
+        )
 
         dep_dt_raw = _extract_field(item, "departure_datetime")
         if dep_dt_raw:
@@ -322,7 +345,10 @@ class StreamingDedupEngine:
         booking_window = _extract_field(item, "booking_window", None)
         currency = str(_extract_field(item, "currency", "INR"))
         is_nonstop = bool(_extract_field(item, "is_nonstop", True))
-        cabin_class = str(_extract_field(item, "cabin_class", "economy")).strip().lower() or "economy"
+        cabin_class = (
+            str(_extract_field(item, "cabin_class", "economy")).strip().lower()
+            or "economy"
+        )
 
         metadata = _extract_field(item, "metadata", {})
         if not isinstance(metadata, dict):
@@ -336,6 +362,17 @@ class StreamingDedupEngine:
 
         canonical_key, hash_id = self.generate_flight_key(item)
 
+        base_fare_val = _extract_field(item, "base_fare")
+        base_fare = float(base_fare_val) if base_fare_val is not None else None
+        taxes_and_fees_val = _extract_field(item, "taxes_and_fees")
+        taxes_and_fees = float(taxes_and_fees_val) if taxes_and_fees_val is not None else None
+        udf_fee_val = _extract_field(item, "udf_fee")
+        udf_fee = float(udf_fee_val) if udf_fee_val is not None else None
+        conv_fee_val = _extract_field(item, "convenience_fee")
+        convenience_fee = float(conv_fee_val) if conv_fee_val is not None else None
+        flight_status = _extract_field(item, "flight_status")
+        fare_split_basis = _extract_field(item, "fare_split_basis")
+
         quote = FlightQuote(
             origin=origin,
             destination=destination,
@@ -348,14 +385,20 @@ class StreamingDedupEngine:
             booking_window=booking_window,
             currency=currency,
             is_nonstop=is_nonstop,
+            base_fare=base_fare,
+            taxes_and_fees=taxes_and_fees,
+            udf_fee=udf_fee,
+            convenience_fee=convenience_fee,
+            flight_status=flight_status,
+            fare_split_basis=fare_split_basis,
             metadata=metadata,
         )
         return quote, canonical_key, hash_id, cabin_class
 
     def ingest(
         self,
-        quote_input: Union[FlightQuote, Mapping[str, Any], Any],
-        arrival_time: Optional[datetime] = None,
+        quote_input: FlightQuote | Mapping[str, Any] | Any,
+        arrival_time: datetime | None = None,
     ) -> DedupResult:
         """Ingests a streaming flight fare quote and resolves minimum consumer price in sub-millisecond latency.
 
@@ -367,9 +410,9 @@ class StreamingDedupEngine:
             DedupResult containing deduplicated flight state, minimum consumer price, and latency.
         """
         start_ns = time.perf_counter_ns()
-        now_utc = arrival_time or datetime.now(timezone.utc)
+        now_utc = arrival_time or datetime.now(UTC)
         if now_utc.tzinfo is None:
-            now_utc = now_utc.replace(tzinfo=timezone.utc)
+            now_utc = now_utc.replace(tzinfo=UTC)
 
         quote, flight_key, hash_id, cabin_class = self._normalize_to_quote(quote_input)
 
@@ -483,43 +526,43 @@ class StreamingDedupEngine:
 
     def ingest_batch(
         self,
-        quotes: Iterable[Union[FlightQuote, Mapping[str, Any], Any]],
-    ) -> List[DedupResult]:
+        quotes: Iterable[FlightQuote | Mapping[str, Any] | Any],
+    ) -> list[DedupResult]:
         """Ingests a sequence/batch of streaming flight quotes in sequence.
 
         Returns:
             List of DedupResult objects corresponding to each quote.
         """
-        results: List[DedupResult] = []
+        results: list[DedupResult] = []
         for q in quotes:
             results.append(self.ingest(q))
         return results
 
-    def get_best_quote(self, flight_key: str) -> Optional[FlightQuote]:
+    def get_best_quote(self, flight_key: str) -> FlightQuote | None:
         """Returns the current best (minimum consumer price) FlightQuote for a flight key."""
         state = self._buffer.get(flight_key)
         return state.best_quote if state else None
 
-    def get_best_quote_by_hash(self, hash_id: str) -> Optional[FlightQuote]:
+    def get_best_quote_by_hash(self, hash_id: str) -> FlightQuote | None:
         """Returns the current best FlightQuote for a given SHA-256 hash fingerprint."""
         flight_key = self._hash_to_key.get(hash_id)
         if not flight_key:
             return None
         return self.get_best_quote(flight_key)
 
-    def get_flight_state(self, flight_key: str) -> Optional[FlightBufferState]:
+    def get_flight_state(self, flight_key: str) -> FlightBufferState | None:
         """Returns the internal FlightBufferState for a flight key."""
         return self._buffer.get(flight_key)
 
-    def get_all_resolved_quotes(self) -> List[FlightQuote]:
+    def get_all_resolved_quotes(self) -> list[FlightQuote]:
         """Returns a snapshot of all canonical deduplicated quotes currently in buffer."""
-        resolved: List[FlightQuote] = []
+        resolved: list[FlightQuote] = []
         for state in self._buffer.values():
             if state.best_quote is not None:
                 resolved.append(state.best_quote)
         return resolved
 
-    def prune_expired(self, current_time: Optional[datetime] = None) -> int:
+    def prune_expired(self, current_time: datetime | None = None) -> int:
         """Evicts expired records whose last update age exceeds window_seconds.
 
         Args:
@@ -528,12 +571,12 @@ class StreamingDedupEngine:
         Returns:
             Number of flight records evicted from buffer.
         """
-        now_utc = current_time or datetime.now(timezone.utc)
+        now_utc = current_time or datetime.now(UTC)
         if now_utc.tzinfo is None:
-            now_utc = now_utc.replace(tzinfo=timezone.utc)
+            now_utc = now_utc.replace(tzinfo=UTC)
 
         cutoff_seconds = self.window_seconds
-        keys_to_remove: List[str] = []
+        keys_to_remove: list[str] = []
 
         for key, state in self._buffer.items():
             age = (now_utc - state.last_updated_at).total_seconds()
@@ -541,7 +584,9 @@ class StreamingDedupEngine:
                 keys_to_remove.append(key)
 
         for key in keys_to_remove:
-            state = self._buffer.pop(key, None)
+            if key not in self._buffer:
+                continue
+            state = self._buffer.pop(key)
             if state:
                 self._hash_to_key.pop(state.hash_id, None)
                 self._window_evictions_count += 1
@@ -551,7 +596,11 @@ class StreamingDedupEngine:
     def _evict_lru(self, count: int) -> int:
         """Evicts oldest accessed/updated flight records to enforce max_buffer_size limit."""
         evicted = 0
-        while self._buffer and len(self._buffer) > self.max_buffer_size and evicted < count:
+        while (
+            self._buffer
+            and len(self._buffer) > self.max_buffer_size
+            and evicted < count
+        ):
             # popitem(last=False) pops the oldest (least recently used) item
             _key, state = self._buffer.popitem(last=False)
             self._hash_to_key.pop(state.hash_id, None)
@@ -573,11 +622,13 @@ class StreamingDedupEngine:
         self._max_latency_ns = 0
         self._watermark_ts = None
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Returns operational metrics and latency statistics of the deduplication engine."""
         avg_latency_us = 0.0
         if self._total_processed > 0:
-            avg_latency_us = round((self._total_latency_ns / self._total_processed) / 1000.0, 3)
+            avg_latency_us = round(
+                (self._total_latency_ns / self._total_processed) / 1000.0, 3
+            )
 
         return {
             "total_processed": self._total_processed,

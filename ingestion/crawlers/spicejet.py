@@ -10,51 +10,41 @@ Provides specialized direct-carrier crawling for SpiceJet (IATA: SG):
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import random
 import re
 import time
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from datetime import UTC, date, datetime, timedelta
+from importlib.util import find_spec
+from typing import Any
 
-try:
-    from playwright.sync_api import (
-        BrowserContext,
-        Page,
-        Playwright,
-        Request as PlaywrightRequest,
-        Response as PlaywrightResponse,
-        Route as PlaywrightRoute,
-        sync_playwright,
-    )
-    HAS_PLAYWRIGHT_SYNC = True
-except ImportError:
-    HAS_PLAYWRIGHT_SYNC = False
-
-try:
-    import httpx
-    HAS_HTTPX = True
-except ImportError:
-    HAS_HTTPX = False
-
+from backend.app.core.cleaning import reported_flight_status, sourced_duration_minutes
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
 from ingestion.config import (
-    BOOKING_WINDOW_MAP,
+    BOOKING_WINDOWS,
     DEFAULT_ROUTES,
+    BookingWindow,
     IngestionConfig,
     Route,
-    VALID_AIRLINE_CODES,
-    VALID_IATA_CODES,
 )
 from ingestion.crawlers.amadeus import AmadeusFlightClient
 from ingestion.crawlers.synthetic import SyntheticFlightGenerator
 
+try:
+    from playwright.sync_api import Response as PlaywrightResponse
+    from playwright.sync_api import Route as PlaywrightRoute
+    from playwright.sync_api import sync_playwright
+
+    HAS_PLAYWRIGHT_SYNC = True
+except ImportError:
+    HAS_PLAYWRIGHT_SYNC = False
+
+HAS_HTTPX = find_spec("httpx") is not None
+
 logger = logging.getLogger("ingestion.crawlers.spicejet")
 
 # Realistic desktop viewports for browser fingerprint randomization
-STEALTH_VIEWPORTS: List[Dict[str, int]] = [
+STEALTH_VIEWPORTS: list[dict[str, int]] = [
     {"width": 1920, "height": 1080},
     {"width": 1440, "height": 900},
     {"width": 1536, "height": 864},
@@ -87,7 +77,7 @@ BLOCKED_RESOURCE_TYPES: frozenset[str] = frozenset(
     {"image", "imageset", "media", "font", "stylesheet"}
 )
 
-TRACKER_DOMAINS: List[str] = [
+TRACKER_DOMAINS: list[str] = [
     r"google-analytics\.com",
     r"googletagmanager\.com",
     r"doubleclick\.net",
@@ -115,17 +105,19 @@ class SpiceJetScraper(BaseScraper):
 
     def __init__(
         self,
-        config: Optional[IngestionConfig] = None,
-        amadeus_client: Optional[AmadeusFlightClient] = None,
-        synthetic_generator: Optional[SyntheticFlightGenerator] = None,
-        proxy: Optional[Union[str, Dict[str, str]]] = None,
+        config: IngestionConfig | None = None,
+        amadeus_client: AmadeusFlightClient | None = None,
+        synthetic_generator: SyntheticFlightGenerator | None = None,
+        proxy: str | dict[str, str] | None = None,
     ) -> None:
         super().__init__(config)
         self.amadeus_client = amadeus_client or AmadeusFlightClient(config=self.config)
-        self.synthetic_generator = synthetic_generator or SyntheticFlightGenerator(config=self.config)
+        self.synthetic_generator = synthetic_generator or SyntheticFlightGenerator(
+            config=self.config
+        )
         self.proxy = proxy or getattr(self.config, "proxy_url", None)
 
-    def get_randomized_headers(self) -> Dict[str, str]:
+    def get_randomized_headers(self) -> dict[str, str]:
         """Generates realistic randomized HTTP headers simulating genuine Indian domestic browser sessions."""
         user_agent = random.choice(self.config.user_agents)
 
@@ -178,6 +170,7 @@ class SpiceJetScraper(BaseScraper):
         """Determines if an intercepted network request is a SpiceJet availability or booking endpoint."""
         target_patterns = [
             r"/api/.*flight",
+            r"/v1/.*flight",
             r"/v1/.*search",
             r"/v2/.*availability",
             r"/booking/.*search",
@@ -186,25 +179,37 @@ class SpiceJetScraper(BaseScraper):
             r"/availability",
             r"/getAvailability",
         ]
+        # Station, city and metadata endpoints also live under /v1/.../search but
+        # carry no inventory, so they must never be parsed as flights.
+        reject_patterns = [
+            r"getStationDetails",
+            r"getAllCities",
+            r"getPopular",
+            r"stationsFullName",
+            r"metaInfo",
+            r"featureconfig",
+        ]
+        if any(re.search(pat, url, re.IGNORECASE) for pat in reject_patterns):
+            return False
         return any(re.search(pat, url, re.IGNORECASE) for pat in target_patterns)
 
     def parse_flight_json(
         self,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         origin: str,
         destination: str,
         window_code: str,
-        capture_dt: Optional[datetime] = None,
-    ) -> List[RawFareRecord]:
+        capture_dt: datetime | None = None,
+    ) -> list[RawFareRecord]:
         """Parses SpiceJet availability/pricing JSON responses into canonical RawFareRecords."""
-        records: List[RawFareRecord] = []
-        capture_time = capture_dt or datetime.now(timezone.utc)
+        records: list[RawFareRecord] = []
+        capture_time = capture_dt or datetime.now(UTC)
         booking_dt_str = capture_time.strftime("%Y-%m-%dT%H:%M:%S")
 
         norm_origin = self.normalize_iata(origin)
         norm_dest = self.normalize_iata(destination)
 
-        flight_candidates: List[Dict[str, Any]] = []
+        flight_candidates: list[dict[str, Any]] = []
 
         if isinstance(payload, dict):
             # 1. Navitaire / NewSkies structure: trips -> journeys -> segments
@@ -230,18 +235,24 @@ class SpiceJetScraper(BaseScraper):
                     or data.get("availability")
                     or []
                 )
-            elif "availability" in payload and isinstance(payload["availability"], list):
+            elif "availability" in payload and isinstance(
+                payload["availability"], list
+            ):
                 flight_candidates = payload["availability"]
 
         if not isinstance(flight_candidates, list):
-            logger.debug("SpiceJet: unexpected payload structure: %s", type(flight_candidates))
+            logger.debug(
+                "SpiceJet: unexpected payload structure: %s", type(flight_candidates)
+            )
             return records
 
         for item in flight_candidates:
             try:
                 # Segments extraction
                 segments = item.get("segments") or []
-                first_seg = segments[0] if (isinstance(segments, list) and segments) else item
+                first_seg = (
+                    segments[0] if (isinstance(segments, list) and segments) else item
+                )
 
                 # Airline code and flight number
                 carrier = (
@@ -262,7 +273,7 @@ class SpiceJetScraper(BaseScraper):
 
                 clean_num = flight_no_raw.strip()
                 if clean_num.upper().startswith(airline_code):
-                    clean_num = clean_num[len(airline_code):].lstrip("- ")
+                    clean_num = clean_num[len(airline_code) :].lstrip("- ")
                 else:
                     clean_num = re.sub(r"^[A-Za-z]{2}[-\s]?", "", clean_num)
                 clean_num = clean_num.strip() or "8101"
@@ -278,7 +289,11 @@ class SpiceJetScraper(BaseScraper):
                 arr_raw = (
                     (segments[-1].get("arrivalTime") or segments[-1].get("arrTime"))
                     if (isinstance(segments, list) and segments)
-                    else (first_seg.get("arrivalTime") or first_seg.get("arrTime") or item.get("arrivalTime"))
+                    else (
+                        first_seg.get("arrivalTime")
+                        or first_seg.get("arrTime")
+                        or item.get("arrivalTime")
+                    )
                 )
 
                 dep_dt_str = self.normalize_datetime(dep_raw) if dep_raw else None
@@ -297,21 +312,40 @@ class SpiceJetScraper(BaseScraper):
                     or first_seg.get("fare")
                 )
 
-                if fare_raw is None and "fares" in item and isinstance(item["fares"], list) and item["fares"]:
+                if (
+                    fare_raw is None
+                    and "fares" in item
+                    and isinstance(item["fares"], list)
+                    and item["fares"]
+                ):
                     fare_obj = item["fares"][0]
-                    fare_raw = fare_obj.get("totalFare") or fare_obj.get("fare") or fare_obj.get("amount")
+                    fare_raw = (
+                        fare_obj.get("totalFare")
+                        or fare_obj.get("fare")
+                        or fare_obj.get("amount")
+                    )
 
-                if fare_raw is None and "fareDetails" in item and isinstance(item["fareDetails"], dict):
-                    fare_raw = item["fareDetails"].get("totalFare") or item["fareDetails"].get("total")
+                if (
+                    fare_raw is None
+                    and "fareDetails" in item
+                    and isinstance(item["fareDetails"], dict)
+                ):
+                    fare_raw = item["fareDetails"].get("totalFare") or item[
+                        "fareDetails"
+                    ].get("total")
 
                 fare_inr = self.normalize_fare(fare_raw)
 
                 # Duration and stops
-                duration = int(
+                duration = sourced_duration_minutes(
                     item.get("duration")
                     or item.get("durationMinutes")
-                    or first_seg.get("duration")
-                    or 120
+                    or first_seg.get("duration"),
+                    dep_dt_str,
+                    arr_dt_str,
+                )
+                flight_status = reported_flight_status(item) or reported_flight_status(
+                    first_seg
                 )
                 stops = int(item.get("stops", len(segments) - 1 if segments else 0))
                 if stops < 0:
@@ -332,6 +366,7 @@ class SpiceJetScraper(BaseScraper):
                     booking_window=window_code,
                     flight_date=dep_dt_str.split("T")[0],
                     duration_minutes=duration,
+                    flight_status=flight_status,
                     is_synthetic=False,
                     source_platform="spicejet",
                 )
@@ -340,7 +375,9 @@ class SpiceJetScraper(BaseScraper):
                 if is_valid:
                     records.append(record)
                 else:
-                    logger.debug("Skipping invalid SpiceJet record: %s", validation_errors)
+                    logger.debug(
+                        "Skipping invalid SpiceJet record: %s", validation_errors
+                    )
 
             except Exception as exc:
                 logger.debug("Skipping unparseable SpiceJet flight item: %s", exc)
@@ -354,14 +391,19 @@ class SpiceJetScraper(BaseScraper):
         destination: str,
         target_date: date,
         window_code: str,
-    ) -> List[RawFareRecord]:
+    ) -> list[RawFareRecord]:
         """Launches Playwright with stealth context and intercepts SpiceJet availability XHR JSON."""
         if not HAS_PLAYWRIGHT_SYNC:
             raise RuntimeError("playwright.sync_api is not installed")
 
         search_url = self.build_search_url(origin, destination, target_date)
-        collected_records: List[RawFareRecord] = []
-        capture_time = datetime.now(timezone.utc)
+
+        denial = self.robots_gate(search_url)
+        if denial is not None:
+            logger.warning("robots.txt blocked %s scrape: %s", self.BASE_URL, denial)
+            return []
+        collected_records: list[RawFareRecord] = []
+        capture_time = datetime.now(UTC)
 
         with sync_playwright() as p:
             browser = p.chromium.launch(
@@ -377,7 +419,7 @@ class SpiceJetScraper(BaseScraper):
                 headers = self.get_randomized_headers()
                 viewport = random.choice(STEALTH_VIEWPORTS)
 
-                context_opts: Dict[str, Any] = {
+                context_opts: dict[str, Any] = {
                     "viewport": viewport,
                     "user_agent": headers["User-Agent"],
                     "locale": "en-IN",
@@ -386,16 +428,17 @@ class SpiceJetScraper(BaseScraper):
                     "ignore_https_errors": True,
                 }
                 if self.proxy:
-                    if isinstance(self.proxy, str):
-                        context_opts["proxy"] = {"server": self.proxy}
-                    elif isinstance(self.proxy, dict):
-                        context_opts["proxy"] = self.proxy
+                    resolved = self.playwright_proxy_config(self.proxy)
+                    if resolved:
+                        context_opts["proxy"] = resolved
 
                 context = browser.new_context(**context_opts)
                 context.add_init_script(STEALTH_INIT_SCRIPT)
 
                 def handle_route(route: PlaywrightRoute) -> None:
-                    if should_abort_resource(route.request.url, route.request.resource_type):
+                    if should_abort_resource(
+                        route.request.url, route.request.resource_type
+                    ):
                         route.abort()
                     else:
                         route.continue_()
@@ -467,15 +510,21 @@ class SpiceJetScraper(BaseScraper):
 
         # Direct synthetic / mock mode bypass
         if mode == "synthetic":
-            res = self._synthetic_fallback(norm_orig, norm_dest, target_date, window_code)
+            res = self._synthetic_fallback(
+                norm_orig, norm_dest, target_date, window_code
+            )
             res.metadata["tier"] = 3
             res.metadata["source"] = "spicejet_tier3_synthetic"
             return res
 
         if mode == "mock":
             # Attempt Tier 2 Amadeus mock first
-            t2_res = self.amadeus_client.scrape_route(norm_orig, norm_dest, target_date, window_code)
-            sg_records = [r for r in t2_res.records if r.airline_code == self.AIRLINE_CODE]
+            t2_res = self.amadeus_client.scrape_route(
+                norm_orig, norm_dest, target_date, window_code
+            )
+            sg_records = [
+                r for r in t2_res.records if r.airline_code == self.AIRLINE_CODE
+            ]
             if sg_records:
                 elapsed_ms = round((time.time() - start_time) * 1000, 2)
                 return ScrapeResult(
@@ -495,19 +544,32 @@ class SpiceJetScraper(BaseScraper):
                     },
                 )
             # If no SG records from Amadeus mock, synthetic SG fallback
-            res = self._synthetic_fallback(norm_orig, norm_dest, target_date, window_code)
+            res = self._synthetic_fallback(
+                norm_orig, norm_dest, target_date, window_code
+            )
             res.metadata["tier"] = 3
             res.metadata["source"] = "spicejet_tier3_synthetic"
             return res
 
         # Tier 1: Live SpiceJet Crawler
-        tier1_errors: List[str] = []
+        tier1_errors: list[str] = []
         try:
-            logger.info("Tier 1: Scraping SpiceJet for %s-%s on %s", norm_orig, norm_dest, target_date)
-            records = self._scrape_with_playwright(norm_orig, norm_dest, target_date, window_code)
+            logger.info(
+                "Tier 1: Scraping SpiceJet for %s-%s on %s",
+                norm_orig,
+                norm_dest,
+                target_date,
+            )
+            records = self._scrape_with_playwright(
+                norm_orig, norm_dest, target_date, window_code
+            )
             if records:
                 elapsed_ms = round((time.time() - start_time) * 1000, 2)
-                logger.info("Tier 1 Success: %d records from SpiceJet in %.2fms", len(records), elapsed_ms)
+                logger.info(
+                    "Tier 1 Success: %d records from SpiceJet in %.2fms",
+                    len(records),
+                    elapsed_ms,
+                )
                 return ScrapeResult(
                     source="spicejet",
                     success=True,
@@ -524,20 +586,28 @@ class SpiceJetScraper(BaseScraper):
                         "window": window_code,
                     },
                 )
-            tier1_errors.append("SpiceJet crawler executed but returned no flight records")
+            tier1_errors.append(
+                "SpiceJet crawler executed but returned no flight records"
+            )
         except Exception as t1_exc:
             err_msg = f"Tier 1 SpiceJet failure: {t1_exc}"
             logger.warning(err_msg)
             tier1_errors.append(err_msg)
 
         # Tier 2: Amadeus GDS Fallback (filter for SG flights or route fallback)
-        tier2_errors: List[str] = []
+        tier2_errors: list[str] = []
         try:
-            logger.info("Tier 2 Fallback: Querying Amadeus GDS for %s-%s", norm_orig, norm_dest)
-            t2_res = self.amadeus_client.scrape_route(norm_orig, norm_dest, target_date, window_code)
+            logger.info(
+                "Tier 2 Fallback: Querying Amadeus GDS for %s-%s", norm_orig, norm_dest
+            )
+            t2_res = self.amadeus_client.scrape_route(
+                norm_orig, norm_dest, target_date, window_code
+            )
             if t2_res.success and t2_res.records:
                 # Prefer SG records if available
-                sg_records = [r for r in t2_res.records if r.airline_code == self.AIRLINE_CODE]
+                sg_records = [
+                    r for r in t2_res.records if r.airline_code == self.AIRLINE_CODE
+                ]
                 use_records = sg_records if sg_records else t2_res.records
                 elapsed_ms = round((time.time() - start_time) * 1000, 2)
                 return ScrapeResult(
@@ -564,8 +634,14 @@ class SpiceJetScraper(BaseScraper):
             tier2_errors.append(err_msg)
 
         # Tier 3: Synthetic DGCA Generator calibrated to SpiceJet
-        logger.info("Tier 3 Fallback: Generating synthetic SpiceJet flights for %s-%s", norm_orig, norm_dest)
-        t3_res = self._synthetic_fallback(norm_orig, norm_dest, target_date, window_code)
+        logger.info(
+            "Tier 3 Fallback: Generating synthetic SpiceJet flights for %s-%s",
+            norm_orig,
+            norm_dest,
+        )
+        t3_res = self._synthetic_fallback(
+            norm_orig, norm_dest, target_date, window_code
+        )
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
         t3_res.duration_ms = elapsed_ms
         t3_res.metadata["tier"] = 3
@@ -582,10 +658,12 @@ class SpiceJetScraper(BaseScraper):
         window_code: str,
     ) -> ScrapeResult:
         """Generates synthetic flights calibrated specifically for SpiceJet (SG)."""
-        gen_res = self.synthetic_generator.scrape_route(origin, destination, target_date, window_code)
+        gen_res = self.synthetic_generator.scrape_route(
+            origin, destination, target_date, window_code
+        )
 
         # Filter or rebrand records to SpiceJet SG
-        sg_records: List[RawFareRecord] = []
+        sg_records: list[RawFareRecord] = []
         for r in gen_res.records:
             # Calibrate record for SpiceJet
             sg_flight_num = f"SG-{random.randint(8100, 8900)}"
@@ -628,32 +706,34 @@ class SpiceJetScraper(BaseScraper):
 
     def scrape_all(
         self,
-        routes: Optional[List[Route]] = None,
-        windows: Optional[List[BookingWindow]] = None,
-    ) -> List[ScrapeResult]:
+        routes: list[Route] | None = None,
+        windows: list[BookingWindow] | None = None,
+    ) -> list[ScrapeResult]:
         """Scrapes all routes and windows using SpiceJet 3-tier fallback pipeline."""
         target_routes = routes or DEFAULT_ROUTES
         target_windows = windows or BOOKING_WINDOWS
         today = date.today()
 
-        results: List[ScrapeResult] = []
+        results: list[ScrapeResult] = []
         for route in target_routes:
             for window in target_windows:
                 target_date = today + timedelta(days=window.days_advance)
-                res = self.scrape_route(route.origin, route.destination, target_date, window.code)
+                res = self.scrape_route(
+                    route.origin, route.destination, target_date, window.code
+                )
                 results.append(res)
         return results
 
     def scrape_all_routes(
         self,
-        routes: Optional[List[Route]] = None,
-        target_date: Optional[date] = None,
+        routes: list[Route] | None = None,
+        target_date: date | None = None,
         window_code: str = "T+7",
-    ) -> List[ScrapeResult]:
+    ) -> list[ScrapeResult]:
         """Scrapes all standard routes for SpiceJet with fallback."""
         target_routes = routes or DEFAULT_ROUTES
         flight_date = target_date or (date.today() + timedelta(days=7))
-        results: List[ScrapeResult] = []
+        results: list[ScrapeResult] = []
 
         for r in target_routes:
             res = self.scrape_route(
@@ -663,6 +743,6 @@ class SpiceJetScraper(BaseScraper):
                 window_code=window_code,
             )
             results.append(res)
-            time.sleep(random.uniform(0.5, 1.5))
+            self.rate_limit_delay()
 
         return results

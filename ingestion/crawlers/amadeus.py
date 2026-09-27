@@ -11,33 +11,30 @@ the official Amadeus Flight Offers Search API response contract.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
 import time
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 try:
     import httpx
+
     HAS_HTTPX = True
 except ImportError:
     httpx = None  # type: ignore
     HAS_HTTPX = False
 
+from backend.app.core.cleaning import reported_flight_status, sourced_duration_minutes
+from backend.app.core.fare_components import ESTIMATED_BASE_FARE_RATIO
 from ingestion.base import BaseScraper, RawFareRecord, ScrapeResult
 from ingestion.config import (
-    AIRLINE_MAP,
-    AIRLINES,
-    BOOKING_WINDOW_MAP,
     BOOKING_WINDOWS,
-    BookingWindow,
     DEFAULT_ROUTES,
+    BookingWindow,
     IngestionConfig,
     Route,
-    VALID_AIRLINE_CODES,
-    VALID_IATA_CODES,
 )
 
 logger = logging.getLogger("ingestion.crawlers.amadeus")
@@ -65,19 +62,27 @@ class AmadeusFlightClient(BaseScraper):
 
     def __init__(
         self,
-        config: Optional[IngestionConfig] = None,
-        client_id: Optional[str] = None,
-        client_secret: Optional[str] = None,
-        hostname: Optional[str] = None,
-        mock_mode: Optional[bool] = None,
+        config: IngestionConfig | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        hostname: str | None = None,
+        mock_mode: bool | None = None,
     ) -> None:
         super().__init__(config)
-        self.client_id = client_id or self.config.amadeus_client_id or os.getenv("AMADEUS_CLIENT_ID", "")
+        self.client_id = (
+            client_id
+            or self.config.amadeus_client_id
+            or os.getenv("AMADEUS_CLIENT_ID", "")
+        )
         self.client_secret = (
-            client_secret or self.config.amadeus_client_secret or os.getenv("AMADEUS_CLIENT_SECRET", "")
+            client_secret
+            or self.config.amadeus_client_secret
+            or os.getenv("AMADEUS_CLIENT_SECRET", "")
         )
         self.hostname = (
-            hostname or self.config.amadeus_hostname or os.getenv("AMADEUS_HOSTNAME", "test.api.amadeus.com")
+            hostname
+            or self.config.amadeus_hostname
+            or os.getenv("AMADEUS_HOSTNAME", "test.api.amadeus.com")
         )
         self.mock_mode = (
             mock_mode
@@ -88,7 +93,7 @@ class AmadeusFlightClient(BaseScraper):
             )
         )
 
-        self._token: Optional[str] = None
+        self._token: str | None = None
         self._token_expires_at: float = 0.0
 
     @property
@@ -99,7 +104,7 @@ class AmadeusFlightClient(BaseScraper):
     def flight_offers_endpoint(self) -> str:
         return f"https://{self.hostname}/v2/shopping/flight-offers"
 
-    def get_access_token(self) -> Optional[str]:
+    def get_access_token(self) -> str | None:
         """Obtains or returns cached OAuth2 Bearer token using client_credentials grant."""
         if self.mock_mode or not (self.client_id and self.client_secret):
             return "mock-amadeus-bearer-token"
@@ -109,7 +114,9 @@ class AmadeusFlightClient(BaseScraper):
             return self._token
 
         if not HAS_HTTPX:
-            logger.warning("httpx not installed; unable to execute live Amadeus OAuth2 request")
+            logger.warning(
+                "httpx not installed; unable to execute live Amadeus OAuth2 request"
+            )
             return None
 
         try:
@@ -131,13 +138,19 @@ class AmadeusFlightClient(BaseScraper):
                     logger.info("Successfully refreshed Amadeus OAuth2 access token")
                     return self._token
                 else:
-                    logger.error("Amadeus OAuth2 token request failed: %s %s", resp.status_code, resp.text)
+                    logger.error(
+                        "Amadeus OAuth2 token request failed: %s %s",
+                        resp.status_code,
+                        resp.text,
+                    )
                     return None
         except Exception as exc:
             logger.error("Error communicating with Amadeus OAuth2 service: %s", exc)
             return None
 
-    async def get_access_token_async(self, client: Optional[httpx.AsyncClient] = None) -> Optional[str]:
+    async def get_access_token_async(
+        self, client: httpx.AsyncClient | None = None
+    ) -> str | None:
         """Asynchronously obtains or refreshes OAuth2 token."""
         if self.mock_mode or not (self.client_id and self.client_secret):
             return "mock-amadeus-bearer-token"
@@ -168,7 +181,11 @@ class AmadeusFlightClient(BaseScraper):
                 self._token_expires_at = time.time() + float(expires_in)
                 return self._token
             else:
-                logger.error("Amadeus OAuth2 token async error: %s %s", resp.status_code, resp.text)
+                logger.error(
+                    "Amadeus OAuth2 token async error: %s %s",
+                    resp.status_code,
+                    resp.text,
+                )
                 return None
         except Exception as exc:
             logger.error("Error obtaining Amadeus async token: %s", exc)
@@ -179,20 +196,32 @@ class AmadeusFlightClient(BaseScraper):
 
     def parse_flight_offers(
         self,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         origin: str,
         destination: str,
         window_code: str,
-        capture_dt: Optional[datetime] = None,
-    ) -> List[RawFareRecord]:
-        """Normalizes Amadeus v2 Flight Offers Search response into canonical RawFareRecords."""
-        records: List[RawFareRecord] = []
-        capture_time = capture_dt or datetime.now(timezone.utc)
+        capture_dt: datetime | None = None,
+    ) -> list[RawFareRecord]:
+        """Normalizes Amadeus v2 Flight Offers Search response into canonical RawFareRecords.
+
+        Provenance follows the same condition that selects the payload: when the
+        client is unauthenticated or in mock mode the payload comes from
+        _generate_mock_amadeus_payload, so the records are generated and are
+        labelled synthetic. Only a response actually returned by the Amadeus API
+        is labelled real.
+        """
+        records: list[RawFareRecord] = []
+        payload_is_generated = bool(
+            self.mock_mode or not (self.client_id and self.client_secret)
+        )
+        capture_time = capture_dt or datetime.now(UTC)
         booking_dt_str = capture_time.strftime("%Y-%m-%dT%H:%M:%S")
 
         offers_data = payload.get("data", [])
         if not isinstance(offers_data, list):
-            logger.warning("Amadeus response payload 'data' is not a list: %s", type(offers_data))
+            logger.warning(
+                "Amadeus response payload 'data' is not a list: %s", type(offers_data)
+            )
             return records
 
         for offer in offers_data:
@@ -210,7 +239,8 @@ class AmadeusFlightClient(BaseScraper):
                 last_seg = segments[-1]
 
                 carrier_code = self.normalize_airline_code(
-                    first_seg.get("carrierCode") or offer.get("validatingAirlineCodes", ["6E"])[0]
+                    first_seg.get("carrierCode")
+                    or offer.get("validatingAirlineCodes", ["6E"])[0]
                 )
                 flight_no = str(first_seg.get("number", "101"))
                 if not flight_no.startswith(carrier_code):
@@ -230,18 +260,32 @@ class AmadeusFlightClient(BaseScraper):
                 arr_datetime_str = self.normalize_datetime(arr_at_raw)
 
                 # Duration in minutes
-                duration_str = primary_itinerary.get("duration", "PT2H0M")
-                duration_minutes = parse_iso_duration(duration_str)
+                duration_str = primary_itinerary.get("duration")
+                if duration_str:
+                    duration_minutes: int | None = parse_iso_duration(duration_str)
+                else:
+                    duration_minutes = sourced_duration_minutes(
+                        None,
+                        dep_datetime_str,
+                        arr_datetime_str,
+                    )
+                flight_status = reported_flight_status(offer)
 
                 # Number of stops
                 num_stops = max(0, len(segments) - 1)
 
                 # Pricing details
                 price_data = offer.get("price", {})
-                total_raw = price_data.get("grandTotal") or price_data.get("total") or 5000.0
-                base_raw = price_data.get("base") or (float(total_raw) * 0.78)
+                total_raw = (
+                    price_data.get("grandTotal") or price_data.get("total") or 5000.0
+                )
                 fare_inr = self.normalize_fare(total_raw)
-                base_fare_inr = self.normalize_fare(base_raw)
+                supplied_base = price_data.get("base")
+                base_fare_inr = (
+                    self.normalize_fare(supplied_base)
+                    if supplied_base not in (None, "")
+                    else None
+                )
 
                 # Cabin class extraction
                 cabin_class = "economy"
@@ -254,7 +298,9 @@ class AmadeusFlightClient(BaseScraper):
 
                 # Segment airport codes
                 seg_origin = self.normalize_iata(dep_info.get("iataCode") or origin)
-                seg_destination = self.normalize_iata(arr_info.get("iataCode") or destination)
+                seg_destination = self.normalize_iata(
+                    arr_info.get("iataCode") or destination
+                )
 
                 record = RawFareRecord(
                     airline_code=carrier_code,
@@ -271,9 +317,10 @@ class AmadeusFlightClient(BaseScraper):
                     booking_window=window_code,
                     flight_date=dep_datetime_str.split("T")[0],
                     duration_minutes=duration_minutes,
+                    flight_status=flight_status,
                     base_fare=base_fare_inr,
                     total_fare=fare_inr,
-                    is_synthetic=False,
+                    is_synthetic=payload_is_generated,
                     source_platform="amadeus",
                 )
 
@@ -281,7 +328,9 @@ class AmadeusFlightClient(BaseScraper):
                 if is_valid:
                     records.append(record)
                 else:
-                    logger.debug("Amadeus record validation failed: %s", validation_errors)
+                    logger.debug(
+                        "Amadeus record validation failed: %s", validation_errors
+                    )
 
             except Exception as item_err:
                 logger.debug("Failed parsing Amadeus flight offer: %s", item_err)
@@ -295,7 +344,7 @@ class AmadeusFlightClient(BaseScraper):
         destination: str,
         target_date: date,
         window_code: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generates realistic Amadeus v2 flight offers JSON adhering to the official schema."""
         window_multiplier = {
             "T+1": 1.75,
@@ -325,12 +374,24 @@ class AmadeusFlightClient(BaseScraper):
         ]
 
         flight_offers = []
-        for idx, (carrier, f_num, d_h, d_m, a_h, a_m, stops, dur_m, carrier_mult) in enumerate(schedule_templates, start=1):
-            dep_dt = datetime(target_date.year, target_date.month, target_date.day, d_h, d_m)
+        for idx, (
+            carrier,
+            f_num,
+            d_h,
+            d_m,
+            _a_h,
+            _a_m,
+            stops,
+            dur_m,
+            carrier_mult,
+        ) in enumerate(schedule_templates, start=1):
+            dep_dt = datetime(
+                target_date.year, target_date.month, target_date.day, d_h, d_m
+            )
             arr_dt = dep_dt + timedelta(minutes=dur_m)
 
             final_fare = round(route_base * window_multiplier * carrier_mult, 2)
-            base_fare = round(final_fare * 0.78, 2)
+            base_fare = round(final_fare * ESTIMATED_BASE_FARE_RATIO, 2)
 
             dur_hours = dur_m // 60
             dur_mins = dur_m % 60
@@ -378,7 +439,10 @@ class AmadeusFlightClient(BaseScraper):
                     "base": f"{base_fare:.2f}",
                     "grandTotal": f"{final_fare:.2f}",
                     "fees": [
-                        {"amount": f"{round(final_fare - base_fare, 2):.2f}", "type": "SUPPLIER"}
+                        {
+                            "amount": f"{round(final_fare - base_fare, 2):.2f}",
+                            "type": "SUPPLIER",
+                        }
                     ],
                 },
                 "pricingOptions": {
@@ -479,7 +543,7 @@ class AmadeusFlightClient(BaseScraper):
                 metadata={"tier": 2},
             )
 
-        params = {
+        params: dict[str, str | int | float | bool | None] = {
             "originLocationCode": norm_orig,
             "destinationLocationCode": norm_dest,
             "departureDate": target_date.strftime("%Y-%m-%d"),
@@ -552,7 +616,7 @@ class AmadeusFlightClient(BaseScraper):
         destination: str,
         target_date: date,
         window_code: str,
-        client: Optional[httpx.AsyncClient] = None,
+        client: httpx.AsyncClient | None = None,
         max_offers: int = 50,
     ) -> ScrapeResult:
         """Asynchronously executes flight search via Amadeus v2 API."""
@@ -594,7 +658,7 @@ class AmadeusFlightClient(BaseScraper):
                 metadata={"tier": 2},
             )
 
-        params = {
+        params: dict[str, str | int | float | bool | None] = {
             "originLocationCode": norm_orig,
             "destinationLocationCode": norm_dest,
             "departureDate": target_date.strftime("%Y-%m-%d"),
@@ -628,7 +692,11 @@ class AmadeusFlightClient(BaseScraper):
                     records=records,
                     errors=[],
                     duration_ms=round(elapsed_ms, 2),
-                    metadata={"mode": "live", "tier": 2, "offers_returned": len(records)},
+                    metadata={
+                        "mode": "live",
+                        "tier": 2,
+                        "offers_returned": len(records),
+                    },
                 )
             else:
                 err_msg = f"Amadeus API returned {resp.status_code}"
@@ -665,18 +733,20 @@ class AmadeusFlightClient(BaseScraper):
 
     def scrape_all(
         self,
-        routes: Optional[List[Route]] = None,
-        windows: Optional[List[BookingWindow]] = None,
-    ) -> List[ScrapeResult]:
+        routes: list[Route] | None = None,
+        windows: list[BookingWindow] | None = None,
+    ) -> list[ScrapeResult]:
         """Scrapes all 40 slots using Amadeus Flight Offers Search."""
         target_routes = routes or DEFAULT_ROUTES
         target_windows = windows or BOOKING_WINDOWS
         today = date.today()
 
-        results: List[ScrapeResult] = []
+        results: list[ScrapeResult] = []
         for route in target_routes:
             for window in target_windows:
                 flight_date = today + timedelta(days=window.days_advance)
-                result = self.scrape_route(route.origin, route.destination, flight_date, window.code)
+                result = self.scrape_route(
+                    route.origin, route.destination, flight_date, window.code
+                )
                 results.append(result)
         return results
