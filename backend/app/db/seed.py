@@ -19,86 +19,118 @@ from backend.app.models.route import Route
 
 logger = logging.getLogger("apix.db.seed")
 
-# Modelled corridor weights, not a DGCA release. Total Pax = 2,500,000 | Sum = 1.0000
+# Modelled corridor weights, not a DGCA release. Total Pax = 3,000,000 | Sum = 1.0000
 INITIAL_ROUTES: list[dict[str, Any]] = [
     {
         "origin": "DEL",
         "destination": "BOM",
         "distance_km": 1148.0,
-        "dgca_monthly_pax": 437500,
-        "weight": 0.175,
+        "dgca_monthly_pax": 450000,
+        "weight": 0.150,
         "is_active": True,
     },
     {
         "origin": "BOM",
         "destination": "DEL",
         "distance_km": 1148.0,
-        "dgca_monthly_pax": 437500,
-        "weight": 0.175,
+        "dgca_monthly_pax": 450000,
+        "weight": 0.150,
         "is_active": True,
     },
     {
         "origin": "BLR",
         "destination": "DEL",
         "distance_km": 1740.0,
-        "dgca_monthly_pax": 312500,
-        "weight": 0.125,
+        "dgca_monthly_pax": 330000,
+        "weight": 0.110,
         "is_active": True,
     },
     {
         "origin": "DEL",
         "destination": "BLR",
         "distance_km": 1740.0,
-        "dgca_monthly_pax": 312500,
-        "weight": 0.125,
+        "dgca_monthly_pax": 330000,
+        "weight": 0.110,
         "is_active": True,
     },
     {
         "origin": "BOM",
         "destination": "BLR",
         "distance_km": 842.0,
-        "dgca_monthly_pax": 225000,
-        "weight": 0.090,
+        "dgca_monthly_pax": 240000,
+        "weight": 0.080,
         "is_active": True,
     },
     {
         "origin": "BLR",
         "destination": "BOM",
         "distance_km": 842.0,
-        "dgca_monthly_pax": 225000,
-        "weight": 0.090,
+        "dgca_monthly_pax": 240000,
+        "weight": 0.080,
         "is_active": True,
     },
     {
         "origin": "DEL",
         "destination": "CCU",
         "distance_km": 1305.0,
-        "dgca_monthly_pax": 162500,
-        "weight": 0.065,
+        "dgca_monthly_pax": 165000,
+        "weight": 0.055,
         "is_active": True,
     },
     {
         "origin": "CCU",
         "destination": "DEL",
         "distance_km": 1305.0,
-        "dgca_monthly_pax": 162500,
-        "weight": 0.065,
+        "dgca_monthly_pax": 165000,
+        "weight": 0.055,
         "is_active": True,
     },
     {
         "origin": "DEL",
         "destination": "HYD",
         "distance_km": 1253.0,
-        "dgca_monthly_pax": 112500,
-        "weight": 0.045,
+        "dgca_monthly_pax": 120000,
+        "weight": 0.040,
         "is_active": True,
     },
     {
         "origin": "HYD",
         "destination": "DEL",
         "distance_km": 1253.0,
-        "dgca_monthly_pax": 112500,
-        "weight": 0.045,
+        "dgca_monthly_pax": 120000,
+        "weight": 0.040,
+        "is_active": True,
+    },
+    {
+        "origin": "DEL",
+        "destination": "MAA",
+        "distance_km": 1757.0,
+        "dgca_monthly_pax": 120000,
+        "weight": 0.040,
+        "is_active": True,
+    },
+    {
+        "origin": "MAA",
+        "destination": "DEL",
+        "distance_km": 1757.0,
+        "dgca_monthly_pax": 120000,
+        "weight": 0.040,
+        "is_active": True,
+    },
+    {
+        "origin": "BLR",
+        "destination": "HYD",
+        "distance_km": 504.0,
+        "dgca_monthly_pax": 75000,
+        "weight": 0.025,
+        "is_active": True,
+    },
+    {
+        "origin": "HYD",
+        "destination": "BLR",
+        "distance_km": 504.0,
+        "dgca_monthly_pax": 75000,
+        "weight": 0.025,
         "is_active": True,
     },
 ]
@@ -139,7 +171,7 @@ INITIAL_AIRLINES: list[dict[str, Any]] = [
 
 
 def seed_routes(session: Session) -> list[Route]:
-    """Seed or update the 10 directional corridors idempotently.
+    """Seed or update the 14 directional corridors idempotently.
 
     Returns:
         List of Route instances in the session.

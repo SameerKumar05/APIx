@@ -361,12 +361,12 @@ class TestMasterDataAlignment:
     """Validates that routes and airlines match across Ingestion config and Database seeds."""
 
     def test_route_definitions_match_between_ingestion_and_db_seed(self) -> None:
-        """The 10 standard DGCA domestic corridors must exist in both Ingestion and Database seeds."""
+        """The 14 standard DGCA domestic corridors must exist in both Ingestion and Database seeds."""
         ingestion_route_codes = {r.pair_key for r in DEFAULT_ROUTES}
         db_route_codes = {f"{r['origin']}-{r['destination']}" for r in INITIAL_ROUTES}
 
-        assert len(ingestion_route_codes) == 10
-        assert len(db_route_codes) == 10
+        assert len(ingestion_route_codes) == 14
+        assert len(db_route_codes) == 14
         assert ingestion_route_codes == db_route_codes
 
         expected_pairs = {
@@ -380,9 +380,12 @@ class TestMasterDataAlignment:
             "CCU-DEL",
             "DEL-HYD",
             "HYD-DEL",
+            "DEL-MAA",
+            "MAA-DEL",
+            "BLR-HYD",
+            "HYD-BLR",
         }
         assert ingestion_route_codes == expected_pairs
-
     def test_dgca_route_weights_sum_to_one(self) -> None:
         """Route traffic weights must sum to 1.000 (100% of monitored basket) in all layers."""
         # 1. Ingestion config route weights

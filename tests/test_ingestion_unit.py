@@ -25,7 +25,7 @@ from ingestion.orchestrator import IngestionOrchestrator
 
 class TestIngestionConfig(unittest.TestCase):
     def test_default_routes_count_and_properties(self):
-        self.assertEqual(len(DEFAULT_ROUTES), 10)
+        self.assertEqual(len(DEFAULT_ROUTES), 14)
         total_weight = sum(r.dgca_weight for r in DEFAULT_ROUTES)
         self.assertAlmostEqual(total_weight, 1.0, places=2)
         for route in DEFAULT_ROUTES:

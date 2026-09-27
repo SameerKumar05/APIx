@@ -48,16 +48,20 @@ DEFAULT_BOOKING_WINDOW_WEIGHTS: dict[str, float] = {
 # MODELLED city-pair traffic shares, not a DGCA release. Mirrors the seed data
 # in backend/app/db/seed.py so the two cannot disagree.
 DEFAULT_DGCA_ROUTE_TRAFFIC_SHARES: dict[str, float] = {
-    "DEL-BOM": 0.175,
-    "BOM-DEL": 0.175,
-    "BLR-DEL": 0.125,
-    "DEL-BLR": 0.125,
-    "BOM-BLR": 0.090,
-    "BLR-BOM": 0.090,
-    "DEL-CCU": 0.065,
-    "CCU-DEL": 0.065,
-    "DEL-HYD": 0.045,
-    "HYD-DEL": 0.045,
+    "DEL-BOM": 0.150,
+    "BOM-DEL": 0.150,
+    "BLR-DEL": 0.110,
+    "DEL-BLR": 0.110,
+    "BOM-BLR": 0.080,
+    "BLR-BOM": 0.080,
+    "DEL-CCU": 0.055,
+    "CCU-DEL": 0.055,
+    "DEL-HYD": 0.040,
+    "HYD-DEL": 0.040,
+    "DEL-MAA": 0.040,
+    "MAA-DEL": 0.040,
+    "BLR-HYD": 0.025,
+    "HYD-BLR": 0.025,
 }
 
 

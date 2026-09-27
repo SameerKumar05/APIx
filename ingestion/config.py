@@ -52,77 +52,105 @@ class Airline:
     base_price_factor: float  # Multiplier relative to LCC baseline
 
 
-# Top 10 domestic routes calibrated to DGCA air passenger traffic statistics
+# Top 14 domestic routes calibrated to DGCA air passenger traffic statistics
 DEFAULT_ROUTES: list[Route] = [
     Route(
         origin="DEL",
         destination="BOM",
         distance_km=1148,
         typical_duration_min=130,
-        dgca_weight=0.15,
+        dgca_weight=0.150,
     ),
     Route(
         origin="BOM",
         destination="DEL",
         distance_km=1148,
         typical_duration_min=130,
-        dgca_weight=0.15,
+        dgca_weight=0.150,
     ),
     Route(
         origin="DEL",
         destination="BLR",
         distance_km=1740,
         typical_duration_min=165,
-        dgca_weight=0.12,
+        dgca_weight=0.110,
     ),
     Route(
         origin="BLR",
         destination="DEL",
         distance_km=1740,
         typical_duration_min=165,
-        dgca_weight=0.12,
+        dgca_weight=0.110,
     ),
     Route(
         origin="BOM",
         destination="BLR",
         distance_km=842,
         typical_duration_min=105,
-        dgca_weight=0.10,
+        dgca_weight=0.080,
     ),
     Route(
         origin="BLR",
         destination="BOM",
         distance_km=842,
         typical_duration_min=105,
-        dgca_weight=0.10,
-    ),
-    Route(
-        origin="DEL",
-        destination="HYD",
-        distance_km=1253,
-        typical_duration_min=135,
-        dgca_weight=0.07,
-    ),
-    Route(
-        origin="HYD",
-        destination="DEL",
-        distance_km=1253,
-        typical_duration_min=135,
-        dgca_weight=0.07,
+        dgca_weight=0.080,
     ),
     Route(
         origin="DEL",
         destination="CCU",
         distance_km=1305,
         typical_duration_min=135,
-        dgca_weight=0.06,
+        dgca_weight=0.055,
     ),
     Route(
         origin="CCU",
         destination="DEL",
         distance_km=1305,
         typical_duration_min=135,
-        dgca_weight=0.06,
+        dgca_weight=0.055,
+    ),
+    Route(
+        origin="DEL",
+        destination="HYD",
+        distance_km=1253,
+        typical_duration_min=135,
+        dgca_weight=0.040,
+    ),
+    Route(
+        origin="HYD",
+        destination="DEL",
+        distance_km=1253,
+        typical_duration_min=135,
+        dgca_weight=0.040,
+    ),
+    Route(
+        origin="DEL",
+        destination="MAA",
+        distance_km=1757,
+        typical_duration_min=170,
+        dgca_weight=0.040,
+    ),
+    Route(
+        origin="MAA",
+        destination="DEL",
+        distance_km=1757,
+        typical_duration_min=170,
+        dgca_weight=0.040,
+    ),
+    Route(
+        origin="BLR",
+        destination="HYD",
+        distance_km=504,
+        typical_duration_min=75,
+        dgca_weight=0.025,
+    ),
+    Route(
+        origin="HYD",
+        destination="BLR",
+        distance_km=504,
+        typical_duration_min=75,
+        dgca_weight=0.025,
     ),
 ]
 

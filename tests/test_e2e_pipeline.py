@@ -273,7 +273,7 @@ class TestEndToEndPipeline:
         )
 
         assert pipeline_result["status"] == "success"
-        assert pipeline_result["routes_covered"] == 10
+        assert pipeline_result["routes_covered"] == 14
         assert pipeline_result["route_indices_count"] > 0
         assert pipeline_result["national_index_value"] > 0
 
