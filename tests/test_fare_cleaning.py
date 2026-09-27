@@ -394,3 +394,75 @@ def test_raw_fare_record_measured_splits_preserved(db_session: Session) -> None:
     assert row.taxes_and_fees == 1200.0
     assert row.fare_split_basis == "measured"
 
+
+def test_classify_fare_split_residual_taxes_and_measured() -> None:
+    """classify_fare_split handles residual from tax, explicit measured, and fallback estimate."""
+    from backend.app.core.fare_components import (
+        FareSplitBasis,
+        split_base_and_taxes,
+    )
+
+    # 1. Tax supplied only -> base is residual
+    split_tax_only = classify_fare_split(1000.0, None, 350.0)
+    assert split_tax_only.basis == FareSplitBasis.RESIDUAL
+    assert split_tax_only.base_fare == 650.0
+    assert split_tax_only.taxes_and_fees == 350.0
+
+    # 2. Both supplied -> measured
+    split_measured = classify_fare_split(1200.0, 900.0, 300.0)
+    assert split_measured.basis == FareSplitBasis.MEASURED
+    assert split_measured.base_fare == 900.0
+    assert split_measured.taxes_and_fees == 300.0
+
+    # 3. Neither supplied -> estimated
+    split_est = classify_fare_split(1000.0, None, None)
+    assert split_est.basis == FareSplitBasis.ESTIMATED
+    assert split_est.base_fare == round(1000.0 * ESTIMATED_BASE_FARE_RATIO, 2)
+    assert split_est.taxes_and_fees == round(1000.0 - split_est.base_fare, 2)
+
+    # 4. split_base_and_taxes returns (base, tax)
+    b, t = split_base_and_taxes(1200.0, 900.0, 300.0)
+    assert b == 900.0
+    assert t == 300.0
+
+
+def test_canonical_flight_status_and_booking_class_helpers() -> None:
+    """Verify normalisation of flight status tokens and RBD booking codes."""
+    from backend.app.core.fare_components import (
+        canonical_booking_class,
+        canonical_flight_status,
+    )
+
+    # Flight status aliases
+    assert canonical_flight_status("cancelled") == "cancelled"
+    assert canonical_flight_status("canceled") == "cancelled"
+    assert canonical_flight_status("sold_out") == "sold_out"
+    assert canonical_flight_status("sold-out") == "sold_out"
+    assert canonical_flight_status("soldout") == "sold_out"
+    assert canonical_flight_status("scheduled") == "scheduled"
+    assert canonical_flight_status("schedule") == "scheduled"
+    assert canonical_flight_status("DELAYED") == "delayed"
+    assert canonical_flight_status(None) is None
+    assert canonical_flight_status("   ") is None
+
+    # Booking class
+    assert canonical_booking_class("  y  ") == "Y"
+    assert canonical_booking_class("j") == "J"
+    assert canonical_booking_class(None) is None
+    assert canonical_booking_class("   ") is None
+
+
+def test_optional_amount_parsing_edge_cases() -> None:
+    """Verify optional_amount correctly parses numbers, ignores booleans, and treats blanks as None."""
+    from backend.app.core.fare_components import optional_amount
+
+    assert optional_amount(150) == 150.0
+    assert optional_amount(250.75) == 250.75
+    assert optional_amount(" 300.50 ") == 300.5
+    assert optional_amount(0) == 0.0
+    assert optional_amount(0.0) == 0.0
+    assert optional_amount(None) is None
+    assert optional_amount(True) is None
+    assert optional_amount(False) is None
+    assert optional_amount("") is None
+    assert optional_amount("   ") is None

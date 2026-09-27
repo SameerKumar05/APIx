@@ -161,6 +161,48 @@ class TestIngestionToApiContract:
                 fare_inr=-2500.0,
             )
 
+    def test_api_record_fare_components_validation(self) -> None:
+        """ApiRawFareRecord validates base_fare and taxes_and_fees as non-negative floats."""
+        rec = ApiRawFareRecord(
+            airline_code="6E",
+            flight_number="6E-101",
+            origin="DEL",
+            destination="BOM",
+            departure_datetime=datetime(2026, 10, 1, 8, 0),
+            booking_datetime=datetime(2026, 9, 24, 6, 0),
+            fare_inr=5000.0,
+            base_fare=3800.0,
+            taxes_and_fees=1200.0,
+        )
+        assert rec.base_fare == 3800.0
+        assert rec.taxes_and_fees == 1200.0
+
+        # Reject negative base_fare
+        with pytest.raises(ValidationError):
+            ApiRawFareRecord(
+                airline_code="6E",
+                flight_number="6E-101",
+                origin="DEL",
+                destination="BOM",
+                departure_datetime=datetime(2026, 10, 1, 8, 0),
+                booking_datetime=datetime(2026, 9, 24, 6, 0),
+                fare_inr=5000.0,
+                base_fare=-100.0,
+            )
+
+        # Reject negative taxes_and_fees
+        with pytest.raises(ValidationError):
+            ApiRawFareRecord(
+                airline_code="6E",
+                flight_number="6E-101",
+                origin="DEL",
+                destination="BOM",
+                departure_datetime=datetime(2026, 10, 1, 8, 0),
+                booking_datetime=datetime(2026, 9, 24, 6, 0),
+                fare_inr=5000.0,
+                taxes_and_fees=-50.0,
+            )
+
     def test_ingestion_batch_request_validation(
         self, sample_api_record: ApiRawFareRecord
     ) -> None:
@@ -448,6 +490,36 @@ class TestQuantEngineContract:
         deduped = deduplicate_quotes(quotes)
         assert len(deduped) == 1
         assert deduped[0].fare == 5250.0  # Selected best consumer price
+
+    def test_flight_quote_fare_components_and_splits(self) -> None:
+        """FlightQuote preserves base_fare, taxes_and_fees, fees, flight_status, and fare_split_basis."""
+        quote = FlightQuote(
+            origin="DEL",
+            destination="BOM",
+            flight_date="2026-10-01",
+            airline_code="6E",
+            flight_number="6E-205",
+            departure_time="08:00",
+            fare=5420.0,
+            base_fare=4200.0,
+            taxes_and_fees=1220.0,
+            udf_fee=250.0,
+            convenience_fee=150.0,
+            flight_status="scheduled",
+            fare_split_basis="measured",
+        )
+        assert quote.base_fare == 4200.0
+        assert quote.taxes_and_fees == 1220.0
+        assert quote.udf_fee == 250.0
+        assert quote.convenience_fee == 150.0
+        assert quote.flight_status == "scheduled"
+        assert quote.fare_split_basis == "measured"
+
+        d = quote.to_dict()
+        assert d["base_fare"] == 4200.0
+        assert d["taxes_and_fees"] == 1220.0
+        assert d["flight_status"] == "scheduled"
+        assert d["fare_split_basis"] == "measured"
 
 
 # ===========================================================================

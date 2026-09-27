@@ -36,7 +36,7 @@ URL_FRAGMENTS: dict[str, str] = {
     "indigo": "https://www.goindigo.in/booking/flight-select.html?origin=DEL&destination=BOM&departureDate=2026-09-25&adults=1&tripType=oneWay",
     "airindia": "https://www.airindia.com/in/en/book-flights?origin=DEL&destination=BOM&departureDate=2026-09-25&adults=1&cabin=ECONOMY&tripType=O",
     "airindiaexpress": "https://www.airindiaexpress.com/flight-availability?origin=DEL&destination=BOM&departureDate=2026-09-25&adult=1&child=0&infant=0&tripType=oneWay",
-    "akasa": "https://www.akasaair.com/?origin=DEL&destination=BOM&departureDate=2026-09-25&adults=1&tripType=oneWay",
+    "akasa": "https://www.akasaair.com/fly/flight-search?from=DEL&to=BOM&departDate=2026-09-25&adults=1&tripType=one-way",
     "yatra": "https://flight.yatra.com/air-search-ui/dom2/trigger?type=O&viewName=normal&flexi=0&noOfSegments=1&origin=DEL&originCountry=IN&destination=BOM&destinationCountry=IN&flight_depart_date=25/09/2026&ADT=1&CHD=0&INF=0&class=Economy&hb=0",
     "cleartrip": "https://www.cleartrip.com/flights/search?from=DEL&to=BOM&depart_date=25/09/2026&adults=1&childs=0&infants=0&class=Economy&intl=n",
     "ixigo": "https://www.ixigo.com/search/result/flight?from=DEL&to=BOM&date=25092026&adults=1&children=0&infants=0&class=e",
