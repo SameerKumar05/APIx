@@ -9,7 +9,7 @@ Implements SIH 2026 Problem Statement 26056 quantitative specifications:
 3. Substitution Bias quantification:
    Delta = P_L - P_F (quantifying consumer substitution away from rising fares).
    Under standard microeconomic substitution behavior, P_L >= P_F >= P_P.
-4. Advance booking lead-time price elasticity curve (T+30, T+15, T+7, T+1):
+4. Advance booking lead-time price elasticity curve (T+45, T+30, T+15, T+7, T+1):
    Arc and point elasticity E_d(h) = (% dQ / % dP) capturing dynamic revenue management.
 5. MoSPI CPI Transport Sub-Index divergence and lead-lag cross-correlation:
    Gap_t = APIx_t - MoSPI_t, tracking error, and predictive lead time analysis (~38 days).
@@ -381,11 +381,11 @@ def calculate_lead_time_elasticity(
 
     In civil aviation revenue management, demand elasticity varies systematically
     as departure approaches:
+    - T+45 (45-day advance): Far-planned / corporate travel policy.
     - T+30 (30-day early bird): Highly discretionary/leisure travel, price elastic.
     - T+15 (15-day advance): Planned travel, balanced elasticity.
     - T+7 (7-day advance): Business/urgent travel transition.
     - T+1 (1-day urgent): Inelastic, emergency/corporate travel, steep yield curves.
-
     Calculates:
     1. Arc price elasticity between successive windows A and B:
        E_{A->B} = ((Q_B - Q_A) / ((Q_A + Q_B) / 2)) / ((P_B - P_A) / ((P_A + P_B) / 2))
@@ -393,7 +393,7 @@ def calculate_lead_time_elasticity(
     3. Urgency price escalation ratio and lead-time premium percentage.
 
     Args:
-        window_fares: Mapping of booking window (e.g. 'T+30', 'T+15', 'T+7', 'T+1') to fare in INR.
+        window_fares: Mapping of booking window (e.g. 'T+45', 'T+30', 'T+15', 'T+7', 'T+1') to fare in INR.
         window_pax_shares: Optional mapping of passenger shares or passenger counts.
                            Defaults to DEFAULT_LEAD_TIME_PAX_SHARES.
 
@@ -421,8 +421,8 @@ def calculate_lead_time_elasticity(
         if v is not None and v > 0:
             norm_pax[_normalize_window_key(k)] = float(v)
 
-    # Standard ordering by advance purchase horizon (descending days: T+30 -> T+15 -> T+7 -> T+1)
-    canonical_order = ["T+30", "T+15", "T+7", "T+1"]
+    # Standard ordering by advance purchase horizon (descending days: T+45 -> T+30 -> T+15 -> T+7 -> T+1)
+    canonical_order = ["T+45", "T+30", "T+15", "T+7", "T+1"]
     active_windows = [w for w in canonical_order if w in norm_fares]
 
     if len(active_windows) < 2:
@@ -431,7 +431,7 @@ def calculate_lead_time_elasticity(
         f_val = norm_fares.get(single_w, 5000.0)
         return LeadTimeElasticityResult(
             curves={
-                single_w: {"fare": f_val, "pax_share": norm_pax.get(single_w, 0.25)}
+                single_w: {"fare": f_val, "pax_share": norm_pax.get(single_w, DEFAULT_LEAD_TIME_PAX_SHARES.get(single_w, 0.20))}
             },
             arc_elasticities={},
             overall_elasticity=-1.0,
@@ -445,7 +445,7 @@ def calculate_lead_time_elasticity(
     for w in active_windows:
         curves[w] = {
             "fare": round(norm_fares[w], 2),
-            "pax_share": round(norm_pax.get(w, 0.25), 4),
+            "pax_share": round(norm_pax.get(w, DEFAULT_LEAD_TIME_PAX_SHARES.get(w, 0.20)), 4),
             "advance_days": CANONICAL_WINDOW_DAYS.get(w, 7),
         }
 
@@ -460,8 +460,8 @@ def calculate_lead_time_elasticity(
 
         p_prev = norm_fares[w_prev]
         p_curr = norm_fares[w_curr]
-        q_prev = norm_pax.get(w_prev, 0.25)
-        q_curr = norm_pax.get(w_curr, 0.25)
+        q_prev = norm_pax.get(w_prev, DEFAULT_LEAD_TIME_PAX_SHARES.get(w_prev, 0.20))
+        q_curr = norm_pax.get(w_curr, DEFAULT_LEAD_TIME_PAX_SHARES.get(w_curr, 0.20))
 
         p_avg = (p_prev + p_curr) / 2.0
         q_avg = (q_prev + q_curr) / 2.0
@@ -483,7 +483,7 @@ def calculate_lead_time_elasticity(
     # Calculate overall log-log elasticity via ordinary least squares
     for w in active_windows:
         p_val = norm_fares[w]
-        q_val = norm_pax.get(w, 0.25)
+        q_val = norm_pax.get(w, DEFAULT_LEAD_TIME_PAX_SHARES.get(w, 0.20))
         if p_val > 0 and q_val > 0:
             log_p.append(math.log(p_val))
             log_q.append(math.log(q_val))

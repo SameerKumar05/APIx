@@ -158,9 +158,9 @@ export class ApiClient {
   /**
    * 2. Routes: Specific route historical index
    */
-  public async getRouteHistory(routeCode: string, days: number = 30): Promise<RouteHistoryResponse> {
+  public async getRouteHistory(routeCode: string, days: number = 30, frequency: string = 'daily'): Promise<RouteHistoryResponse> {
     return this.request<RouteHistoryResponse>(
-      `/indices/routes/${routeCode}/history?days=${days}`
+      `/indices/routes/${routeCode}/history?days=${days}&frequency=${encodeURIComponent(frequency)}`
     );
   }
 

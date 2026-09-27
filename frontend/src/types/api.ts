@@ -95,6 +95,7 @@ export interface RouteHistoryResponse {
   destination: string;
   points: NationalIndexPoint[];
   data_available?: boolean;
+  frequency?: string;
 }
 
 // ---------------------------------------------------------------------------
