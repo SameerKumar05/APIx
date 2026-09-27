@@ -1065,6 +1065,8 @@ class EconometricsRepo:
         return get_cpi_divergence_analysis(self.db, **kwargs)
 
     # Route Elasticity operations
+    upsert_route_elasticity = staticmethod(upsert_route_elasticity)
+
     def upsert_elasticity(self, **kwargs: Any) -> RouteElasticity:
         """Upsert a route elasticity curve record."""
         return upsert_route_elasticity(self.db, **kwargs)
