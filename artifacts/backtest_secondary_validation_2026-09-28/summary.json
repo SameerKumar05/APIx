@@ -1,10 +1,10 @@
 {
   "db": "apix.db",
   "window": {
-    "apix_days": 35,
+    "apix_days": 36,
     "apix_span": [
       "2026-08-20",
-      "2026-09-23"
+      "2026-09-28"
     ]
   },
   "invariants": {
@@ -57,64 +57,64 @@
   },
   "holdout_week": {
     "status": "computed",
-    "train_days": 28,
+    "train_days": 29,
     "holdout_days": 7,
     "holdout_span": [
-      "2026-09-17",
-      "2026-09-23"
+      "2026-09-18",
+      "2026-09-28"
     ],
-    "fitted_intercept": -33.195267,
-    "fitted_slope": 1.277773,
-    "train_r": 0.9709,
+    "fitted_intercept": -32.405467,
+    "fitted_slope": 1.270872,
+    "train_r": 0.9726,
     "holdout_r": null,
-    "holdout_mape_pct": 0.487,
-    "holdout_mae": 0.5654,
-    "holdout_max_abs_pct": 1.0958,
-    "note": "Relationship fitted on the first 28 days predicts the final 7 days; the three in-window benchmark anchors are the only external input.",
+    "holdout_mape_pct": 4.5014,
+    "holdout_mae": 7.0021,
+    "holdout_max_abs_pct": 28.1519,
+    "note": "Relationship fitted on the first 29 days predicts the final 7 days; the three in-window benchmark anchors are the only external input.",
     "holdout_r_reason": "prediction is constant across the holdout week, so correlation is undefined; the benchmark interpolant is clamped at the last anchor (mid-month of the final benchmark month) and has no variation inside the holdout week. Level agreement is reported as MAPE/MAE."
   },
   "lead_lag": {
     "status": "computed",
-    "days": 35,
+    "days": 36,
     "full_window": {
-      "r_at_lag_0": 0.9569,
-      "best_lag_days": 6,
-      "r_at_best_lag": 0.9698,
+      "r_at_lag_0": 0.3324,
+      "best_lag_days": -3,
+      "r_at_best_lag": 0.9578,
       "max_lag_searched": 7
     },
     "subwindows": [
       {
         "start": 0,
-        "end": 11,
-        "days": 11,
-        "r_at_lag_0": 0.7723,
+        "end": 12,
+        "days": 12,
+        "r_at_lag_0": 0.8243,
         "best_lag_days": 0,
-        "r_at_best_lag": 0.7723,
-        "max_lag_searched": 2
+        "r_at_best_lag": 0.8243,
+        "max_lag_searched": 3
       },
       {
-        "start": 11,
-        "end": 22,
-        "days": 11,
-        "r_at_lag_0": 0.777,
-        "best_lag_days": 0,
-        "r_at_best_lag": 0.777,
-        "max_lag_searched": 2
+        "start": 12,
+        "end": 24,
+        "days": 12,
+        "r_at_lag_0": 0.8213,
+        "best_lag_days": 3,
+        "r_at_best_lag": 0.8914,
+        "max_lag_searched": 3
       },
       {
-        "start": 22,
-        "end": 35,
-        "days": 13,
-        "r_at_lag_0": 0.4697,
-        "best_lag_days": -3,
-        "r_at_best_lag": 0.5584,
+        "start": 24,
+        "end": 36,
+        "days": 12,
+        "r_at_lag_0": 0.1358,
+        "best_lag_days": 3,
+        "r_at_best_lag": 0.196,
         "max_lag_searched": 3
       }
     ],
     "best_lags": [
       0,
-      0,
-      -3
+      3,
+      3
     ],
     "best_lag_spread_days": 3,
     "best_lag_stable": false,

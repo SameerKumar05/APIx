@@ -5,14 +5,13 @@ be stated out loud without inflation.
 
 ## The slide
 
-> **r=0.9569, n=3 overlapping months — indicative, not conclusive.**
-> 35 days of daily APIx Fisher index (2026-08-20 → 2026-09-23) against 3 MoSPI
-> benchmark anchors (2026-07/08/09). 1 calendar month of overlapping
-> month-on-month change (2026-09). Method fully reproducible
-> (`python scripts/backtest_vs_mospi.py`, exit 0). 35 days is 35 days (not 36).
+> **r=0.3324, 6 MoSPI months (3 seeded + 3 press-note-verified) — indicative, not conclusive.**
+> 36 days of daily APIx Fisher index (2026-08-20 → 2026-09-28) on the merged
+> finale pipeline (14 corridors, transcribed DGCA weights, T+45 composite).
+> Method fully reproducible (`python scripts/backtest_vs_mospi.py`, exit 0).
+> 36 days is 36 days; r² = 0.1105, RMSE = 7.4555, MAPE = 2.0104%.
 
-Full metric set from the same run: r² = 0.9157, RMSE = 1.2077, MAPE = 0.9811%,
-direction agreement = 65.71%, best lag = 0 months. Reproduce with:
+Full metric set from the same run: direction agreement = 66.67%, best lag = 0 months. Reproduce with:
 
 ```bash
 python scripts/backtest_vs_mospi.py --db <path> --json-out <path> --md-out <path>
@@ -58,7 +57,7 @@ withdrawn-bundle correction (combined general 198.0, not 195.8).
 
 Why the series stops there, and why overlap cannot grow:
 
-1. **APIx history is the binding constraint.** 35 days of APIx data exist
+1. **APIx history is the binding constraint.** 36 days of APIx data exist
    (2026-08-20 → 2026-09-23). Extending MoSPI backwards adds zero months that
    overlap that window.
 2. **The airfare item left the press notes.** The December 2025 note (last
@@ -126,7 +125,7 @@ and do not change r=0.9569 over n=3 overlapping months.
 
 ## What would strengthen this post-finale
 
-1. **Grow APIx history.** The binding constraint is 35 days of APIx data, not
+1. **Grow APIx history.** The binding constraint is 36 days of APIx data, not
    MoSPI. Every additional week of live Fisher-index history widens the window
    that future benchmark months can overlap. One full quarter would allow ≥3
    overlapping months of month-on-month change (the monthly-MoM branch of
@@ -151,3 +150,19 @@ and do not change r=0.9569 over n=3 overlapping months.
   tests/test_math_invariants.py`.
 - This document deliberately under-claims. "Indicative on thin overlap, method
   fully reproducible" is the claim; "validated" is not.
+
+## Post-merge headline update (finale integration, 2026-09-28)
+
+After merging the finale branches (14 corridors, transcribed DGCA weights, T+45
+composite) and re-running on the merged tree, the reproducible headline is:
+
+- **r = 0.3324 (r² = 0.1105), RMSE = 7.4555, MAPE = 2.0104%**, 36 days
+  (2026-08-20 → 2026-09-28), 6 MoSPI months, exit 0.
+- The earlier r = 0.9569 was the 3-seeded-anchor era on the old 10-corridor
+  pipeline; that bundle is preserved in git history, not deleted. The number
+  moved because the pipeline and the anchor set both changed — which is exactly
+  why the deck cites the re-runnable script, never a frozen figure.
+- Secondary validation on the same tree: 6/6 invariants exact, holdout MAPE =
+  4.5014%, lead-lag unstable (no lead claim). All checks exit 0.
+- `artifacts/backtest_2026-09-28/` (result.json, summary.md, run.log) was
+  regenerated from this run. Direction agreement: 66.67%.

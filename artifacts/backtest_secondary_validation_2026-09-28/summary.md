@@ -1,6 +1,6 @@
 # Secondary validation of the 35-day back-test window
 
-- Window: 35 daily APIx points (2026-08-20 to 2026-09-23)
+- Window: 36 daily APIx points (2026-08-20 to 2026-09-28)
 
 ## Internal-consistency invariants (MoSPI-independent)
 
@@ -19,23 +19,23 @@ All invariants passed: **True**
 
 ## Holdout-week replication
 
-- Fitted on 28 days, held out 7 days (2026-09-17 to 2026-09-23).
-- Train r: 0.9709
+- Fitted on 29 days, held out 7 days (2026-09-18 to 2026-09-28).
+- Train r: 0.9726
 - Holdout r: None
-- Holdout MAPE: 0.487%
-- Holdout MAE: 0.5654
-- Holdout worst day: 1.0958%
+- Holdout MAPE: 4.5014%
+- Holdout MAE: 7.0021
+- Holdout worst day: 28.1519%
 
 ## Lead-lag stability across sub-windows
 
-- Full window: r(lag 0) = 0.9569, best lag = 6 day(s) with r = 0.9698.
-- Best lags by sub-window: [0, 0, -3] (spread 3 day(s), stable: False).
+- Full window: r(lag 0) = 0.3324, best lag = -3 day(s) with r = 0.9578.
+- Best lags by sub-window: [0, 3, 3] (spread 3 day(s), stable: False).
 
 | sub-window | days | r at lag 0 | best lag (days) | r at best lag |
 | --- | --- | --- | --- | --- |
-| 0..11 | 11 | 0.7723 | 0 | 0.7723 |
-| 11..22 | 11 | 0.777 | 0 | 0.777 |
-| 22..35 | 13 | 0.4697 | -3 | 0.5584 |
+| 0..12 | 12 | 0.8243 | 0 | 0.8243 |
+| 12..24 | 12 | 0.8213 | 3 | 0.8914 |
+| 24..36 | 12 | 0.1358 | 3 | 0.196 |
 
 ## Scope
 
