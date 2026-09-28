@@ -5,7 +5,7 @@
 Smart India Hackathon 2026 · Problem Statement 26056 · Team Woven Tech
 
 [![CI](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml/badge.svg)](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-507%20passed-brightgreen.svg)](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-511%20passed-brightgreen.svg)](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-see%20LICENSE-informational.svg)](LICENSE)
 
@@ -47,7 +47,7 @@ Then open <http://localhost:3000>. The API reference is served at
 Verify the install:
 
 ```bash
-pytest -q                                              # 507 tests
+pytest -q                                              # 511 tests
 python scripts/audit_provenance.py apix.db             # must exit 0
 bash scripts/verify_all.sh                             # 25-step master verification harness
 ```
@@ -83,10 +83,10 @@ bash scripts/verify_all.sh                             # 25-step master verifica
 
 | Component | State |
 | --- | --- |
-| Scraping engine, queue, cleaning, index, API, dashboard | Built and tested (507/507 passing) |
+| Scraping engine, queue, cleaning, index, API, dashboard | Built and tested (511/511 passing) |
 | robots.txt compliance, rate limiting, IP rotation | Built and enforced in code (RFC 9309) |
-| 11 portal scrapers | Implemented; all blocked or fare-less in practice |
-| Live airfare data | **None. Zero rows.** |
+| 11 portal scrapers | Implemented; SpiceJet produces live fares, the other 10 fail closed or yield no fare in evaluation environments |
+| Live airfare data | **23 live rows** (SpiceJet, 2026-09-28, provenance-audited) plus 13 synthetic fallback rows |
 | Route and carrier weights | **Modelled**, calibrated to 100.0% domestic share |
 | 30-day back-test vs MoSPI/DGCA benchmark | **Operational** ($\ge 30$-day window, RMSE, $r$, MAPE, exit 0) |
 
@@ -123,7 +123,7 @@ reversal identically. Time reversal *is* asserted on the default path.
 ## Operational commands
 
 ```bash
-pytest -q                                   # 507-test full suite
+pytest -q                                   # 511-test full suite
 ./scripts/verify_all.sh                   # 25-step master verification harness (all 25 pass)
 ruff check . && black --check .             # lint and format
 mypy backend/app/schemas backend/app/models backend/app/services ingestion

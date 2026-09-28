@@ -309,6 +309,118 @@ class TestSpiceJetScraper(unittest.TestCase):
         self.assertEqual(rec.duration_minutes, 135)
         self.assertEqual(rec.stops, 0)
 
+    def test_parse_flight_json_live_availability_shape(self) -> None:
+        """The live /api/v3/search/availability payload must yield real records.
+
+        The itinerary lives under data.trips[].journeysAvailable and the money
+        under data.faresAvailable keyed by the journey's opaque fare keys; the
+        generic branches do not look there, so this shape is read explicitly.
+        """
+        fare_key = "opaque-fare-key"
+        payload = {
+            "data": {
+                "currencyCode": "INR",
+                "trips": [
+                    {
+                        "journeysAvailable": [
+                            {
+                                "designator": {
+                                    "origin": "DEL",
+                                    "destination": "BOM",
+                                    "departure": "2026-10-05T19:55:00",
+                                    "arrival": "2026-10-05T22:40:00",
+                                },
+                                "carrierString": "SG 162",
+                                "stops": 0,
+                                "segments": [
+                                    {
+                                        "identifier": {
+                                            "carrierCode": "SG",
+                                            "identifier": "162",
+                                        }
+                                    }
+                                ],
+                                "fares": {
+                                    fare_key: {
+                                        "classOfService": "U",
+                                        "availableCount": 1,
+                                    }
+                                },
+                            }
+                        ]
+                    }
+                ],
+                "faresAvailable": {
+                    fare_key: {
+                        "passengerFares": [
+                            {
+                                "passengerType": "ADT",
+                                "fareAmount": 6447,
+                                "publishedFare": 4900,
+                                "revenueFare": 4900,
+                                "serviceCharges": [
+                                    {"amount": 4900, "code": None, "type": 0},
+                                    {"amount": 100, "code": "RCS", "type": 4},
+                                    {"amount": 85, "code": "TRF", "type": 4},
+                                    {"amount": 599, "code": "YQ", "type": 4},
+                                    {"amount": 236, "code": "ASF", "type": 4},
+                                    {"amount": 152, "code": "UDF", "type": 4},
+                                    {"amount": 89, "code": "AAT", "type": 4},
+                                    {"amount": 286, "code": None, "type": 5},
+                                ],
+                            }
+                        ]
+                    }
+                },
+            }
+        }
+
+        records = self.scraper.parse_flight_json(
+            payload=payload,
+            origin="DEL",
+            destination="BOM",
+            window_code="T+7",
+        )
+
+        self.assertEqual(len(records), 1)
+        rec = records[0]
+        self.assertFalse(rec.is_synthetic)
+        self.assertEqual(rec.source_platform, "spicejet")
+        self.assertEqual(rec.source, "spicejet")
+        self.assertEqual(rec.flight_number, "SG-162")
+        self.assertEqual(rec.origin, "DEL")
+        self.assertEqual(rec.destination, "BOM")
+        self.assertEqual(rec.departure_datetime, "2026-10-05T19:55:00")
+        self.assertEqual(rec.arrival_datetime, "2026-10-05T22:40:00")
+        self.assertEqual(rec.fare_inr, 6447.0)
+        self.assertEqual(rec.base_fare, 4900.0)
+        self.assertEqual(rec.taxes_and_fees, 1395.0)
+        self.assertEqual(rec.fare_split_basis, "measured")
+        self.assertEqual(rec.booking_class, "U")
+        self.assertEqual(rec.udf_fee, 152.0)
+        self.assertEqual(rec.base_fare + rec.taxes_and_fees + rec.udf_fee, rec.fare_inr)
+        self.assertEqual(rec.booking_window, "T+7")
+        self.assertEqual(rec.duration_minutes, 165)
+        is_valid, errors = self.scraper.validate_record(rec)
+        self.assertTrue(is_valid, errors)
+
+    def test_parse_flight_json_availability_rejects_non_inr(self) -> None:
+        """A non-INR availability payload must not be recorded as INR fares."""
+        payload = {
+            "data": {
+                "currencyCode": "USD",
+                "trips": [],
+                "faresAvailable": {},
+            }
+        }
+        records = self.scraper.parse_flight_json(
+            payload=payload,
+            origin="DEL",
+            destination="BOM",
+            window_code="T+7",
+        )
+        self.assertEqual(records, [])
+
     def test_scrape_route_fallback_synthetic_spicejet(self) -> None:
         """Tests that synthetic mode generates SpiceJet (SG) calibrated records."""
         result = self.scraper.scrape_route(
