@@ -1,16 +1,19 @@
-# APIx
-
-**A real-time airfare price index for India, built to augment the Consumer Price Index.**
-
-Smart India Hackathon 2026 · Problem Statement 26056 · Team Woven Tech
-
-[![CI](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml/badge.svg)](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-520%20passed-brightgreen.svg)](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-see%20LICENSE-informational.svg)](LICENSE)
-[![Live Demo](https://img.shields.io/badge/demo-live-success.svg)](https://apix-dashboard-navy.vercel.app/)
-
-[![Live Demo — Open the Dashboard](https://img.shields.io/badge/▶_Live_Demo-Open_the_Dashboard-brightgreen?style=for-the-badge)](https://apix-dashboard-navy.vercel.app/)
+<div align="center">
+  <img src="assets/logo.svg" alt="APIx logo" width="120" />
+  <h1>APIx</h1>
+  <p><strong>A real-time airfare price index for India, built to augment the Consumer Price Index.</strong></p>
+  <p>Smart India Hackathon 2026 · Problem Statement 26056 · Team Woven Tech</p>
+  <p>
+    <a href="https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml"><img src="https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <a href="https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/tests-520%20passed-brightgreen.svg" alt="Tests" /></a>
+    <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg" alt="Python" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-see%20LICENSE-informational.svg" alt="License" /></a>
+    <a href="https://apix-dashboard-navy.vercel.app/"><img src="https://img.shields.io/badge/demo-live-success.svg" alt="Live Demo" /></a>
+  </p>
+  <p>
+    <a href="https://apix-dashboard-navy.vercel.app/"><img src="https://img.shields.io/badge/▶_Live_Demo-Open_the_Dashboard-brightgreen?style=for-the-badge" alt="Live Demo: Open the Dashboard" /></a>
+  </p>
+</div>
 
 ---
 
