@@ -188,14 +188,33 @@ def test_dgca_traffic_weights_table_provenance() -> None:
     for path in [csv_path, json_path]:
         loader = DgcaTrafficLoader(data_path=path)
         prov = loader.provenance
-        assert prov["is_synthetic"] is True, f"{path.name} not marked synthetic"
-        assert prov["record_count"] >= 270
-        assert len(loader._records) >= 270
+        assert prov["is_synthetic"] is False, f"{path.name} has no real DGCA rows"
+        assert prov["record_count"] == 270
+        assert prov["provenance_counts"] == {"DGCA": 240, "calibrated_baseline": 30}
+        assert len(loader._records) == 270
 
-        first_rec = loader._records[0]
-        assert first_rec.is_synthetic is True
-        assert first_rec.provenance in ("calibrated_baseline", "modelled_dgca_proxy")
-        assert first_rec.source_url.startswith("https://www.dgca.gov.in")
-        assert first_rec.release_date
-        assert first_rec.pax_volume > 0
-        assert first_rec.share_weight > 0
+        by_key = {(r.year_month, r.route_code): r for r in loader._records}
+
+        assert by_key[("2024-01", "DEL-BOM")].pax_volume == 284143
+        assert by_key[("2024-01", "BOM-DEL")].pax_volume == 289788
+        assert by_key[("2025-01", "DEL-BOM")].pax_volume == 279457
+
+        anchor = by_key[("2025-10", "DEL-BOM")]
+        assert anchor.pax_volume == 562463
+        assert anchor.provenance == "calibrated_baseline"
+        assert anchor.is_synthetic is True
+
+        for rec in loader._records:
+            if rec.provenance == "DGCA":
+                assert rec.is_synthetic is False, rec
+                assert rec.source_url.startswith("https://www.dgca.gov.in"), rec
+                assert rec.release_date, rec
+                assert ".xlsx" in rec.source, rec
+            else:
+                assert rec.provenance == "calibrated_baseline", rec
+                assert rec.is_synthetic is True, rec
+            assert rec.pax_volume > 0
+            assert rec.share_weight > 0
+
+        for ym, weights in loader._weights_by_period.items():
+            assert abs(sum(weights.values()) - 1.0) < 1e-6, ym

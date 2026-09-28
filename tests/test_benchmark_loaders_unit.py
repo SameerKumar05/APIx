@@ -307,9 +307,7 @@ class TestDgcaWeightProvenance:
         assert again._records[0].provenance == "DGCA"
         assert again._records[0].pax_volume == 100
 
-    def test_committed_weights_file_carries_calibrated_baseline_provenance(
-        self,
-    ) -> None:
+    def test_committed_weights_file_has_real_dgca_rows(self) -> None:
         from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
 
         csv = (
@@ -323,12 +321,88 @@ class TestDgcaWeightProvenance:
             for rec in loader._records
             if rec.year_month == "2024-01" and rec.route_code == "DEL-BOM"
         )
-        assert january.pax_volume == 441875
-        assert january.is_synthetic is True
-        assert january.provenance in {"calibrated_baseline", "modelled_dgca_proxy"}
-        assert loader.provenance["is_synthetic"] is True
+        assert january.pax_volume == 284143
+        assert january.is_synthetic is False
+        assert january.provenance == "DGCA"
+        assert loader.provenance["is_synthetic"] is False
         assert january.source_url.startswith("https://www.dgca.gov.in")
-        assert january.release_date == "2024-02-18"
+        assert january.release_date == "2024-02-19"
+        assert ".xlsx" in january.source
+
+        october = next(
+            rec
+            for rec in loader._records
+            if rec.year_month == "2025-10" and rec.route_code == "DEL-BOM"
+        )
+        assert october.pax_volume == 562463
+        assert october.provenance == "calibrated_baseline"
+        assert october.is_synthetic is True
+
+    def test_per_row_source_and_file_directive_round_trip(self, tmp_path) -> None:
+        import json as jsonlib
+
+        from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader
+
+        cited_csv = tmp_path / "cited.csv"
+        cited_csv.write_text(
+            "# provenance: calibrated_baseline\n"
+            "year_month,route_code,origin,destination,pax_volume,share_weight,"
+            "distance_km,period_rank,provenance,is_synthetic,source,source_url,"
+            "release_date\n"
+            "2024-01,DEL-BOM,DEL,BOM,284143,,1148.0,,DGCA,False,"
+            "CITED SOURCE,https://www.dgca.gov.in/x.xlsx,2024-02-19\n"
+            "2024-01,BOM-DEL,BOM,DEL,289788,,1148.0,,DGCA,False,"
+            "CITED SOURCE,https://www.dgca.gov.in/x.xlsx,2024-02-19\n",
+            encoding="utf-8",
+        )
+        loader = DgcaTrafficLoader(data_path=cited_csv)
+        assert loader._file_declared == "calibrated_baseline"
+        assert {r.source for r in loader._records} == {"CITED SOURCE"}
+
+        out = tmp_path / "roundtrip.csv"
+        loader.export_csv(out)
+        text = out.read_text(encoding="utf-8")
+        assert text.splitlines()[0] == "# provenance: calibrated_baseline"
+
+        again = DgcaTrafficLoader(data_path=out)
+        assert {r.source for r in again._records} == {"CITED SOURCE"}
+        assert again._records[0].release_date == "2024-02-19"
+        assert again.provenance["provenance_counts"] == {"DGCA": 2}
+
+        cited_json = tmp_path / "cited.json"
+        cited_json.write_text(
+            jsonlib.dumps(
+                [
+                    {
+                        "year_month": "2024-01",
+                        "route_code": "DEL-BOM",
+                        "origin": "DEL",
+                        "destination": "BOM",
+                        "pax_volume": 284143,
+                        "distance_km": 1148.0,
+                        "provenance": "DGCA",
+                        "source": "JSON CITED",
+                        "source_url": "https://www.dgca.gov.in/x.xlsx",
+                        "release_date": "2024-02-19",
+                    },
+                    {
+                        "year_month": "2024-01",
+                        "route_code": "BOM-DEL",
+                        "origin": "BOM",
+                        "destination": "DEL",
+                        "pax_volume": 289788,
+                        "distance_km": 1148.0,
+                        "provenance": "DGCA",
+                        "source": "JSON CITED",
+                        "source_url": "https://www.dgca.gov.in/x.xlsx",
+                        "release_date": "2024-02-19",
+                    },
+                ]
+            ),
+            encoding="utf-8",
+        )
+        jloader = DgcaTrafficLoader(data_path=cited_json)
+        assert {r.source for r in jloader._records} == {"JSON CITED"}
 
     def test_weights_still_sum_to_one_per_period(self) -> None:
         from ingestion.loaders.dgca_traffic_loader import DgcaTrafficLoader

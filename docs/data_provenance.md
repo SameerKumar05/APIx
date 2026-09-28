@@ -129,23 +129,25 @@ and earned a false `LIVE` badge. 450 rows previously mislabelled were re-flagged
 
 **Carrier market shares and advance-purchase weights.** The carrier market shares
 and the advance-purchase weights are documented calibrations. City-pair route
-traffic weights and passenger volumes are calibrated baseline proxies in
-`data/dgca_passenger_traffic_weights.json` and `.csv` under explicit
-`provenance="calibrated_baseline"` (`is_synthetic=True`). DGCA publishes aggregate
-domestic passenger traffic statistics (city-pair rankings and annual handbook volumes),
-but does not publish high-frequency programmatic microdata or flight fare feeds
-(Lok Sabha Unstarred Question 1934, answered 30 July 2026). The weights are calibrated
-proxies derived from published DGCA city-pair traffic rankings without false official claims.
+traffic weights are now transcribed from real DGCA monthly city-pair XLSX releases:
+240 of 270 rows in `data/dgca_passenger_traffic_weights.json` and `.csv` carry
+`provenance="DGCA"` (`is_synthetic=False`) with a per-row source URL and release
+citation (HTTP Last-Modified date). The 30 rows for 2025-10/11/12 remain
+`provenance="calibrated_baseline"` (`is_synthetic=True`) because those three XLSX
+files return HTTP 403; per issue #7 they are never relabelled without a real
+per-row citation. DGCA does not publish high-frequency fare microdata or flight
+fare feeds (Lok Sabha Unstarred Question 1934, answered 30 July 2026), so fare-side
+calibrations remain labelled as they are.
 
 ## Withdrawn comparisons and known index limits
 
 **The bundled MoSPI CPI series is withdrawn.** `data/mospi_cpi_historical_2024_2026.json` declares `"status": "withdrawn"`: its stored values contradicted NSO press notes, and the file now carries no records. Any comparison plotted against it is modelled, not a MoSPI benchmark, and the withdrawn values must never be presented as a current official release.
 
-**DGCA publishes no reusable fare dataset.** Its Tariff Monitoring Unit monitors fares but releases no dataset, dashboard, or route list — so no measured back-test against DGCA fares exists. (DGCA *traffic* volumes are a separate matter: real monthly city-pair XLSX files exist and are the intended replacement for the modelled weights above; fare levels do not.)
+**DGCA publishes no reusable fare dataset.** Its Tariff Monitoring Unit monitors fares but releases no dataset, dashboard, or route list — so no measured back-test against DGCA fares exists. (DGCA *traffic* volumes are a separate matter: the real monthly city-pair XLSX releases have now been transcribed into the weights files for 24 of 27 table months; fare levels still do not exist as open data.)
 
 **The Fisher index here fails factor reversal by design.** The Paasche leg is textbook; the Laspeyres leg is a fixed-weight mean of price relatives rather than a true Laspeyres, so `P_F x Q_F == V_t / V_0` does not hold for the engine pair. `tests/test_factor_reversal.py` proves both halves (`test_factor_reversal_holds_for_the_true_laspeyres_paasche_pair` passes for the true pair; `test_engine_fisher_pair_does_not_satisfy_factor_reversal` proves the engine pair fails). Time reversal is asserted.
 
-**Deployed fares are synthetic by name.** The fallback that produces every fare in the system today is `SyntheticFlightGenerator` (`ingestion/crawlers/synthetic.py:52`), reached only after the live scrapers yield zero records, and its output is persisted with `is_synthetic=true`. Route and traffic weights carry verified `provenance=calibrated_baseline` (`is_synthetic=true`) as calibrated proxies derived from DGCA city-pair traffic rankings.
+**Deployed fares are synthetic by name.** The fallback that produces every fare in the system today is `SyntheticFlightGenerator` (`ingestion/crawlers/synthetic.py:52`), reached only after the live scrapers yield zero records, and its output is persisted with `is_synthetic=true`. Route and traffic weights are transcribed from real DGCA monthly city-pair releases for 240 of 270 rows (`provenance=DGCA`, `is_synthetic=false`, per-row source URL and release citation); the 30 rows for 2025-10/11/12 keep `provenance=calibrated_baseline` (`is_synthetic=true`) until their XLSX releases are reachable.
 
 ## Evidence paths
 

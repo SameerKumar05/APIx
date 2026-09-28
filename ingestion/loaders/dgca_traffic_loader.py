@@ -408,6 +408,7 @@ class DgcaTrafficLoader:
         self._records: list[DgcaTrafficRecord] = []
         self._records_by_period: dict[str, list[DgcaTrafficRecord]] = {}
         self._weights_by_period: dict[str, dict[str, float]] = {}
+        self._file_declared: str | None = None
 
         if self.data_path and self.data_path.exists():
             if self.data_path.suffix.lower() == ".json":
@@ -433,6 +434,9 @@ class DgcaTrafficLoader:
         """
         synthetic = {r.is_synthetic for r in self._records}
         sources = sorted({r.source for r in self._records if r.source})
+        provenance_counts: dict[str, int] = {}
+        for r in self._records:
+            provenance_counts[r.provenance] = provenance_counts.get(r.provenance, 0) + 1
         return {
             "is_synthetic": synthetic == {True},
             "record_count": len(self._records),
@@ -440,6 +444,7 @@ class DgcaTrafficLoader:
             "first_period": min((r.year_month for r in self._records), default=None),
             "last_period": max((r.year_month for r in self._records), default=None),
             "sources": sources,
+            "provenance_counts": provenance_counts,
             "data_path": str(self.data_path) if self.data_path else None,
         }
 
@@ -474,6 +479,11 @@ class DgcaTrafficLoader:
         - Passenger volume: pax_volume, pax, passengers, traffic, monthly_pax
         - Distance: distance_km, distance, dist_km
         - Weight: share_weight, weight, basket_weight
+
+        Citation: when an ``origin`` column is present, any ``source`` (or
+        ``citation``) column is read as the per-row citation and stored verbatim
+        on the record. Only when no ``origin`` column exists does ``source``
+        double as an origin alias (legacy behaviour).
         """
         if isinstance(csv_source, Path) or (
             isinstance(csv_source, str)
@@ -488,9 +498,15 @@ class DgcaTrafficLoader:
             content = str(csv_source)
 
         file_declared, content = split_provenance_directive(content)
+        self._file_declared = file_declared
         reader = csv.DictReader(io.StringIO(content.strip()))
         if not reader.fieldnames:
             raise ValueError("CSV is empty or missing headers")
+
+        has_origin_column = any(
+            name and name.strip().lower() in ("origin", "from", "origin_iata")
+            for name in reader.fieldnames
+        )
 
         raw_rows_by_period: dict[str, list[dict[str, Any]]] = {}
 
@@ -515,12 +531,12 @@ class DgcaTrafficLoader:
                 or row.get("corridor")
                 or row.get("city_pair")
             )
-            origin = (
-                row.get("origin")
-                or row.get("source")
-                or row.get("from")
-                or row.get("origin_iata")
-            )
+            if has_origin_column:
+                origin = row.get("origin") or row.get("from") or row.get("origin_iata")
+                citation = row.get("source") or row.get("citation") or ""
+            else:
+                origin = row.get("origin") or row.get("source") or row.get("from")
+                citation = row.get("citation") or ""
             dest = (
                 row.get("destination")
                 or row.get("dest")
@@ -584,6 +600,7 @@ class DgcaTrafficLoader:
                     "share_weight": share_weight,
                     "is_synthetic": prov.is_synthetic,
                     "provenance": prov.label,
+                    "citation": citation,
                     "source_url": source_url,
                     "release_date": release_date,
                 }
@@ -622,7 +639,10 @@ class DgcaTrafficLoader:
                     period_rank=rank,
                     is_synthetic=item["is_synthetic"],
                     provenance=item["provenance"],
-                    source=self._source_for(item["provenance"], item["is_synthetic"]),
+                    source=(
+                        item.get("citation")
+                        or self._source_for(item["provenance"], item["is_synthetic"])
+                    ),
                     source_url=item.get("source_url", ""),
                     release_date=item.get("release_date", ""),
                 )
@@ -654,6 +674,7 @@ class DgcaTrafficLoader:
             data = json_source
 
         file_declared = data.get("provenance") if isinstance(data, dict) else None
+        self._file_declared = file_declared
         raw_list = (
             data
             if isinstance(data, list)
@@ -701,6 +722,7 @@ class DgcaTrafficLoader:
                 None if file_declared is None else str(file_declared),
             )
             prov = resolve_traffic_provenance(token)
+            citation = str(item.get("source") or item.get("citation") or "")
             source_url = str(item.get("source_url") or item.get("url") or "")
             release_date = str(
                 item.get("release_date") or item.get("date_published") or ""
@@ -715,6 +737,7 @@ class DgcaTrafficLoader:
                     "share_weight": share_weight,
                     "is_synthetic": prov.is_synthetic,
                     "provenance": prov.label,
+                    "citation": citation,
                     "source_url": source_url,
                     "release_date": release_date,
                 }
@@ -749,7 +772,10 @@ class DgcaTrafficLoader:
                     period_rank=rank,
                     is_synthetic=item["is_synthetic"],
                     provenance=item["provenance"],
-                    source=self._source_for(item["provenance"], item["is_synthetic"]),
+                    source=(
+                        item.get("citation")
+                        or self._source_for(item["provenance"], item["is_synthetic"])
+                    ),
                     source_url=item.get("source_url", ""),
                     release_date=item.get("release_date", ""),
                 )
@@ -881,6 +907,8 @@ class DgcaTrafficLoader:
         ]
 
         with open(path, mode="w", encoding="utf-8", newline="") as f:
+            if self._file_declared:
+                f.write(f"# provenance: {self._file_declared}\n")
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for r in self._records:
