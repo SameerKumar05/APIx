@@ -16,7 +16,7 @@ enforced in code rather than promised in prose.
 | Are scrapers implemented for all 11 PS-named portals? | Yes, as registered classes |
 | Do any of them currently produce a fare? | **No.** Every live portal query fails closed or encounters bot-mitigation in evaluation environments. The system operates in fallback mode (`is_synthetic = True`). The ingestion architecture, component separation, and persistence plumbing are fully implemented and verified via staged fixtures. |
 | Is the dashboard badge honest? | Yes. It separates stream status (`WEBSOCKET LIVE`) from data provenance (`DGCA BENCHMARK` / `LIVE SCRAPE`), and cannot claim `LIVE SCRAPE` without a corroborated scrape. |
-| Is the route weighting official DGCA data? | **No.** It is modelled, and labelled as such. |
+| Is the route weighting official DGCA data? | **Selected on DGCA data, not published by DGCA.** 240 of 270 route-traffic rows transcribe real DGCA monthly city-pair XLSX releases with per-row source URL and release citation; the 30 rows for 2025-10/11/12 (HTTP 403) and the carrier shares remain calibrated/modelled, and are labelled as such. |
 
 `GET /api/v1/health` reports this machine-readably:
 
