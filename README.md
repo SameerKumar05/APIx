@@ -8,6 +8,9 @@ Smart India Hackathon 2026 · Problem Statement 26056 · Team Woven Tech
 [![Tests](https://img.shields.io/badge/tests-520%20passed-brightgreen.svg)](https://github.com/SameerKumar05/APIx/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-see%20LICENSE-informational.svg)](LICENSE)
+[![Live Demo](https://img.shields.io/badge/demo-live-success.svg)](https://apix-dashboard-navy.vercel.app/)
+
+**[▶ Live Demo — https://apix-dashboard-navy.vercel.app/](https://apix-dashboard-navy.vercel.app/)**
 
 ---
 
