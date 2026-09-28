@@ -262,3 +262,53 @@ def test_proxy_pool_health_tracking_and_cooldown_recovery() -> None:
     assert len(recovered) == 1
     assert recovered[0].ip == "10.0.1.1"
     assert recovered[0].status == "testing"
+
+
+def test_worker_egress_label_strips_proxy_credentials() -> None:
+    """The egress label recorded in proxy_health_records must never leak secrets."""
+    from ingestion.worker import CrawlerWorker
+
+    label = CrawlerWorker._egress_label("http://user:secret@198.51.100.9:8080")
+    assert label == "http://198.51.100.9:8080"
+    assert "secret" not in label and "user" not in label
+    assert CrawlerWorker._egress_label(None) == "direct-egress"
+    assert CrawlerWorker._egress_label("   ") == "direct-egress"
+
+
+def test_worker_process_job_records_egress_health(db_session) -> None:
+    """Every finished job must leave an egress-health row for the provenance audit."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.app.db.crawler_job_repo import enqueue_job
+    from backend.app.models.telemetry import ProxyHealthRecord
+    from ingestion.base import ScrapeResult
+    from ingestion.worker import CrawlerWorker
+
+    class _StubOrchestrator:
+        scraper_source = "synthetic"
+
+        def scrape_slot(self, origin, window_code, scraper_source=None):
+            return ScrapeResult(source="synthetic", success=True, records=[], errors=[])
+
+    testing_session_factory = sessionmaker(bind=db_session.bind, expire_on_commit=False)
+    enqueue_job(
+        db=db_session,
+        crawler_name="synthetic",
+        route_code="DEL-BOM",
+        booking_window="T+1",
+    )
+    worker = CrawlerWorker(
+        worker_id="egress-test-worker",
+        config=IngestionConfig(ingestion_mode="synthetic"),
+        session_factory=testing_session_factory,
+        orchestrator=_StubOrchestrator(),
+    )
+    job = worker._claim_job()
+    assert job is not None
+    worker._process_job(job)
+
+    rows = db_session.scalars(select(ProxyHealthRecord)).all()
+    assert len(rows) >= 1
+    assert rows[0].proxy_ip == "direct-egress"
+    assert rows[0].status == "HEALTHY"
