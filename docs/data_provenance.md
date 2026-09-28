@@ -14,7 +14,7 @@ enforced in code rather than promised in prose.
 | Has a live airfare ever been read? | **Yes.** 23 live quotes were read from SpiceJet's availability API on 2026-09-28 (DEL-BOM and DEL-BLR, windows T+1..T+45) and persisted with `is_synthetic = 0`. They are corroborated by scraper telemetry, proxy-health evidence, and 7 distinct scrape times, so `scripts/audit_provenance.py` passes. The other 10 PS-named portals still fail closed or yield no fare in evaluation environments (no commercial rotating residential proxies such as BrightData/Oxylabs; Cloudflare/Akamai bot-mitigation or fail-closed RFC 9309 robots.txt). |
 | Rows claiming to be live in the database | **23** (all SpiceJet, `is_synthetic = 0`). A further 13 rows are the synthetic fallback (`is_synthetic = True`). |
 | Are scrapers implemented for all 11 PS-named portals? | Yes, as registered classes |
-| Do any of them currently produce a fare? | **Yes — SpiceJet.** The intercepted availability JSON supplies `fareAmount` and a coded tax breakdown, persisted as a measured split (`base + taxes + UDF == total`, checked at insert). Every other portal query still fails closed or encounters bot-mitigation, and those paths fall through to the synthetic tier (`is_synthetic = True`). |
+| Do any of them currently produce a fare? | **Yes, SpiceJet.** The intercepted availability JSON supplies `fareAmount` and a coded tax breakdown, persisted as a measured split (`base + taxes + UDF == total`, checked at insert). Every other portal query still fails closed or encounters bot-mitigation, and those paths fall through to the synthetic tier (`is_synthetic = True`). |
 | Is the dashboard badge honest? | Yes. It separates stream status (`WEBSOCKET LIVE`) from data provenance (`DGCA BENCHMARK` / `LIVE SCRAPE`), and cannot claim `LIVE SCRAPE` without a corroborated scrape. |
 | Is the route weighting official DGCA data? | **Selected on DGCA data, not published by DGCA.** 240 of 270 route-traffic rows transcribe real DGCA monthly city-pair XLSX releases with per-row source URL and release citation; the 30 rows for 2025-10/11/12 (HTTP 403) and the carrier shares remain calibrated/modelled, and are labelled as such. |
 
@@ -77,7 +77,7 @@ HTTP 200, data.trips[]            -> SG 815, DEL 09:50 -> BOM 12:25
 ```
 
 The parser reads `fareAmount`/`publishedFare` and the per-code tax charges directly
-from that JSON — nothing is decoded from the opaque `fareAvailabilityKey`, and no
+from that JSON. Nothing is decoded from the opaque `fareAvailabilityKey`, and no
 price is guessed. The opaque key (`USAV~5511~~0~665~`,
 `X!0:48004:1004:854:5994:2364:1524:895:280`) still has no documented mapping and
 is used only for lookups, never to derive an amount.
@@ -107,7 +107,7 @@ Four mechanisms, all enforced in code:
 3. **`scripts/audit_provenance.py` fails closed.** It exits non-zero if any row
    claims to be live without corroborating telemetry, a scraping run, proxy
    evidence, and scrape-time diversity.
-4. **Data provenance is rigorously tested.** The feed distinguishes stream connectivity (`WEBSOCKET LIVE`) from data calibration (`DGCA BENCHMARK`), and
+4. **Data provenance is tested.** The feed distinguishes stream connectivity (`WEBSOCKET LIVE`) from data calibration (`DGCA BENCHMARK`), and
    the provenance badge is contract-tested in
    `frontend/scripts/verify-mock-data.ts`.
 
@@ -117,16 +117,16 @@ and earned a false `LIVE` badge. 450 rows previously mislabelled were re-flagged
 
 ## Fare component splits, calibrations, and recomposition integrity
 
-**Base fare versus taxes and calibrated ratios.** Rather than using a fixed 0.78 constant everywhere, the system utilizes route- and carrier-aware calibrated ratios grounded in Indian domestic airline economics:
-- **Carrier differentiation:** Full-Service Carriers (Air India `AI`) bundle 25kg checked baggage, complimentary meals, and seat selection into the base fare, yielding higher base proportions (~0.81). Low-Cost Carriers (IndiGo `6E`, Akasa Air `QP`, Air India Express `IX`, SpiceJet `SG`) unbundle ancillaries and levy separate fees, yielding base ratios between 0.74 and 0.78.
-- **Route distance and airport fee scaling:** Fixed passenger airport charges (User Development Fee / UDF, Passenger Service Fee / PSF, and Aviation Security Fee / ASF) represent a larger percentage of short-haul low fares (e.g. BLR-HYD ~500km, base ratio 0.72) and a smaller percentage of long-haul high fares (e.g. DEL-BLR, DEL-MAA ~1750km, base ratio 0.81).
+**Base fare versus taxes and calibrated ratios.** Rather than using a fixed 0.78 constant everywhere, the system uses route- and carrier-aware calibrated ratios grounded in Indian domestic airline economics:
+- Full-service carriers (Air India `AI`) bundle 25kg checked baggage, complimentary meals, and seat selection into the base fare, yielding higher base proportions (~0.81). Low-cost carriers (IndiGo `6E`, Akasa Air `QP`, Air India Express `IX`, SpiceJet `SG`) unbundle ancillaries and levy separate fees, yielding base ratios between 0.74 and 0.78.
+- Fixed passenger airport charges (User Development Fee / UDF, Passenger Service Fee / PSF, and Aviation Security Fee / ASF) represent a larger percentage of short-haul low fares (e.g. BLR-HYD ~500km, base ratio 0.72) and a smaller percentage of long-haul high fares (e.g. DEL-BLR, DEL-MAA ~1750km, base ratio 0.81).
 - **Explicit `fare_split_basis` labels:**
   - `measured`: Both base and taxes supplied directly by the source.
   - `residual`: One side supplied directly; the other derived as residual of total.
   - `calibrated`: Route- and carrier-aware calibrated ratio applied when components are omitted.
   - `estimated`: Uncalibrated fallback (`DEFAULT_BASE_FARE_RATIO = 0.78`) when carrier and route are unknown.
-- **Total recomposition integrity check:** When components exist, the system enforces `abs(total - (base + taxes + UDF + convenience)) <= max(1.0, 0.005 * total)`. Any violating observation is quarantined with `index_exclusion_reason = "split_recomposition_mismatch"`.
-- **Policy for sparse windows (< 4 Tukey peers):** When fewer than 4 payable peer quotes exist within the 30-day lookback window on a corridor-window slice, quartiles cannot be statistically identified. In sparse windows, no outlier fence is applied (all payable quotes remain index-eligible with `index_exclusion_reason = None`), avoiding false censorship on thin routes while structural checks (cancelled/sold-out status and recomposition mismatch) remain active.
+- When components exist, the system enforces `abs(total - (base + taxes + UDF + convenience)) <= max(1.0, 0.005 * total)` as a total recomposition integrity check. Any violating observation is quarantined with `index_exclusion_reason = "split_recomposition_mismatch"`.
+- For sparse windows with fewer than 4 Tukey peers: when fewer than 4 payable peer quotes exist within the 30-day lookback window on a corridor-window slice, quartiles cannot be statistically identified. In sparse windows, no outlier fence is applied (all payable quotes remain index-eligible with `index_exclusion_reason = None`), avoiding false censorship on thin routes while structural checks (cancelled/sold-out status and recomposition mismatch) remain active.
 
 **Carrier market shares and advance-purchase weights.** The carrier market shares
 and the advance-purchase weights are documented calibrations. City-pair route
@@ -144,7 +144,7 @@ calibrations remain labelled as they are.
 
 **The bundled MoSPI CPI series is withdrawn.** `data/mospi_cpi_historical_2024_2026.json` declares `"status": "withdrawn"`: its stored values contradicted NSO press notes, and the file now carries no records. Any comparison plotted against it is modelled, not a MoSPI benchmark, and the withdrawn values must never be presented as a current official release.
 
-**DGCA publishes no reusable fare dataset.** Its Tariff Monitoring Unit monitors fares but releases no dataset, dashboard, or route list — so no measured back-test against DGCA fares exists. (DGCA *traffic* volumes are a separate matter: the real monthly city-pair XLSX releases have now been transcribed into the weights files for 24 of 27 table months; fare levels still do not exist as open data.)
+**DGCA publishes no reusable fare dataset.** Its Tariff Monitoring Unit monitors fares but releases no dataset, dashboard, or route list, so no measured back-test against DGCA fares exists. (DGCA *traffic* volumes are a separate matter: the real monthly city-pair XLSX releases have now been transcribed into the weights files for 24 of 27 table months; fare levels still do not exist as open data.)
 
 **The Fisher index here fails factor reversal by design.** The Paasche leg is textbook; the Laspeyres leg is a fixed-weight mean of price relatives rather than a true Laspeyres, so `P_F x Q_F == V_t / V_0` does not hold for the engine pair. `tests/test_factor_reversal.py` proves both halves (`test_factor_reversal_holds_for_the_true_laspeyres_paasche_pair` passes for the true pair; `test_engine_fisher_pair_does_not_satisfy_factor_reversal` proves the engine pair fails). Time reversal is asserted.
 

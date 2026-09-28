@@ -99,7 +99,7 @@ Advance purchase windows capture the steep non-linear price trajectory character
 - **$T+30$ (Baseline / Advance Leisure Window, Weight: $0.14$):** Departure in 16–30 days. Reflects base fare bucket inventory and early-bird leisure purchases used for Laspeyres/Paasche base price indexing ($\times 0.95 - \times 1.05$ baseline multiplier; calibrated default: $\times 1.00$).
 - **$T+45$ (Far-Planned / Corporate Window, Weight: $0.08$):** Departure in 31–45 days (45 days advance). Reflects planned early purchase and far-planned corporate travel policy inventory ($\times 0.92 - \times 1.02$ baseline multiplier; calibrated default: $\times 0.96$).
 
-_Basis: the T+30 description is restored from the sibling-row pattern and `ingestion/config.py:155-161` (1-month advance booking, baseline index fare, $\times 0.95 - \times 1.05$, default $\times 1.00$) — the "16–30 days" text previously attached to T+45 belongs to T+30. T+45 is 45 days advance per `ingestion/config.py:163-169` (6-week advance, $\times 0.92 - \times 1.02$, default $\times 0.96$)._
+_Basis: the T+30 description is restored from the sibling-row pattern and `ingestion/config.py:155-161` (1-month advance booking, baseline index fare, $\times 0.95 - \times 1.05$, default $\times 1.00$). The "16–30 days" text previously attached to T+45 belongs to T+30. T+45 is 45 days advance per `ingestion/config.py:163-169` (6-week advance, $\times 0.92 - \times 1.02$, default $\times 0.96$)._
 
 ---
 
@@ -333,10 +333,10 @@ Where:
 
 ### 8. Distributed Task Scheduler (`ingestion/scheduler.py`) and Standalone Worker (`ingestion/worker.py`)
 
-The distributed scheduler is built upon `APScheduler` (`AsyncIOScheduler`), operating as an asynchronous daemon capable of running standalone or embedded within the APIx backend process. For trigger truth, the durable path is authoritative: the standalone worker `python -m ingestion.worker` polls `crawler_jobs` with atomic claims, holds `worker_heartbeats` leases, sweeps stale leases, and dispatches via `IngestionClient`. Current suite covering this path is 511 passed, with 25/25 verification steps passing in `scripts/verify_all.sh`; older counts (388/226/188) are historical.
+The distributed scheduler is built upon `APScheduler` (`AsyncIOScheduler`), operating as an asynchronous daemon capable of running standalone or embedded within the APIx backend process. For trigger truth, the durable path is authoritative: the standalone worker `python -m ingestion.worker` polls `crawler_jobs` with atomic claims, holds `worker_heartbeats` leases, sweeps stale leases, and dispatches via `IngestionClient`. Current suite covering this path is 520 passed, with 25/25 verification steps passing in `scripts/verify_all.sh`; older counts (388/226/188) are historical.
 
 #### 8.1 Key Capabilities & Lifecycle Architecture
-- **Slot Job Registration:** Pre-registers all 50 discrete route-window combinations as individual jobs with unique deterministic identifiers (`slot_DEL_BOM_T+1`, `slot_BOM_DEL_T+7`, etc.).
+- **Slot Job Registration:** Pre-registers all 70 discrete route-window combinations as individual jobs with unique deterministic identifiers (`slot_DEL_BOM_T+1`, `slot_BOM_DEL_T+7`, etc.).
 - **Stale source comments (report-only, not fixed here):** the scheduler's own docstrings in `ingestion/scheduler.py:4,161,192,221,516` still say "40"/"4 horizons". Those are source files and out of scope for this docs pass; the runtime count is derived from `BOOKING_WINDOWS` (`ingestion/scheduler.py:175`), i.e. 10 routes × 5 windows = 50.
 - **Interval & Cron Triggers:**
   - Standard recurring sweep: Dispatches scheduled sweeps every 6 hours (`interval_minutes=360`).

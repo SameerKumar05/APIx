@@ -8,12 +8,12 @@ Repo: `github.com/SameerKumar05/APIx`, production branch: `main`, app root: `fro
 **Git integration is NOT enabled.** Evidence (no project setting was changed):
 
 - `GET /v9/projects/apix-dashboard` returned `"link": null`,
-  `"gitRepository": null`, `"productionBranch": null` — a Git-connected
+  `"gitRepository": null`, `"productionBranch": null`. A Git-connected
   project would show a `link` object (`type: "github"`, `repo`, `org`) and a
   production branch (Vercel docs: production branch defaults to `main`).
 - `vercel project inspect apix-dashboard` shows correct build settings but no
   Git section.
-- The last deployments are all `"source": "cli"` — every deploy so far was a
+- The last deployments are all `"source": "cli"`. Every deploy so far was a
   manual `vercel` CLI invocation, minutes before this check. Nothing deploys
   automatically today.
 
@@ -32,7 +32,7 @@ than a hand-rolled workflow for this project:
 - Instant rollback is a domain-pointer update, not a rebuild
   ([GitHub Actions with Vercel](https://vercel.com/kb/guide/how-can-i-use-github-actions-with-vercel)).
 - No token stored in the repo. Vercel's own guidance is explicit: *"most
-  teams need no pipeline at all"* — add Actions only for tests, scans,
+  teams need no pipeline at all"*. Add Actions only for tests, scans,
   performance budgets, or approval gates, i.e. things Vercel does not run.
 
 **Fallback (implemented now): `.github/workflows/deploy-frontend.yml`.**
@@ -49,9 +49,9 @@ honestly stated:
 | CI gating | Via Deployment Checks reading GitHub check runs | Via `workflow_run` on CI success |
 | Secrets | None in repo | Static `VERCEL_TOKEN` to rotate |
 | Build caching | Vercel-managed | Runner-side, manual |
-| Double-deploy risk | — | Must delete this file once Git is connected |
+| Double-deploy risk | none | Must delete this file once Git is connected |
 
-## 3. Vercel project settings (verified current — keep pinned)
+## 3. Vercel project settings (verified current, keep pinned)
 
 | Setting | Value | Verified |
 |---|---|---|
@@ -60,9 +60,9 @@ honestly stated:
 | Install Command | `bun install` | yes |
 | Build Command | `bun run build` (`tsc -b && vite build`) | yes |
 | Output Directory | `dist` | yes |
-| `frontend/vercel.json` SPA rewrite `/(.*)` → `/index.html` | present | yes — required; the Vite preset does NOT do SPA fallback automatically |
+| `frontend/vercel.json` SPA rewrite `/(.*)` → `/index.html` | present | yes. Required; the Vite preset does NOT do SPA fallback automatically |
 | Env `VITE_API_BASE_URL=https://api.adityaai.dev` | production only | yes (target `['production']`) |
-| Package manager | Bun (`frontend/bun.lock`, `lockfileVersion: 2`, needs bun ≥ 1.3) | yes — Vercel auto-detects Bun from the lockfile |
+| Package manager | Bun (`frontend/bun.lock`, `lockfileVersion: 2`, needs bun ≥ 1.3) | yes. Vercel auto-detects Bun from the lockfile |
 
 Do **not** commit `VITE_API_BASE_URL` (or any env value) to the repo: Vite
 bakes `import.meta.env` at **build time**, so the value must exist as a
@@ -82,8 +82,8 @@ Vercel project env var, and changing it requires a new deploy.
    URL comment.
 5. **Then delete `.github/workflows/deploy-frontend.yml`** (or, if you want
    to keep Actions as the deployer instead, set
-   `"git": {"deploymentEnabled": false}` in `frontend/vercel.json` — never
-   both active, or every push deploys twice).
+    `"git": {"deploymentEnabled": false}` in `frontend/vercel.json`. Never
+    both active, or every push deploys twice).
 
 ## 5. Preview domains and the CORS coupling (operational consequence)
 
@@ -98,10 +98,10 @@ Vercel project env var, and changing it requires a new deploy.
   - Previews calling the real API will fail CORS unless the preview origin
     is added to `BACKEND_CORS_ORIGINS` on the VM (and Caddy/proxy reloaded
     as applicable), or the preview is pointed at a staging API.
-  - Any **new permanent frontend domain** (custom domain, or a
-    Git-integration-generated replacement of the current URL) likewise
-    requires a `BACKEND_CORS_ORIGINS` update on the VM — treat
-    frontend-domain changes as a coupled backend change.
+   - Any **new permanent frontend domain** (custom domain, or a
+     Git-integration-generated replacement of the current URL) likewise
+     requires a `BACKEND_CORS_ORIGINS` update on the VM. Treat
+     frontend-domain changes as a coupled backend change.
 
 ## 6. Fallback workflow: what it does and what a human must configure
 
@@ -118,30 +118,30 @@ and the [`vercel deploy` CLI reference](https://vercel.com/docs/cli/deploy)):
   `VERCEL_TOKEN`), plus manual `workflow_dispatch`. It checks out the
   **CI-tested SHA** (`head_sha`), not the branch tip, and skips backend-only
   pushes (no `frontend/` changes → success with no deploy).
-- `concurrency: group: deploy-frontend-production, cancel-in-progress: false`
-  — production deploys queue; never cancel one mid-promotion.
+- `concurrency: group: deploy-frontend-production, cancel-in-progress: false`.
+  Production deploys queue; never cancel one mid-promotion.
 - `vercel pull --yes --environment=production` → `vercel build --prod` →
   `vercel deploy --prebuilt --prod`, all non-interactive, authed via the
   `VERCEL_TOKEN` job env var (never a `--token` command-line flag, never
-  echoed; masked in logs). `--prebuilt` means Vercel does **not** rebuild —
-  one build, in the runner.
+  echoed; masked in logs). `--prebuilt` means Vercel does **not** rebuild.
+  One build, in the runner.
 - **Vercel CLI pinned to `59.23.2`, never `@latest`** (`deploy-frontend.yml:115`):
   `vercel@latest` floated to 60.1.3 on the runner and `vercel build` died with
   `Error: spawn sh ENOENT`; 59.23.2 builds this project cleanly. Upgrade
   deliberately after verifying locally.
 - **`oven-sh/setup-bun` (pinned to bun `1.4`) is REQUIRED, not redundant**
   (`deploy-frontend.yml:98-107`): `vercel build` detects `frontend/bun.lock` and
-  delegates to `bun install`, so bun must exist on the runner — without it the
+  delegates to `bun install`, so bun must exist on the runner. Without it the
   build dies with `sh: 1: bun: not found` (exit 127). Pinned to 1.4 (not `latest`)
   because the lockfile is `lockfileVersion: 2`, which needs bun ≥ 1.3.
-  (Removing the step was tried in `1d07826` and reverted in `e2295c2` — the
+  (Removing the step was tried in `1d07826` and reverted in `e2295c2`. The
   earlier `spawn sh ENOENT` was this same missing-binary problem surfacing badly.)
 - **All `vercel` commands run from the REPO ROOT** (`deploy-frontend.yml:117-120`):
   the project's Root Directory is already `frontend`, so invoking the CLI from
   inside `frontend/` makes it resolve the project root to `frontend/frontend`,
   which fails with `Error: spawn sh ENOENT` (fixed in `19b5c74`).
 - All third-party actions pinned to full commit SHAs (checkout v4, setup-node
-  v5, setup-bun v2 — SHAs recorded in comments).
+  v5, setup-bun v2. SHAs recorded in comments).
 - `VITE_API_BASE_URL` is set as a (public, client-baked) workflow env var so
   the runner-side `vercel build` embeds the same value as the Vercel project
   env; keep the two in sync.
@@ -154,20 +154,20 @@ and the [`vercel deploy` CLI reference](https://vercel.com/docs/cli/deploy)):
    (repo Settings → Secrets and variables → Actions). No other secret is
    needed: `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` are non-secret identifiers
    already in the workflow.
-2. Nothing else — no dashboard change, no VM/SSH/Caddy change, no new
-   domain, so **no CORS update** (production domains unchanged).
+2. Nothing else. No dashboard change, no VM/SSH/Caddy change, no new
+  domain, so **no CORS update** (production domains unchanged).
 3. Ongoing: rotate `VERCEL_TOKEN` when team members leave (Vercel has no
-   OIDC for deploy auth as of 2026-08 — static token it is).
+  OIDC for deploy auth as of 2026-08, so static token it is).
 
 ## 7. Validation
 
 - `deploy-frontend.yml` and `deploy-backend.yml`: validated with
-  `actionlint` v1.7.12 on 2026-09-27 — **clean, zero findings** on both files
+  `actionlint` v1.7.12 on 2026-09-27. **Clean, zero findings** on both files
   (exit 0). Covered by the lint: `on.workflow_run.workflows` names the real
   CI workflow `APIx CI / Quality Gate`; `concurrency` present;
   `VERCEL_TOKEN` only via `${{ secrets.VERCEL_TOKEN }}` in `env` (no secret
   value in file, no `--token` flag); all third-party actions pinned to full
-  SHAs (checkout v4, setup-node v5, setup-bun v2 — SHAs verified to exist in
+  SHAs (checkout v4, setup-node v5, setup-bun v2. SHAs verified to exist in
   their upstream repos, not forks, via the GitHub API).
 - No mutation was performed on the Vercel project (read-only `project
   inspect` + `GET /v9/projects` + env/deployments list; no `link`,

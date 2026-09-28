@@ -1,4 +1,4 @@
-# APIx Deployment Run — 2026-09-26
+# APIx deployment run, 2026-09-26
 
 Operational record of the first public deployment of APIx: FastAPI backend on Google
 Compute Engine behind Caddy, Vite SPA on Vercel.
@@ -75,7 +75,7 @@ Provider: **Porkbun** (`*.ns.porkbun.com`). Record created:
 | `api` | A | `34.131.69.223` | 600 |
 
 The current Porkbun v3 API puts parameters in a **JSON body**, and the path is
-`dns/create/{domain}` — *not* `domains/{domain}/dns/add/...`:
+`dns/create/{domain}`, not `domains/{domain}/dns/add/...`:
 
 ```bash
 curl -X POST https://api.porkbun.com/api/json/v3/dns/create/adityaai.dev \
@@ -227,7 +227,7 @@ Playwright-backed API. Sizing is therefore based on *available* memory, not tota
 | backend memory cap | `1g` | prevents OOM reaching neighbouring services |
 | uvicorn workers | 1 | 8 read-only tabs do not need 4 workers on 2 vCPU |
 
-Measured after deploy: **4.0 GiB available** (was 4.4 GiB) — the whole stack costs ~0.4 GiB.
+Measured after deploy: **4.0 GiB available** (was 4.4 GiB). The whole stack costs ~0.4 GiB.
 Swap: 4 GB unused, as a safety net.
 
 ---
@@ -237,7 +237,7 @@ Swap: 4 GB unused, as a safety net.
 These four each caused a real failure or a silent misconfiguration during this run.
 
 **`DATABASE_URL` must be a sync driver URL.** `backend/app/db/session.py:28` uses
-`create_engine` with `sqlalchemy.orm.Session` — not the async engine. So
+`create_engine` with `sqlalchemy.orm.Session`, not the async engine. So
 `postgresql+asyncpg://` (which `.env.example` used to advertise) raises at engine
 creation. Use `postgresql+psycopg2://`.
 
@@ -325,7 +325,7 @@ for the single date; the pipeline persists all three per day in
 | Console errors / failed requests | 0 / 0 |
 | Postgres port binding | none |
 | Backend binding | `127.0.0.1:8000` only |
-| Pre-existing containers | all `Up` at host uptime — never restarted |
+| Pre-existing containers | all `Up` at host uptime, never restarted |
 | `apix` memory cost | ~0.4 GiB |
 
 ---
@@ -362,7 +362,7 @@ The dashboard is live and fully functional, but be precise about what it shows:
   fares, and DGCA offers no reusable fare dataset.
 - **The CPI comparison is modelled.** The official MoSPI series was withdrawn after the
   data contradicted NSO press notes.
-- **Route weights are modelled**, not a DGCA download — the loader reports
+- **Route weights are modelled**, not a DGCA download. The loader reports
   `provenance=generated`.
 - **Fisher factor reversal still fails** by design; it is a known model defect, not a
   regression.
@@ -460,7 +460,7 @@ Caddy backups live at `/opt/caddy/Caddyfile.bak-<timestamp>`.
 | `POSTGRES_PASSWORD` | `/opt/apix/.env` (600) | rotate if the VM is ever exposed |
 | `INGESTION_API_KEY` | `/opt/apix/.env` (600) | already freshly generated; rotate on any suspected leak |
 | `SECRET_KEY` | `/opt/apix/.env` (600) | same |
-| Porkbun API key/secret | `~/Work/woventech/domain-creds.txt` | **was mode 644 (world-readable) — `chmod 600` and rotate** |
+| Porkbun API key/secret | `~/Work/woventech/domain-creds.txt` | **was mode 644 (world-readable). `chmod 600` and rotate** |
 
 `POSTGRES_PASSWORD` only takes effect on first init of an empty data directory. Changing it
 in `.env` afterwards does nothing to an existing volume; you must `ALTER USER` inside the
@@ -486,7 +486,7 @@ ssh volt-rust 'sudo docker exec apix-db pg_dump -U postgres -Fc -f /tmp/apix.dum
 3. **`Dockerfile` pinned `oven/bun:1.2-alpine` (bun 1.2.23)** but `frontend/bun.lock` is
    `lockfileVersion: 2`, which needs bun ≥ 1.3. Reproduced on the VM:
    `error: Unknown lockfile version`. Bumped to `oven/bun:1.4-alpine`; the frontend image
-   now builds (276 packages) and serves 200. Vercel was never affected — it uses its own
+   now builds (276 packages) and serves 200. Vercel was never affected. It uses its own
    newer bun.
 4. **`BACKEND_CORS_ORIGINS` in the live `.env` named the API's own origin** instead of the
    Vercel frontend origin, so every browser call failed preflight with HTTP 400. Corrected

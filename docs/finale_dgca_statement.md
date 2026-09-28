@@ -9,7 +9,7 @@ per-row source URL and release citation; the other 30 stay
 
 All fetch results below were observed on 2026-09-28.
 
-## 1. What DGCA publishes (traffic — and what we used)
+## 1. What DGCA publishes (traffic) and what we used
 
 DGCA publishes monthly domestic city-pair passenger traffic as free XLSX files
 with no login and no API key:
@@ -37,9 +37,9 @@ What we transcribed from these files: **24 of the 27 months in the weights
 table (2024-01 … 2026-03, except 2025-10/11/12) × 10 trunk corridors = 240
 rows**, each with:
 
-- `source_url` — the DGCA portal deep link for that month's file,
-- `release_date` — the HTTP `Last-Modified` date of that file,
-- `source` — report name, XLSX file name, S3 object URL, and the full
+- `source_url`: the DGCA portal deep link for that month's file,
+- `release_date`: the HTTP `Last-Modified` date of that file,
+- `source`: report name, XLSX file name, S3 object URL, and the full
   `Last-Modified` timestamp,
 - `provenance: DGCA`, `is_synthetic: false`.
 
@@ -53,7 +53,7 @@ civil aviation handbooks. None of those contain fares either.
 
 ## 2. What DGCA withholds (fares)
 
-No route-level fare dataset exists in any DGCA public release — no monthly
+No route-level fare dataset exists in any DGCA public release. No monthly
 averages, no fare microdata, no advance-booking-window price series, no
 machine-readable fare time series. The Ministry of Civil Aviation confirmed the
 operational posture in Parliament.
@@ -74,10 +74,10 @@ this repository's own record (`artifacts/DGCA_POSITION_NOTE.md`,
 `scripts/backtest_vs_mospi.py`). The identical TMU passage is independently
 corroborated in at least four other retrievable sources:
 
-- [LS UQ 747, answered 24 July 2025](https://sansad.in/getFile/loksabhaquestions/annex/185/AU747_7QIMtj.pdf?source=pqals) — same 78 routes / 27% sentence.
-- [LS UQ 2127, answered 12 February 2026](https://sansad.in/getFile/loksabhaquestions/annex/187/AU2127_whdYfO.pdf?source=pqals) — same 78 routes / 27% sentence.
-- [LS UQ 3414, answered 12 March 2026](https://sansad.in/getFile/loksabhaquestions/annex/187/AU3414_aXtOwZ.pdf?source=pqals) — TMU monitors airfares monthly from airline websites.
-- [PTI report, 8 December 2025](https://www.newkerala.com/news/o/dgcas-tariff-monitoring-unit-keeping-airfares-78-routes-check-437) — "78 routes … 27 per cent of the domestic traffic".
+- [LS UQ 747, answered 24 July 2025](https://sansad.in/getFile/loksabhaquestions/annex/185/AU747_7QIMtj.pdf?source=pqals), same 78 routes / 27% sentence.
+- [LS UQ 2127, answered 12 February 2026](https://sansad.in/getFile/loksabhaquestions/annex/187/AU2127_whdYfO.pdf?source=pqals), same 78 routes / 27% sentence.
+- [LS UQ 3414, answered 12 March 2026](https://sansad.in/getFile/loksabhaquestions/annex/187/AU3414_aXtOwZ.pdf?source=pqals), TMU monitors airfares monthly from airline websites.
+- [PTI report, 8 December 2025](https://www.newkerala.com/news/o/dgcas-tariff-monitoring-unit-keeping-airfares-78-routes-check-437), "78 routes … 27 per cent of the domestic traffic".
 
 Consequences for this project:
 
@@ -95,15 +95,15 @@ files are reachable, their 30 rows cannot be cited, so they stay calibrated.
 
 ## 3. What changed when real data landed
 
-All 240 transcribed rows differ from the calibrated values they replaced —
-none coincidentally matched. The calibrated table was not merely unverified; it
+All 240 transcribed rows differ from the calibrated values they replaced,
+and none coincidentally matched. The calibrated table was not merely unverified; it
 was quantitatively wrong.
 
 | Metric | Calibrated (before) | DGCA (after) |
 | --- | --- | --- |
 | Monthly total, mean of the 24 shared months | 2,760,432 | 1,784,630 (old = **1.55×**) |
 | Monthly total, range | 2,366,438 – 3,314,720 | 1,631,427 – 1,905,742 |
-| Cumulative overstatement over those 24 months | **+23,419,230 passengers** | — |
+| Cumulative overstatement over those 24 months | **+23,419,230 passengers** | none |
 | Directional symmetry | forced (DEL-BOM = BOM-DEL = 441,875 in 2024-01) | real (2024-01: 284,143 / 289,788) |
 
 Row-level change across the 240 transcribed rows:
@@ -130,11 +130,11 @@ They are currently far above the real run rate:
 | | Calibrated value | Real reference |
 | --- | --- | --- |
 | Monthly total 2025-10 / 11 / 12 | 3,247,500 / 3,202,750 / 3,314,720 (mean 3,254,990) | 24 transcribed months average 1,784,630 (**1.82×**) |
-| Same three months vs their neighbours | — | adjacent real months (2025-09, 2026-01) average 1,734,110 (**1.87×**) |
+| Same three months vs their neighbours | none | adjacent real months (2025-09, 2026-01) average 1,734,110 (**1.87×**) |
 | DEL-BOM 2025-10 | 562,463 | 2025-09 actual: 248,779 (**2.26×**) |
 
 If the three files match their neighbours when they become reachable, these
-rows should fall by roughly 45–50% — a correction this repository will take
+rows should fall by roughly 45–50%. A correction this repository will take
 only from the XLSX itself, never by estimation. That is the precise meaning of
 "which rows would change on real ingestion": 240 already did, 30 are pending
 behind HTTP 403, and nothing else in the table is expected to move.
@@ -169,7 +169,7 @@ New months must be added to `RELEASE_HTTP_DATES` in
 `scripts/ingest_dgca_citypair.py` with their observed `Last-Modified` value.
 Clearing the calibrated remainder works the same way: when 2025-10/11/12 start
 returning 200, add their stamps, remove them from `CALIBRATED_MONTHS`, and
-re-run — only then may those 30 rows carry `provenance: DGCA`.
+re-run. Only then may those 30 rows carry `provenance: DGCA`.
 
 ## 7. Guarantees
 
@@ -180,10 +180,10 @@ re-run — only then may those 30 rows carry `provenance: DGCA`.
   composition, pinned values, per-kind citation contract, and per-period weight
   sums; `tests/test_benchmark_loaders_unit.py` round-trips source citations
   through export/reparse. The file-level `# provenance:` directive remains
-  `calibrated_baseline` as the conservative fallback — row-level provenance
+  `calibrated_baseline` as the conservative fallback. Row-level provenance
   always wins.
 - **`release_date` means the file's HTTP `Last-Modified` date**, i.e. when DGCA
   published that XLSX, not the traffic month it covers.
-- **Verification:** 508 tests pass, `ruff check .` and `black --check .` are
+- **Verification:** 520 tests pass, `ruff check .` and `black --check .` are
   clean, and `python -m scripts.audit_provenance apix.db` reports
   `RESULT: PASS`.

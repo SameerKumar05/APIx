@@ -25,7 +25,7 @@
 > **Live deployment (2026-09-26).** Frontend: `https://apix-dashboard-navy.vercel.app`
 > (Vercel) · API: `https://api.adityaai.dev` (FastAPI on a Google Compute Engine VM
 > behind Caddy). There is no Render deployment and no `onrender.com` URL anywhere in
-> this system. This guide explains the concepts — architecture, prerequisites,
+> this system. This guide explains the concepts: architecture, prerequisites,
 > schema/migrations, operational behaviour. The literal command sequence that produced
 > the live system is the runbook [`deployment_run_2026-09-26.md`](deployment_run_2026-09-26.md);
 > the auto-deploy wiring is [`ci_deploy.md`](ci_deploy.md) (backend) and
@@ -85,7 +85,7 @@ only (`127.0.0.1:8000`); Caddy terminates TLS for `https://api.adityaai.dev` and
 reverse-proxies to it. Postgres runs in the same compose project with no host port
 published, so it is unreachable from the internet. The VM is shared with unrelated
 services, so every `docker compose` invocation is scoped with `-p apix-deploy` and
-names only the services it touches — never an unscoped `down`.
+names only the services it touches, never an unscoped `down`.
 
 ### 2.1 Deploy path: CI-gated auto-deploy (primary)
 
@@ -97,7 +97,7 @@ re-deploy. The workflow rsyncs the repo to `/opt/apix` (excluding the VM's gitig
 `alembic upgrade head` in a one-off container while the old backend still serves,
 recreates the backend, then polls `http://127.0.0.1:8000/health` until it returns 200.
 The full wiring is documented in [`ci_deploy.md`](ci_deploy.md). So "push to main to
-deploy" is accurate; a manual `pip install` on a server is not the production path —
+deploy" is accurate; a manual `pip install` on a server is not the production path.
 the `pip`/`uvicorn` commands in §12 are the local-development path.
 
 ### 2.2 Health Check & Rollout Gating
@@ -113,13 +113,13 @@ the `pip`/`uvicorn` commands in §12 are the local-development path.
   }
   ```
   (plus a `timestamp`; evidence: `backend/app/main.py:175-190`).
-- Unhealthy states return 503: `Database unavailable` on unreachable DB or reachable-but-uninitialized schema, and the trigger path additionally returns 503 `No active crawler worker available` without a fresh `worker_heartbeats` lease. Trigger returns 401 without a key and 202 `QUEUED` only after a committed `crawler_jobs` row plus fresh heartbeat (evidence: `.omo/ulw-research/20260925-180203/evidence/api-8015-final.json`, `evidence/trigger-liveness-8014.json`, `evidence/trigger-idempotency-8014.json`, `tests/test_runtime_boundaries.py:93-106`).
+- Unhealthy states return 503: `Database unavailable` on unreachable DB or reachable-but-uninitialized schema, and the trigger path returns 503 `No active crawler worker available` without a fresh `worker_heartbeats` lease. Trigger returns 401 without a key and 202 `QUEUED` only after a committed `crawler_jobs` row plus fresh heartbeat (evidence: `.omo/ulw-research/20260925-180203/evidence/api-8015-final.json`, `evidence/trigger-liveness-8014.json`, `evidence/trigger-idempotency-8014.json`, `tests/test_runtime_boundaries.py:93-106`).
 - If the migration or the post-restart health gate fails, the deploy workflow fails loudly; the old container keeps serving until `up -d backend` recreates it, and data survives in named volumes regardless.
 
 ### 2.3 PostgreSQL / TimescaleDB in Compose
-1. Postgres runs as the `db` service of the compose project (TimescaleDB image — pinned to `timescale/timescaledb:2.14.2-pg16` in `docker-compose.deploy.yml`), with data in a named volume. On the VM it publishes no host port.
+1. Postgres runs as the `db` service of the compose project (TimescaleDB image, pinned to `timescale/timescaledb:2.14.2-pg16` in `docker-compose.deploy.yml`), with data in a named volume. On the VM it publishes no host port.
 2. Database name, user and password come from `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` (defaults `apix_user` / `apix_db`).
-3. Set `DATABASE_URL` to a synchronous `postgresql+psycopg2://` URI (e.g. `postgresql+psycopg2://apix_user:<password>@db:5432/apix_db`), matching the sync `create_engine()` in `backend/app/db/session.py:28`. `DATABASE_URL_SYNC` is read by nothing — `migrations/env.py` resolves `DATABASE_URL` only — so it is a no-op placeholder; see §8.1.
+3. Set `DATABASE_URL` to a synchronous `postgresql+psycopg2://` URI (e.g. `postgresql+psycopg2://apix_user:<password>@db:5432/apix_db`), matching the sync `create_engine()` in `backend/app/db/session.py:28`. `DATABASE_URL_SYNC` is read by nothing. `migrations/env.py` resolves `DATABASE_URL` only, so it is a no-op placeholder; see §8.1.
 
 ---
 
@@ -137,7 +137,7 @@ Vercel provides edge network hosting for the React 19 single-page application.
    - **Install Command**: `bun install` (or `npm install`)
 
 ### 3.2 Single Page Application (SPA) Routing Configuration
-`frontend/vercel.json` contains only the SPA rewrite — no `headers` cache block, no
+`frontend/vercel.json` contains only the SPA rewrite, no `headers` cache block, no
 `cleanUrls`, no `cname`:
 ```json
 {
@@ -157,7 +157,7 @@ the client-side router take over.
 
 ### 3.3 Frontend Environment Variables
 In **Project Settings** -> **Environment Variables**:
-- `VITE_API_BASE_URL`: `https://api.adityaai.dev` (Production — bare origin only; `frontend/src/services/apiClient.ts:35-46` appends `/api/v1` when the value lacks that suffix)
+- `VITE_API_BASE_URL`: `https://api.adityaai.dev` (Production, bare origin only; `frontend/src/services/apiClient.ts:35-46` appends `/api/v1` when the value lacks that suffix)
 - Configure preview environments to point to staging or preview backend URLs.
 
 ---
@@ -236,7 +236,7 @@ Where:
 ### 5.3 Dynamic Blacklisting & Cooldown Lifecycle
 1. **Quarantine Threshold**: A proxy that records 3 consecutive connection failures, HTTP 403 Forbidden, or HTTP 429 Too Many Requests is automatically quarantined into the blacklisted pool.
 2. **Cooldown Window**: Quarantined proxies remain quarantined for a configurable 300-second (5-minute) cooldown window (`PROXY_COOLDOWN_SEC=300`), after which they receive a single low-impact health-check probe.
-3. **Emergency Unblacklisting Fallback**: To prevent catastrophic scraping pipeline deadlocks during network volatility, if the available active proxy count drops below a minimum threshold ($N_{\text{active}} < 3$), the orchestrator executes an emergency flush—re-enlisting the oldest quarantined proxies with an elevated latency penalty.
+3. **Emergency unblacklisting fallback**: To prevent scraping pipeline deadlocks during network volatility, if the available active proxy count drops below a minimum threshold ($N_{\text{active}} < 3$), the orchestrator executes an emergency flush that re-enlists the oldest quarantined proxies with an elevated latency penalty.
 
 ### 5.4 Anti-Bot Jitter & Behavioral Masking
 - **Request Jitter**: Request intervals incorporate an intentional random uniform jitter:
@@ -274,10 +274,10 @@ Digests are logged in the `ingestion_batches` audit table, enabling cryptographi
 The APIx frontend dashboard consumes high-frequency fare observations and price updates via WebSockets at `/api/v1/stream/fares` (RFC 6455). Standard HTTP reverse proxies assume short-lived request/response transactions and will terminate or buffer persistent connections unless configured with explicit protocol upgrade handshakes.
 
 ### 7.2 Production edge: Caddy on the VM
-Public traffic terminates at Caddy on the GCE VM, which holds the Let's Encrypt certificate for `api.adityaai.dev` and reverse-proxies to the backend on the host loopback (`127.0.0.1:8000`); Postgres has no host binding. The Caddyfile lives on the VM at `/opt/caddy/Caddyfile` — it is not in this repo — and Caddy is shared with unrelated vhosts, so its config is applied with `caddy validate` then `caddy reload`, never a restart. Full detail, including the rollback procedure, is in the runbook (`deployment_run_2026-09-26.md` §§1, 10), and the loopback binding plus pinned DB image are in `docker-compose.deploy.yml:41-46`.
+Public traffic terminates at Caddy on the GCE VM, which holds the Let's Encrypt certificate for `api.adityaai.dev` and reverse-proxies to the backend on the host loopback (`127.0.0.1:8000`); Postgres has no host binding. The Caddyfile lives on the VM at `/opt/caddy/Caddyfile`. It is not in this repo, and Caddy is shared with unrelated vhosts, so its config is applied with `caddy validate` then `caddy reload`, never a restart. Full detail, including the rollback procedure, is in the runbook (`deployment_run_2026-09-26.md` §§1, 10), and the loopback binding plus pinned DB image are in `docker-compose.deploy.yml:41-46`.
 
 ### 7.3 Compose-local Nginx frontend server
-The config below is the compose-local frontend static server (`Dockerfile` Stage 3, `frontend` service) — it serves the SPA and proxies `/api/` for single-origin local deploys. It is not the production edge:
+The config below is the compose-local frontend static server (`Dockerfile` Stage 3, `frontend` service). It serves the SPA and proxies `/api/` for single-origin local deploys. It is not the production edge:
 
 ```nginx
 server {
@@ -337,10 +337,10 @@ CORS: `BACKEND_CORS_ORIGINS` defaults to `http://localhost:3000`, `http://localh
 | `API_PORT` | Yes | `8000` (served on `127.0.0.1:8000` on the VM via the deploy overlay; no `$PORT` indirection) | ASGI bind port |
 | `LOG_LEVEL` | No | `INFO` | Logging verbosity (`DEBUG` \| `INFO` \| `WARNING` \| `ERROR`) |
 | `DATABASE_URL` | Yes | `postgresql+psycopg2://user:pass@host:5432/apix_db` | Sync connection string for the sync `create_engine` in `backend/app/db/session.py:28`. An `asyncpg` URL yields an async dialect whose first connection raises (`MissingGreenlet`), so the backend could never pass its DB health check |
-| `DATABASE_URL_SYNC` | No (unused) | `postgresql+psycopg2://user:pass@host:5432/apix_db` | **Read by nothing.** No Python code references it (`migrations/env.py:29-40` resolves `DATABASE_URL` only); kept as a no-op placeholder in compose/`.env.example`. Name the `psycopg2` driver explicitly — it is the driver the image ships (`requirements.txt`) |
+| `DATABASE_URL_SYNC` | No (unused) | `postgresql+psycopg2://user:pass@host:5432/apix_db` | **Read by nothing.** No Python code references it (`migrations/env.py:29-40` resolves `DATABASE_URL` only); kept as a no-op placeholder in compose/`.env.example`. Name the `psycopg2` driver explicitly. It is the driver the image ships (`requirements.txt`) |
 | `SECRET_KEY` | Yes | Cryptographic 64-char hex string | JWT token signing & session crypto |
 | `INGESTION_API_KEY` | Yes | `apix-prod-ingest-sec-9f8a7b6c5d4e3f2a1` | Shared secret for `/api/v1/ingestion/*` (`X-Ingestion-Key`) |
-| `BACKEND_CORS_ORIGINS` | Yes | `["https://apix-dashboard-navy.vercel.app"]` | JSON array of allowed browser origins. `backend/app/core/config.py:33-46` declares `list[str]`, which pydantic-settings parses as JSON — a comma-separated string parses to one invalid origin and every browser preflight fails; a literal `*` is rejected at startup |
+| `BACKEND_CORS_ORIGINS` | Yes | `["https://apix-dashboard-navy.vercel.app"]` | JSON array of allowed browser origins. `backend/app/core/config.py:33-46` declares `list[str]`, which pydantic-settings parses as JSON. A comma-separated string parses to one invalid origin and every browser preflight fails; a literal `*` is rejected at startup |
 | `INDEX_BASE_PERIOD` | No | `2026-01` | Baseline reference period for Laspeyres/Fisher index |
 | `INDEX_BASE_VALUE` | No | `100.0` | Initial baseline index value |
 | `ANOMALY_ZSCORE_THRESHOLD` | No | `2.5` | Threshold for statistical anomaly flag |
@@ -373,7 +373,7 @@ CORS: `BACKEND_CORS_ORIGINS` defaults to `http://localhost:3000`, `http://localh
 
 ## 9. Secret Rotation & Security Protocol
 
-To ensure continuous compliance, secrets must follow a defined rotation cadence. (Note: ingestion-key rotation is not zero-downtime — see §9.2.)
+To ensure continuous compliance, secrets must follow a defined rotation cadence. (Note: ingestion-key rotation is not zero-downtime. See §9.2.)
 
 ### 9.1 Rotation Schedule
 - **Ingestion API Key (`INGESTION_API_KEY`)**: Rotated every 90 days.
@@ -385,7 +385,7 @@ To ensure continuous compliance, secrets must follow a defined rotation cadence.
 The backend checks a single key: `verify_ingestion_key` compares `X-Ingestion-Key`
 against `settings.INGESTION_API_KEY` only (`backend/app/core/auth.py:8-24`). There is
 no `INGESTION_API_KEY_SECONDARY` dual-key support in the code, so rotation swaps the
-key rather than overlapping two valid keys — plan a minute of rejected ingestion
+key rather than overlapping two valid keys. Plan a minute of rejected ingestion
 traffic, not zero downtime:
 1. **Generate New Key**:
    ```bash
@@ -444,8 +444,8 @@ engine = create_engine(
 ## 11. Monitoring, Observability & Incident Response
 
 ### 11.1 Health & Diagnostics Endpoints
-- `GET /health`: Readiness probe. Runs `probe_database_readiness` against `routes`, `crawler_jobs` and `worker_heartbeats` and returns 503 `Database unavailable` when the DB is unreachable or the schema is uninitialised (`backend/app/main.py:175-183`). This is what the deploy health-gate polls — not a process-clock check.
-- `GET /api/v1/health`: Richer API health under the versioned router — the same DB probe plus `records_ingested_today`, `active_scrapers` and `last_sync_timestamp` (`backend/app/api/v1/api.py:24-69`).
+- `GET /health`: Readiness probe. Runs `probe_database_readiness` against `routes`, `crawler_jobs` and `worker_heartbeats` and returns 503 `Database unavailable` when the DB is unreachable or the schema is uninitialised (`backend/app/main.py:175-183`). This is what the deploy health-gate polls, not a process-clock check.
+- `GET /api/v1/health`: Richer API health under the versioned router. The same DB probe plus `records_ingested_today`, `active_scrapers` and `last_sync_timestamp` (`backend/app/api/v1/api.py:24-69`).
 - `GET /`: Service metadata with the versioned docs links (`backend/app/main.py:199-207`).
 - Interactive docs live at `/api/v1/docs` (and `/api/v1/redoc`); bare `/docs` 404s (`backend/app/main.py:38`).
 - Telemetry: `GET /api/v1/ingestion/telemetry` (also mounted at `/api/v1/telemetry/telemetry`) for crawler and proxy-pool health; `POST /api/v1/ingestion/trigger` (also `/api/v1/telemetry/trigger`) enqueues a scrape run, gated on `X-Ingestion-Key`. There is no `GET /api/v1/system/status`.
@@ -507,7 +507,7 @@ docker compose logs -f
 ```bash
 # Run database migrations from the repo root, pointed at the Compose DB.
 # (The backend image ships only backend/, ingestion/ and pyproject.toml
-# — Dockerfile:36-39 — so alembic.ini/migrations/ are not inside the
+# per Dockerfile:36-39, so alembic.ini/migrations/ are not inside the
 # container; the production deploy bind-mounts them for the same reason.
 # See .github/workflows/deploy-backend.yml.)
 DATABASE_URL="postgresql+psycopg2://apix_user:apix_password@localhost:5432/apix_db" alembic upgrade head

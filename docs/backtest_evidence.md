@@ -5,7 +5,7 @@ be stated out loud without inflation.
 
 ## The slide
 
-> **r=0.3324, 6 MoSPI months (3 seeded + 3 press-note-verified) — indicative, not conclusive.**
+> **r=0.3324, 6 MoSPI months (3 seeded + 3 press-note-verified). Indicative, not conclusive.**
 > 36 days of daily APIx Fisher index (2026-08-20 → 2026-09-28) on the merged
 > finale pipeline (14 corridors, transcribed DGCA weights, T+45 composite).
 > Method fully reproducible (`python scripts/backtest_vs_mospi.py`, exit 0).
@@ -31,7 +31,7 @@ python scripts/backtest_vs_mospi.py --db <path> --json-out <path> --md-out <path
   cannot be press-note-verified yet.
 - DGCA leg of the mandate: conceded as impossible, not substituted silently.
   Lok Sabha Unstarred Question 1934 (answered 30 July 2026) confirms DGCA TMU
-  publishes no fare dataset — only aggregate percentages. Hence the MoSPI
+  publishes no fare dataset, only aggregate percentages. Hence the MoSPI
   substitute and this framing.
 
 ## MoSPI series extension attempt (issue criterion 1)
@@ -86,10 +86,10 @@ The withdrawn bundle stays withdrawn: no row from
 
 ## Secondary validation (issue criterion 2)
 
-`python scripts/backtest_secondary_validation.py` — three sections, all computed,
+`python scripts/backtest_secondary_validation.py` has three sections, all computed,
 exit 0, persisted to `artifacts/backtest_secondary_validation_2026-09-28/`.
 
-**1. Internal-consistency invariants — MoSPI-independent (the criterion's core).**
+**1. Internal-consistency invariants. MoSPI-independent (the criterion's core).**
 Pure index-engine mathematics, no external data of any kind. 6 checks, all with
 max abs error 0.0 against tolerance 1e-09:
 
@@ -114,7 +114,7 @@ Level agreement (MAPE/MAE) is the meaningful holdout figure.
 best day-lag 6 (r = 0.9698, search range ±7 days). Sub-windows (3 contiguous
 slices of 11/11/13 days, lag search capped at ⌊days/4⌋): best lags
 [0, 0, −3], spread 3 days, **stable = false**. Honest conclusion: at daily
-resolution over 35 days, lead-lag is not identifiable — sub-window optima flip
+resolution over 35 days, lead-lag is not identifiable. Sub-window optima flip
 sign and the full-window optimum sits near the search boundary. **No lead claim
 is made.** (Monthly lead-lag against MoSPI remains best lag = 0 months on the
 overlapping data.)
@@ -160,7 +160,7 @@ composite) and re-running on the merged tree, the reproducible headline is:
   (2026-08-20 → 2026-09-28), 6 MoSPI months, exit 0.
 - The earlier r = 0.9569 was the 3-seeded-anchor era on the old 10-corridor
   pipeline; that bundle is preserved in git history, not deleted. The number
-  moved because the pipeline and the anchor set both changed — which is exactly
+  moved because the pipeline and the anchor set both changed, which is exactly
   why the deck cites the re-runnable script, never a frozen figure.
 - Secondary validation on the same tree: 6/6 invariants exact, holdout MAPE =
   4.5014%, lead-lag unstable (no lead claim). All checks exit 0.

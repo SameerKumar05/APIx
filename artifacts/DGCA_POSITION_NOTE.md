@@ -81,8 +81,8 @@ The team has drafted a formal Right to Information (RTI) application under the R
 
 ### Information Schedule Requested
 1. Route-level monthly average base fares and total fares recorded by the Tariff Monitoring Unit across the 72 domestic monitored corridors from January 2024 to date.
-2. Advance booking window sampling breakdown (T+1, T+7, T+15, T+30) and sampling frequency utilized by TMU web automation scripts.
-3. Route passenger weighting matrix utilized by TMU when compiling aggregate airfare movements for Parliamentary reports.
+2. Advance booking window sampling breakdown (T+1, T+7, T+15, T+30) and sampling frequency used by TMU web automation scripts.
+3. Route passenger weighting matrix used by TMU when compiling aggregate airfare movements for Parliamentary reports.
 4. Anonymized per-flight fare observations sampled across the 10 trunk metropolitan city pairs (DEL-BOM, BOM-DEL, DEL-BLR, BLR-DEL, BOM-BLR, BLR-BOM, DEL-CCU, CCU-DEL, DEL-HYD, HYD-DEL).
 
 ### Pipeline Architectural Readiness

@@ -10,7 +10,7 @@
 | **Problem Statement** | SIH 2026 PS 26056: Real-time Airfare Price Index for CPI Augmentation & Dynamic Tariff Monitoring |
 | **Target Agencies** | Central Statistics Office (CSO / MoSPI), Reserve Bank of India (RBI MPC), Directorate General of Civil Aviation (DGCA) |
 | **System Version** | Cycle 4 Production Master Specification (Release 1.0.0) |
-| **Verification Status** | **Current: 511/511 passed, 25/25 Master Verification Steps passed (100% green exit 0)** |
+| **Verification Status** | **Current: 520/520 passed, 25/25 Master Verification Steps passed (100% green exit 0)** |
 | **Primary Authors** | DocLibral Swarm Consortium (Architecture, Econometrics, Ingestion, API, Deployment) |
 | **Classification** | Official System Specification / Open Public Digital Public Infrastructure (DPI) |
 
@@ -711,7 +711,7 @@ Violations persist in `dgca_violations` with full statutory evidence (route base
 ## 8. Deployment, Infrastructure & CI/CD Cadence
 
 ### 8.1 Production Containerization & Cloud Deployment
-APIx utilizes a unified, multi-stage **Dockerfile** separating backend computation, frontend compilation, and Nginx edge routing:
+APIx uses a unified, multi-stage **Dockerfile** separating backend computation, frontend compilation, and Nginx edge routing:
 - **Stage 1 (Backend):** Python 3.12 slim, installing FastAPI, SQLAlchemy, Uvicorn, and NumPy.
 - **Stage 2 (Frontend):** Node.js 20 Alpine, compiling React 18, Vite, and Tailwind CSS.
 - **Stage 3 (Production Edge):** Nginx Alpine edge proxy combining static asset delivery with reverse proxying and WebSocket upgrading to the FastAPI backend.
@@ -753,13 +753,13 @@ pie title APIx Test Suite Breakdown (Current 511 Passing)
     "Database Models, Seed & Provenance" : 56
 ```
 
-Current: **511 passed** across all unit and integration test suites, with **25/25 verification steps passing** in `scripts/verify_all.sh` (including $\ge 30$-day DGCA backtest vs MoSPI and zero-tolerance provenance audit).
+Current: **520 passed** across all unit and integration test suites, with **25/25 verification steps passing** in `scripts/verify_all.sh` (including $\ge 30$-day DGCA backtest vs MoSPI and zero-tolerance provenance audit).
 
 ### 9.1 Verification Suites Summary
 
 | Test Suite / Script | Verification Target | Status | Passing Checks |
 |:---|:---|:---:|:---:|
-| `pytest tests/` | Complete repository unit & integration tests | **PASSED (current)** | **511 passed, zero failures** |
+| `pytest tests/` | Complete repository unit & integration tests | **PASSED (current)** | **520 passed, zero failures** |
 | `scripts/verify_all.sh` | 25-step master verification harness (contracts, math, seed, backtest, provenance) | **PASSED (current)** | **25 / 25 checks passed (exit 0)** |
 | `scripts/backtest_vs_mospi.py` | $\ge 30$-day Fisher index backtest vs MoSPI CPI Transport benchmark | **PASSED (current)** | **Operational (RMSE, $r$, MAPE, exit 0)** |
 | `scripts/audit_provenance.py` | Database provenance integrity and audit gate | **PASSED (current)** | **Exit 0, zero mislabelled live claims** |
