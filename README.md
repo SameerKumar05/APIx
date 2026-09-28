@@ -10,7 +10,7 @@ Smart India Hackathon 2026 · Problem Statement 26056 · Team Woven Tech
 [![License](https://img.shields.io/badge/license-see%20LICENSE-informational.svg)](LICENSE)
 [![Live Demo](https://img.shields.io/badge/demo-live-success.svg)](https://apix-dashboard-navy.vercel.app/)
 
-**[▶ Live Demo — https://apix-dashboard-navy.vercel.app/](https://apix-dashboard-navy.vercel.app/)**
+[![Live Demo — Open the Dashboard](https://img.shields.io/badge/▶_Live_Demo-Open_the_Dashboard-brightgreen?style=for-the-badge)](https://apix-dashboard-navy.vercel.app/)
 
 ---
 
