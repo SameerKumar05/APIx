@@ -16,7 +16,7 @@ enforced in code rather than promised in prose.
 | Are scrapers implemented for all 11 PS-named portals? | Yes, as registered classes |
 | Do any of them currently produce a fare? | **Yes — SpiceJet.** The intercepted availability JSON supplies `fareAmount` and a coded tax breakdown, persisted as a measured split (`base + taxes + UDF == total`, checked at insert). Every other portal query still fails closed or encounters bot-mitigation, and those paths fall through to the synthetic tier (`is_synthetic = True`). |
 | Is the dashboard badge honest? | Yes. It separates stream status (`WEBSOCKET LIVE`) from data provenance (`DGCA BENCHMARK` / `LIVE SCRAPE`), and cannot claim `LIVE SCRAPE` without a corroborated scrape. |
-| Is the route weighting official DGCA data? | **No.** It is modelled, and labelled as such. |
+| Is the route weighting official DGCA data? | **Selected on DGCA data, not published by DGCA.** 240 of 270 route-traffic rows transcribe real DGCA monthly city-pair XLSX releases with per-row source URL and release citation; the 30 rows for 2025-10/11/12 (HTTP 403) and the carrier shares remain calibrated/modelled, and are labelled as such. |
 
 `GET /api/v1/health` reports this machine-readably:
 
@@ -130,19 +130,21 @@ and earned a false `LIVE` badge. 450 rows previously mislabelled were re-flagged
 
 **Carrier market shares and advance-purchase weights.** The carrier market shares
 and the advance-purchase weights are documented calibrations. City-pair route
-traffic weights and passenger volumes are calibrated baseline proxies in
-`data/dgca_passenger_traffic_weights.json` and `.csv` under explicit
-`provenance="calibrated_baseline"` (`is_synthetic=True`). DGCA publishes aggregate
-domestic passenger traffic statistics (city-pair rankings and annual handbook volumes),
-but does not publish high-frequency programmatic microdata or flight fare feeds
-(Lok Sabha Unstarred Question 1934, answered 30 July 2026). The weights are calibrated
-proxies derived from published DGCA city-pair traffic rankings without false official claims.
+traffic weights are now transcribed from real DGCA monthly city-pair XLSX releases:
+240 of 270 rows in `data/dgca_passenger_traffic_weights.json` and `.csv` carry
+`provenance="DGCA"` (`is_synthetic=False`) with a per-row source URL and release
+citation (HTTP Last-Modified date). The 30 rows for 2025-10/11/12 remain
+`provenance="calibrated_baseline"` (`is_synthetic=True`) because those three XLSX
+files return HTTP 403; per issue #7 they are never relabelled without a real
+per-row citation. DGCA does not publish high-frequency fare microdata or flight
+fare feeds (Lok Sabha Unstarred Question 1934, answered 30 July 2026), so fare-side
+calibrations remain labelled as they are.
 
 ## Withdrawn comparisons and known index limits
 
 **The bundled MoSPI CPI series is withdrawn.** `data/mospi_cpi_historical_2024_2026.json` declares `"status": "withdrawn"`: its stored values contradicted NSO press notes, and the file now carries no records. Any comparison plotted against it is modelled, not a MoSPI benchmark, and the withdrawn values must never be presented as a current official release.
 
-**DGCA publishes no reusable fare dataset.** Its Tariff Monitoring Unit monitors fares but releases no dataset, dashboard, or route list — so no measured back-test against DGCA fares exists. (DGCA *traffic* volumes are a separate matter: real monthly city-pair XLSX files exist and are the intended replacement for the modelled weights above; fare levels do not.)
+**DGCA publishes no reusable fare dataset.** Its Tariff Monitoring Unit monitors fares but releases no dataset, dashboard, or route list — so no measured back-test against DGCA fares exists. (DGCA *traffic* volumes are a separate matter: the real monthly city-pair XLSX releases have now been transcribed into the weights files for 24 of 27 table months; fare levels still do not exist as open data.)
 
 **The Fisher index here fails factor reversal by design.** The Paasche leg is textbook; the Laspeyres leg is a fixed-weight mean of price relatives rather than a true Laspeyres, so `P_F x Q_F == V_t / V_0` does not hold for the engine pair. `tests/test_factor_reversal.py` proves both halves (`test_factor_reversal_holds_for_the_true_laspeyres_paasche_pair` passes for the true pair; `test_engine_fisher_pair_does_not_satisfy_factor_reversal` proves the engine pair fails). Time reversal is asserted.
 
@@ -150,9 +152,7 @@ proxies derived from published DGCA city-pair traffic rankings without false off
 database, 23 are SpiceJet live rows (`is_synthetic=false`, measured split, audit
 corroborated) and 13 are fallback rows from `SyntheticFlightGenerator`
 (`ingestion/crawlers/synthetic.py:52`), reached when a live query yields zero
-records and persisted with `is_synthetic=true`. Route and traffic weights carry
-verified `provenance=calibrated_baseline` (`is_synthetic=true`) as calibrated
-proxies derived from DGCA city-pair traffic rankings.
+records and persisted with `is_synthetic=true`. Route and traffic weights are transcribed from real DGCA monthly city-pair releases for 240 of 270 rows (`provenance=DGCA`, `is_synthetic=false`, per-row source URL and release citation); the 30 rows for 2025-10/11/12 keep `provenance=calibrated_baseline` (`is_synthetic=true`) until their XLSX releases are reachable.
 
 ## Evidence paths
 
