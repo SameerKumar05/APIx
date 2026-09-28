@@ -214,6 +214,17 @@ class SpiceJetScraper(BaseScraper):
         norm_origin = self.normalize_iata(origin)
         norm_dest = self.normalize_iata(destination)
 
+        if isinstance(payload, dict):
+            availability_records = self._parse_availability_journeys(
+                payload,
+                origin=norm_origin,
+                destination=norm_dest,
+                window_code=window_code,
+                booking_dt_str=booking_dt_str,
+            )
+            if availability_records:
+                return availability_records
+
         flight_candidates: list[dict[str, Any]] = []
 
         if isinstance(payload, dict):
@@ -421,6 +432,237 @@ class SpiceJetScraper(BaseScraper):
 
         return records
 
+    def _parse_availability_journeys(
+        self,
+        payload: dict[str, Any],
+        origin: str,
+        destination: str,
+        window_code: str,
+        booking_dt_str: str,
+    ) -> list[RawFareRecord]:
+        """Parses the live /api/v3/search/availability payload shape.
+
+        That response keeps the itinerary under ``data.trips[].journeysAvailable``
+        and the money under ``data.faresAvailable`` (journey fare key -> fare node
+        with ``passengerFares``). No generic branch below matches that shape, so
+        it is read explicitly here. Returns records only when the payload is
+        genuinely that shape and a journey carries a bookable INR fare.
+        """
+        data_raw = payload.get("data")
+        data = data_raw if isinstance(data_raw, dict) else payload
+        trips = data.get("trips")
+        if not isinstance(trips, list):
+            return []
+        fares_available = data.get("faresAvailable")
+        if not isinstance(fares_available, dict):
+            return []
+        if data.get("currencyCode") not in (None, "INR"):
+            logger.debug(
+                "SpiceJet availability payload currency %s is not INR; not recorded",
+                data.get("currencyCode"),
+            )
+            return []
+
+        records: list[RawFareRecord] = []
+        for trip in trips:
+            journeys = trip.get("journeysAvailable") if isinstance(trip, dict) else None
+            if not isinstance(journeys, list):
+                continue
+            for journey in journeys:
+                if not isinstance(journey, dict):
+                    continue
+                try:
+                    record = self._availability_journey_record(
+                        journey,
+                        fares_available,
+                        origin=origin,
+                        destination=destination,
+                        window_code=window_code,
+                        booking_dt_str=booking_dt_str,
+                    )
+                except Exception as exc:
+                    logger.debug("Skipping unparseable SpiceJet journey: %s", exc)
+                    continue
+                if record is not None:
+                    records.append(record)
+        return records
+
+    @staticmethod
+    def _cheapest_bookable_fare(
+        journey: dict[str, Any], fares_available: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        """Cheapest bookable (passenger fare, fare bucket) pair for a journey."""
+        journey_fares = journey.get("fares")
+        if not isinstance(journey_fares, dict) or not journey_fares:
+            return None
+        best: tuple[dict[str, Any], dict[str, Any]] | None = None
+        best_amount = 0.0
+        for fare_key, bucket in journey_fares.items():
+            if not isinstance(bucket, dict):
+                continue
+            available = bucket.get("availableCount")
+            if isinstance(available, int) and available < 1:
+                continue
+            node = fares_available.get(fare_key)
+            if not isinstance(node, dict):
+                continue
+            passenger_fares = node.get("passengerFares")
+            if not isinstance(passenger_fares, list) or not passenger_fares:
+                continue
+            adt = next(
+                (
+                    pf
+                    for pf in passenger_fares
+                    if isinstance(pf, dict) and pf.get("passengerType") == "ADT"
+                ),
+                None,
+            )
+            if not isinstance(adt, dict):
+                adt = (
+                    passenger_fares[0] if isinstance(passenger_fares[0], dict) else None
+                )
+            if not isinstance(adt, dict):
+                continue
+            amount = adt.get("fareAmount")
+            if not isinstance(amount, (int, float)) or amount <= 0:
+                continue
+            if best is None or amount < best_amount:
+                best = (adt, bucket)
+                best_amount = float(amount)
+        return best
+
+    def _availability_journey_record(
+        self,
+        journey: dict[str, Any],
+        fares_available: dict[str, Any],
+        *,
+        origin: str,
+        destination: str,
+        window_code: str,
+        booking_dt_str: str,
+    ) -> RawFareRecord | None:
+        """Builds one canonical record from a journeysAvailable entry, or None.
+
+        Every money figure comes from the fare node the airline returned: the
+        total is ``fareAmount``, the base is ``publishedFare`` (cross-checked
+        against the itemised serviceCharges), and nothing is invented when the
+        source does not supply it.
+        """
+        picked = self._cheapest_bookable_fare(journey, fares_available)
+        if picked is None:
+            return None
+        adt, bucket = picked
+        total = float(adt["fareAmount"])
+
+        designator = journey.get("designator")
+        designator = designator if isinstance(designator, dict) else {}
+        dep_raw = designator.get("departure") or journey.get("departureTime")
+        arr_raw = designator.get("arrival") or journey.get("arrivalTime")
+        if not dep_raw or not arr_raw:
+            return None
+        dep_dt_str = self.normalize_datetime(dep_raw)
+        arr_dt_str = self.normalize_datetime(arr_raw)
+
+        carrier: Any = None
+        number: Any = None
+        segments = journey.get("segments")
+        if isinstance(segments, list) and segments and isinstance(segments[0], dict):
+            seg = segments[0]
+            ident = seg.get("identifier")
+            if isinstance(ident, dict):
+                carrier = ident.get("carrierCode")
+                number = ident.get("identifier")
+            if number is None:
+                number = seg.get("flightNumber")
+        if not carrier or not number:
+            carrier_str = str(journey.get("carrierString") or "")
+            match = re.match(r"^\s*([A-Za-z]{2})\s*-?\s*(\d{1,4})\s*$", carrier_str)
+            if match:
+                carrier = carrier or match.group(1)
+                number = number or match.group(2)
+        if not number:
+            return None
+        airline_code = self.normalize_airline_code(carrier or self.AIRLINE_CODE)
+        clean_num = str(number).strip()
+        if clean_num.upper().startswith(airline_code):
+            clean_num = clean_num[len(airline_code) :].lstrip("- ")
+        else:
+            clean_num = re.sub(r"^[A-Za-z]{2}[-\s]?", "", clean_num)
+        clean_num = clean_num.strip()
+        if not clean_num:
+            return None
+        full_flight_no = f"{airline_code}-{clean_num}"
+
+        charges = adt.get("serviceCharges")
+        charges = charges if isinstance(charges, list) else []
+        tax_from_charges = round(
+            sum(
+                float(c.get("amount") or 0.0)
+                for c in charges
+                if isinstance(c, dict) and c.get("type") != 0
+            ),
+            2,
+        )
+        udf_fee = round(
+            sum(
+                float(c.get("amount") or 0.0)
+                for c in charges
+                if isinstance(c, dict) and c.get("code") == "UDF" and c.get("type") != 0
+            ),
+            2,
+        )
+
+        published = adt.get("publishedFare")
+        if not isinstance(published, (int, float)) or published <= 0:
+            published = adt.get("revenueFare")
+        base_val: float | None = None
+        taxes_val: float | None = None
+        if isinstance(published, (int, float)) and 0 < published <= total:
+            base_val = float(published)
+            if abs(base_val + tax_from_charges - total) <= 0.01:
+                taxes_val = round(tax_from_charges - udf_fee, 2)
+
+        try:
+            origin_code = self.normalize_iata(designator.get("origin") or origin)
+            dest_code = self.normalize_iata(
+                designator.get("destination") or destination
+            )
+        except ValueError:
+            origin_code, dest_code = origin, destination
+        try:
+            stops = max(int(journey.get("stops") or 0), 0)
+        except (TypeError, ValueError):
+            stops = 0
+
+        record = RawFareRecord(
+            airline_code=airline_code,
+            flight_number=full_flight_no,
+            origin=origin_code,
+            destination=dest_code,
+            departure_datetime=dep_dt_str,
+            arrival_datetime=arr_dt_str,
+            booking_datetime=booking_dt_str,
+            fare_inr=total,
+            cabin_class="economy",
+            stops=stops,
+            source="spicejet",
+            booking_window=window_code,
+            flight_date=dep_dt_str.split("T")[0],
+            base_fare=base_val,
+            taxes_and_fees=taxes_val,
+            booking_class=bucket.get("classOfService"),
+            udf_fee=udf_fee if taxes_val is not None else None,
+            is_synthetic=False,
+            source_platform="spicejet",
+        )
+        is_valid, validation_errors = self.validate_record(record)
+        if not is_valid:
+            logger.debug(
+                "Skipping invalid SpiceJet availability record: %s", validation_errors
+            )
+            return None
+        return record
+
     def _scrape_with_playwright(
         self,
         origin: str,
@@ -454,13 +696,18 @@ class SpiceJetScraper(BaseScraper):
             try:
                 headers = self.get_randomized_headers()
                 viewport = random.choice(STEALTH_VIEWPORTS)
+                browser_headers = {
+                    k: v
+                    for k, v in headers.items()
+                    if not k.lower().startswith("sec-fetch")
+                }
 
                 context_opts: dict[str, Any] = {
                     "viewport": viewport,
                     "user_agent": headers["User-Agent"],
                     "locale": "en-IN",
                     "timezone_id": "Asia/Kolkata",
-                    "extra_http_headers": headers,
+                    "extra_http_headers": browser_headers,
                     "ignore_https_errors": True,
                 }
                 if self.proxy:

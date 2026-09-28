@@ -37,6 +37,75 @@ def test_pct_change_uses_consecutive_periods() -> None:
     assert "2024-01" not in out, "first period has no prior"
 
 
+def test_pct_change_skips_coverage_gaps() -> None:
+    out = bt.pct_change(
+        {"2025-10": 100.0, "2025-11": 110.0, "2026-07": 55.0, "2026-08": 56.0}
+    )
+    assert "2026-07" not in out, "a change across an 8-month gap is not month-on-month"
+    assert out["2025-11"] == pytest.approx(10.0)
+    assert out["2026-08"] == pytest.approx((56.0 - 55.0) / 55.0 * 100.0)
+
+
+def test_pct_change_refuses_to_mix_cpi_base_years() -> None:
+    out = bt.pct_change({"2025-12": 198.0, "2026-01": 104.46})
+    assert (
+        out == {}
+    ), "the 2012=100 to 2024=100 boundary is a unit change, not inflation"
+
+
+def test_press_note_extension_preserves_headline(tmp_path) -> None:
+    db = tmp_path / "ext.db"
+    assert bt.ensure_demonstration_data(str(db)) is True
+    assert bt.ensure_demonstration_data(str(db)) is False, "second run is a no-op"
+
+    conn = sqlite3.connect(db)
+    rows = conn.execute(
+        "SELECT year_month, cpi_transport_index, airfare_sub_index, headline_cpi, "
+        "published_at, source FROM mospi_cpi_series ORDER BY year_month"
+    ).fetchall()
+    conn.close()
+
+    assert [r[0] for r in rows] == [
+        "2025-09",
+        "2025-10",
+        "2025-11",
+        "2026-07",
+        "2026-08",
+        "2026-09",
+    ]
+    by_month = {r[0]: r for r in rows}
+    assert by_month["2025-09"][1:] == (
+        173.6,
+        205.1,
+        197.0,
+        "2025-11-12",
+        "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2189186",
+    )
+    assert by_month["2025-10"][1:] == (
+        172.3,
+        211.4,
+        197.3,
+        "2025-12-12",
+        "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2202940",
+    )
+    assert by_month["2025-11"][1:] == (
+        172.4,
+        215.5,
+        197.9,
+        "2025-12-12",
+        "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2202940",
+    )
+
+    res = bt.run(str(db), required_days=30)
+    assert res.status == "OK", res.reason
+    assert res.apix_observations == 35, "35 days is 35 days"
+    assert (
+        res.mospi_observations == 6
+    ), "three 2026 anchors plus three verified 2025 months"
+    assert res.overlapping_months == 1, "extension adds series months, not overlap"
+    assert res.pearson_r == pytest.approx(0.9569, abs=1e-4)
+
+
 def _seed(tmp_path, apix_rows, mospi_rows):
     db = tmp_path / "t.db"
     conn = sqlite3.connect(db)

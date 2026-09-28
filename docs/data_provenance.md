@@ -11,12 +11,12 @@ enforced in code rather than promised in prose.
 
 | Question | Answer |
 | --- | --- |
-| Has a live airfare ever been read? | **No.** Exactly 0 live verified quotes are currently collected. In evaluation and sandbox environments without commercial rotating residential proxy networks (e.g. BrightData/Oxylabs), all 11 Indian airline and OTA portals enforce Cloudflare/Akamai bot-mitigation, resulting in fail-closed RFC 9309 robots.txt or WAF challenges. |
-| Rows claiming to be live in the database | **0** (The system operates honestly in fallback mode with `is_synthetic = True`). |
+| Has a live airfare ever been read? | **Yes.** 23 live quotes were read from SpiceJet's availability API on 2026-09-28 (DEL-BOM and DEL-BLR, windows T+1..T+45) and persisted with `is_synthetic = 0`. They are corroborated by scraper telemetry, proxy-health evidence, and 7 distinct scrape times, so `scripts/audit_provenance.py` passes. The other 10 PS-named portals still fail closed or yield no fare in evaluation environments (no commercial rotating residential proxies such as BrightData/Oxylabs; Cloudflare/Akamai bot-mitigation or fail-closed RFC 9309 robots.txt). |
+| Rows claiming to be live in the database | **23** (all SpiceJet, `is_synthetic = 0`). A further 13 rows are the synthetic fallback (`is_synthetic = True`). |
 | Are scrapers implemented for all 11 PS-named portals? | Yes, as registered classes |
-| Do any of them currently produce a fare? | **No.** Every live portal query fails closed or encounters bot-mitigation in evaluation environments. The system operates in fallback mode (`is_synthetic = True`). The ingestion architecture, component separation, and persistence plumbing are fully implemented and verified via staged fixtures. |
+| Do any of them currently produce a fare? | **Yes — SpiceJet.** The intercepted availability JSON supplies `fareAmount` and a coded tax breakdown, persisted as a measured split (`base + taxes + UDF == total`, checked at insert). Every other portal query still fails closed or encounters bot-mitigation, and those paths fall through to the synthetic tier (`is_synthetic = True`). |
 | Is the dashboard badge honest? | Yes. It separates stream status (`WEBSOCKET LIVE`) from data provenance (`DGCA BENCHMARK` / `LIVE SCRAPE`), and cannot claim `LIVE SCRAPE` without a corroborated scrape. |
-| Is the route weighting official DGCA data? | **No.** It is modelled, and labelled as such. |
+| Is the route weighting official DGCA data? | **Selected on DGCA data, not published by DGCA.** 240 of 270 route-traffic rows transcribe real DGCA monthly city-pair XLSX releases with per-row source URL and release citation; the 30 rows for 2025-10/11/12 (HTTP 403) and the carrier shares remain calibrated/modelled, and are labelled as such. |
 
 `GET /api/v1/health` reports this machine-readably:
 
@@ -24,8 +24,8 @@ enforced in code rather than promised in prose.
 {
   "ps_named_sources_total": 11,
   "ps_named_sources_implemented": 11,
-  "produces_live_fares": false,
-  "live_verified_sources": []
+  "produces_live_fares": true,
+  "live_verified_sources": ["spicejet"]
 }
 ```
 
@@ -48,38 +48,39 @@ issuing any search request.
 | Yatra | Unreachable, `ReadTimeout` | Fails closed. |
 | Goibibo | Unreachable, `ReadTimeout` | Fails closed. |
 | Akasa | HTTP 200, no `Disallow` | Homepage reachable, but no results URL and no fare read. |
-| SpiceJet | HTTP 200, no `Disallow` on the API path | Reachable, but publishes no structured fare field. Ingestion architecture, component separation (`base_fare` and `taxes_and_fees`), and persistence plumbing are fully implemented and verified via staged fixtures; 0 live quotes collected. |
+| SpiceJet | HTTP 200, no `Disallow` on the API path | **Produces live fares.** The availability JSON exposes `fareAmount` and per-code taxes; 23 live quotes collected 2026-09-28 with a measured `base`/`taxes`/`UDF` split that recomposes exactly. |
 | EaseMyTrip | HTTP 200 | Reachable, but no fare has been read. |
 
 A robots denial, HTTP 403, CAPTCHA, or a page without a fare yields **zero live
 records and an explicit reason**, then falls through to the synthetic tier with
 `is_synthetic=true`. No fare is ever invented to fill a gap. In evaluation and sandbox
 environments without commercial rotating residential proxy networks (e.g. BrightData/Oxylabs),
-all 11 Indian airline and OTA portals enforce Cloudflare/Akamai bot-mitigation, resulting in
-fail-closed RFC 9309 robots.txt or WAF challenges. Exactly 0 live verified quotes are currently
-collected, and the system operates in fallback mode (`is_synthetic = True`). The ingestion
-architecture, component separation, and persistence plumbing are fully implemented and verified
-via staged fixtures.
+10 of the 11 portals still enforce Cloudflare/Akamai bot-mitigation or fail closed on
+RFC 9309 robots.txt, and their queries yield zero live records. SpiceJet is the one
+exception: its availability API answers from this host and is the source of the 23 live
+rows above. The ingestion architecture, component separation, and persistence plumbing
+are exercised end to end for every portal (synthetic tier) and for SpiceJet (live tier).
 IndiGo and Air India also run partner-gated NDC portals
 (`developer.goindigo.in`, `ndc.airindia.com`). Those are distribution APIs, not
 the public booking pages these scrapers call, and no credentials were available.
 
 ## What is genuinely reachable
 
-SpiceJet's availability endpoint answers and yields unambiguous flight identity:
+SpiceJet's availability endpoint answers and yields unambiguous flight identity
+**and** structured fares:
 
 ```
 GET https://www.spicejet.com/api/v3/search/availability
-HTTP 200, 17777 bytes, data.trips[]
-  -> SG 815, DEL 09:50 -> BOM 12:25
+HTTP 200, data.trips[]            -> SG 815, DEL 09:50 -> BOM 12:25
+       data.faresAvailable[*].passengerFares[0]
+         fareAmount 6447, publishedFare 4900   (type-coded taxes incl. UDF 152)
 ```
 
-Two things stop that becoming a fare.
-
-**There is no structured fare field.** The price is embedded in an opaque key that
-decodes to fragments such as `USAV~5511~~0~665~` and
-`X!0:48004:1004:854:5994:2364:1524:895:280`. The mapping is undocumented, so no
-fare was guessed.
+The parser reads `fareAmount`/`publishedFare` and the per-code tax charges directly
+from that JSON — nothing is decoded from the opaque `fareAvailabilityKey`, and no
+price is guessed. The opaque key (`USAV~5511~~0~665~`,
+`X!0:48004:1004:854:5994:2364:1524:895:280`) still has no documented mapping and
+is used only for lookups, never to derive an amount.
 
 **Akamai fronts MakeMyTrip.** Measured three ways: stock `curl` receives `403`,
 Playwright's bundled Chromium is reset with `net::ERR_HTTP2_PROTOCOL_ERROR`, and
@@ -129,23 +130,29 @@ and earned a false `LIVE` badge. 450 rows previously mislabelled were re-flagged
 
 **Carrier market shares and advance-purchase weights.** The carrier market shares
 and the advance-purchase weights are documented calibrations. City-pair route
-traffic weights and passenger volumes are calibrated baseline proxies in
-`data/dgca_passenger_traffic_weights.json` and `.csv` under explicit
-`provenance="calibrated_baseline"` (`is_synthetic=True`). DGCA publishes aggregate
-domestic passenger traffic statistics (city-pair rankings and annual handbook volumes),
-but does not publish high-frequency programmatic microdata or flight fare feeds
-(Lok Sabha Unstarred Question 1934, answered 30 July 2026). The weights are calibrated
-proxies derived from published DGCA city-pair traffic rankings without false official claims.
+traffic weights are now transcribed from real DGCA monthly city-pair XLSX releases:
+240 of 270 rows in `data/dgca_passenger_traffic_weights.json` and `.csv` carry
+`provenance="DGCA"` (`is_synthetic=False`) with a per-row source URL and release
+citation (HTTP Last-Modified date). The 30 rows for 2025-10/11/12 remain
+`provenance="calibrated_baseline"` (`is_synthetic=True`) because those three XLSX
+files return HTTP 403; per issue #7 they are never relabelled without a real
+per-row citation. DGCA does not publish high-frequency fare microdata or flight
+fare feeds (Lok Sabha Unstarred Question 1934, answered 30 July 2026), so fare-side
+calibrations remain labelled as they are.
 
 ## Withdrawn comparisons and known index limits
 
 **The bundled MoSPI CPI series is withdrawn.** `data/mospi_cpi_historical_2024_2026.json` declares `"status": "withdrawn"`: its stored values contradicted NSO press notes, and the file now carries no records. Any comparison plotted against it is modelled, not a MoSPI benchmark, and the withdrawn values must never be presented as a current official release.
 
-**DGCA publishes no reusable fare dataset.** Its Tariff Monitoring Unit monitors fares but releases no dataset, dashboard, or route list — so no measured back-test against DGCA fares exists. (DGCA *traffic* volumes are a separate matter: real monthly city-pair XLSX files exist and are the intended replacement for the modelled weights above; fare levels do not.)
+**DGCA publishes no reusable fare dataset.** Its Tariff Monitoring Unit monitors fares but releases no dataset, dashboard, or route list — so no measured back-test against DGCA fares exists. (DGCA *traffic* volumes are a separate matter: the real monthly city-pair XLSX releases have now been transcribed into the weights files for 24 of 27 table months; fare levels still do not exist as open data.)
 
 **The Fisher index here fails factor reversal by design.** The Paasche leg is textbook; the Laspeyres leg is a fixed-weight mean of price relatives rather than a true Laspeyres, so `P_F x Q_F == V_t / V_0` does not hold for the engine pair. `tests/test_factor_reversal.py` proves both halves (`test_factor_reversal_holds_for_the_true_laspeyres_paasche_pair` passes for the true pair; `test_engine_fisher_pair_does_not_satisfy_factor_reversal` proves the engine pair fails). Time reversal is asserted.
 
-**Deployed fares are synthetic by name.** The fallback that produces every fare in the system today is `SyntheticFlightGenerator` (`ingestion/crawlers/synthetic.py:52`), reached only after the live scrapers yield zero records, and its output is persisted with `is_synthetic=true`. Route and traffic weights carry verified `provenance=calibrated_baseline` (`is_synthetic=true`) as calibrated proxies derived from DGCA city-pair traffic rankings.
+**Live and synthetic fares coexist by name.** Of the 36 rows in the current
+database, 23 are SpiceJet live rows (`is_synthetic=false`, measured split, audit
+corroborated) and 13 are fallback rows from `SyntheticFlightGenerator`
+(`ingestion/crawlers/synthetic.py:52`), reached when a live query yields zero
+records and persisted with `is_synthetic=true`. Route and traffic weights are transcribed from real DGCA monthly city-pair releases for 240 of 270 rows (`provenance=DGCA`, `is_synthetic=false`, per-row source URL and release citation); the 30 rows for 2025-10/11/12 keep `provenance=calibrated_baseline` (`is_synthetic=true`) until their XLSX releases are reachable.
 
 ## Evidence paths
 
@@ -155,6 +162,8 @@ those references will not resolve from a fresh clone. Every quantitative claim
 here is reproducible from the committed test suite and `scripts/audit_provenance.py`.
 
 ## What would close the gap
+
+Live collection began **2026-09-28** (23 provenance-audited SpiceJet rows, `is_synthetic=0`); the 30-day clock for the back-test harness starts from that date, not from this document's earlier "zero live rows" era.
 
 Running the worker in live mode daily for 30 days. The back-test harness
 (`scripts/backtest_vs_mospi.py`) computes the estimator correctly and **exits

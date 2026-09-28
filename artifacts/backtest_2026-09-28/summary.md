@@ -11,20 +11,20 @@ This script therefore uses the MoSPI CPI airfare sub-index, published monthly fo
 ## Coverage
 
 - Required window: 30 days
-- APIx observations: 35 distinct days
-- APIx span: 2026-08-20 to 2026-09-23
-- MoSPI observations: 3 months
+- APIx observations: 36 distinct days
+- APIx span: 2026-08-20 to 2026-09-28
+- MoSPI observations: 6 months
 - Overlapping months of change: 1
 
 ## Verdict
 
-- Pearson r (contemporaneous): **0.9569**
-- r squared: **0.9157**
-- Root Mean Squared Error (RMSE): **1.2077**
-- Mean Absolute Percentage Error (MAPE): **0.9811%**
-- Mean absolute error of change: **1.1276** percentage points
-- Direction agreement: **65.71%**
-- Best lag: APIx leads MoSPI by **0** month(s), r = **0.9569**
+- Pearson r (contemporaneous): **0.3324**
+- r squared: **0.1105**
+- Root Mean Squared Error (RMSE): **7.4555**
+- Mean Absolute Percentage Error (MAPE): **2.0104%**
+- Mean absolute error of change: **2.3229** percentage points
+- Direction agreement: **66.67%**
+- Best lag: APIx leads MoSPI by **0** month(s), r = **0.3324**
 
 A positive best-lag is the claim that matters: APIx moved first, which is the entire premise of a leading indicator.
 

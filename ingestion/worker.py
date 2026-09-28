@@ -19,6 +19,7 @@ import threading
 import time
 import uuid
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -33,7 +34,7 @@ from backend.app.db.crawler_job_repo import (
     update_worker_heartbeat,
 )
 from backend.app.db.session import SessionLocal
-from backend.app.db.telemetry_repo import log_scraper_telemetry
+from backend.app.db.telemetry_repo import log_scraper_telemetry, upsert_proxy_health
 from backend.app.models.crawler_job import CrawlerJob
 from ingestion.base import RawFareRecord
 from ingestion.captcha import (
@@ -205,6 +206,47 @@ class CrawlerWorker:
         self._execution_heartbeat_thread = None
         self._execution_heartbeat_stop = None
 
+    @staticmethod
+    def _egress_label(proxy_url: str | None) -> str:
+        """Egress identifier for telemetry, with any credentials stripped."""
+        raw = (proxy_url or "").strip()
+        if not raw:
+            return "direct-egress"
+        try:
+            parts = urlsplit(raw)
+            host = parts.hostname or ""
+            if parts.port:
+                host = f"{host}:{parts.port}"
+            if host:
+                label = f"{parts.scheme}://{host}" if parts.scheme else host
+                return label[:128]
+        except ValueError:
+            pass
+        return "proxy-egress"
+
+    def _record_egress_health(
+        self, db: Any, *, success: bool, latency_ms: float, error: str | None
+    ) -> None:
+        """Persist the egress this job actually used.
+
+        The provenance audit reads proxy_health_records as evidence that real
+        network egress was configured and exercised, so every job records the
+        egress it went out through: the configured PROXY_URL when there is one,
+        otherwise the default direct connection. Health is only claimed when the
+        job finished; a blocked or crashed job records the failure instead.
+        """
+        label = self._egress_label(self.config.proxy_url)
+        try:
+            upsert_proxy_health(
+                db=db,
+                proxy_ip=label,
+                latency_ms=latency_ms,
+                is_success=success,
+                error_message=error[:1000] if error else None,
+            )
+        except Exception as exc:
+            logger.warning("Egress health record failed for %s: %s", label, exc)
+
     def _resolve_routes(self, route_code: str | None) -> list[Route]:
         if not route_code or route_code.upper() in ("ALL", "ALL_ROUTES"):
             return list(DEFAULT_ROUTES)
@@ -364,6 +406,13 @@ class CrawlerWorker:
                     ),
                 )
 
+                self._record_egress_health(
+                    db,
+                    success=job_status == "COMPLETED",
+                    latency_ms=elapsed_ms,
+                    error=(None if job_status == "COMPLETED" else BLOCKED_BY_CAPTCHA),
+                )
+
                 completed = complete_job(
                     db=db,
                     job_id=job_pk,
@@ -417,6 +466,9 @@ class CrawlerWorker:
                         response_time_ms=elapsed_ms,
                         records_extracted=len(all_records),
                         error_details=err_msg,
+                    )
+                    self._record_egress_health(
+                        db, success=False, latency_ms=elapsed_ms, error=err_msg
                     )
                     complete_job(
                         db=db,

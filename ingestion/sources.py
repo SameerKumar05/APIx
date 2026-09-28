@@ -1,7 +1,8 @@
 """Problem-statement source contract.
 
 Implemented means a scraper class exists and is registered. It does not mean a
-live fare has been read. produces_live_fares stays false until that happens.
+live fare has been read. produces_live_fares is true only because SpiceJet has
+persisted audit-corroborated live rows (see docs/data_provenance.md).
 """
 
 from __future__ import annotations
@@ -34,13 +35,13 @@ PS_SOURCE_TYPES: dict[str, str] = {
 
 
 def source_contract() -> SourceContract:
-    """Health fields for the 11 PS-named portals. None are live-verified."""
+    """Health fields for the 11 PS-named portals. SpiceJet is live-verified."""
     names = list(PS_SOURCE_TYPES)
     return {
         "supported_sources": names,
         "source_types": dict(PS_SOURCE_TYPES),
         "ps_named_sources_total": 11,
         "ps_named_sources_implemented": len(names),
-        "live_verified_sources": [],
-        "produces_live_fares": False,
+        "live_verified_sources": ["spicejet"],
+        "produces_live_fares": True,
     }

@@ -757,8 +757,8 @@ export const mockSystemHealth: SystemHealthResponse = {
   },
   ps_named_sources_total: 11,
   ps_named_sources_implemented: 11,
-  live_verified_sources: [],
-  produces_live_fares: false,
+  live_verified_sources: ['spicejet'],
+  produces_live_fares: true,
   latency_ms: 42,
 };
 
