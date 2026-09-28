@@ -57,9 +57,45 @@ bash scripts/verify_all.sh                             # 25-step master verifica
 
 ## How it works
 
-```
-11 portal scrapers  ->  durable job queue  ->  cleaned raw_fares  ->  weighted index  ->  REST + WebSocket  ->  dashboard
-      (Playwright)        (leased, fenced)      (dedup, outliers)     (Fisher ideal)     (rate limited)
+```mermaid
+flowchart LR
+    subgraph COLLECT["Collect"]
+        P1["11 portal scrapers"]
+        P2["Playwright, JS-rendered pages"]
+        P1 --- P2
+    end
+    subgraph GATE["Admit"]
+        G1["robots.txt gate, fail-closed"]
+        G2["Rate limit + jitter"]
+        G3["CAPTCHA: detect, never solve"]
+        G1 --- G2 --- G3
+    end
+    subgraph QUEUE["Queue"]
+        Q1["Durable job queue"]
+        Q2["Leased workers, fenced"]
+        Q1 --- Q2
+    end
+    subgraph CLEAN["Clean"]
+        C1["Dedup on hash_id"]
+        C2["Tukey outliers out"]
+        C3["Cancelled / sold-out out"]
+        C4["Base, taxes, UDF split"]
+        C1 --- C2 --- C3 --- C4
+    end
+    subgraph INDEX["Index"]
+        I1["Fisher ideal"]
+        I2["14 corridors, T+1 to T+45"]
+        I1 --- I2
+    end
+    subgraph SERVE["Serve"]
+        S1["REST + WebSocket"]
+        S2["Rate limited"]
+        S3["React dashboard, 8 tabs"]
+        S1 --- S2 --- S3
+    end
+    COLLECT --> GATE --> QUEUE --> CLEAN --> INDEX --> SERVE
+    LIVE["Live rows: is_synthetic = 0"] -.-> CLEAN
+    FALLBACK["Fallback tier: is_synthetic = 1"] -.-> CLEAN
 ```
 
 - **Collection.** Playwright drives each portal's JavaScript-rendered search. A
